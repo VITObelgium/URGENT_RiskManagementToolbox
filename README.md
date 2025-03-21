@@ -14,7 +14,7 @@ This Python-based toolbox is designed to optimize geothermal reservoir developme
 
 3. Linking & Automation Scripts
 
-    Scripts facilitate communication between the THM simulations and ML routines, enabling iterative simulation cycles to determine optimal well placement and operation.  
+    Scripts facilitate communication between the THM simulations and ML routines, enabling iterative simulation cycles to determine optimal well placement and operation.
 
 ---
 

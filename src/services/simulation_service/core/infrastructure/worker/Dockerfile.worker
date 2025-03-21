@@ -1,0 +1,27 @@
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+COPY infrastructure/worker/worker_requirements.txt .
+RUN pip install --no-cache-dir -r worker_requirements.txt --target /install
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY infrastructure/worker/src/ /app/
+COPY infrastructure/generated/ /app/generated/
+COPY connectors/ /app/connectors/
+COPY utils/ /app/utils/
+
+ENV PYTHONPATH=/app/generated
+
+COPY --from=builder /install /usr/local/lib/python3.12/site-packages
+
+ARG _SERVER_PORT
+ARG _SERVER_HOST
+
+ENV SERVER_PORT=${_SERVER_PORT}
+ENV SERVER_HOST=${_SERVER_HOST}
+
+CMD ["python", "-u", "_simulation_worker_grpc.py"]

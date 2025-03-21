@@ -1,0 +1,26 @@
+FROM python:3.12-alpine AS builder
+
+WORKDIR /app
+
+COPY infrastructure/server/server_requirements.txt .
+
+RUN  pip install --no-cache-dir -r server_requirements.txt --target /install
+
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+COPY infrastructure/server/src/ /app/
+COPY infrastructure/generated/ /app/generated/
+COPY connectors/ /app/connectors/
+COPY utils/ /app/utils/
+
+COPY --from=builder /install /usr/local/lib/python3.12/site-packages
+
+ENV PYTHONPATH=/app/generated
+
+ARG _SERVER_PORT
+
+ENV SERVER_PORT=${_SERVER_PORT}
+
+CMD ["python", "-u", "_simulation_server_grpc.py"]

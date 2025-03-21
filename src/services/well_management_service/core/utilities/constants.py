@@ -1,0 +1,2 @@
+DLS_RATE = 30  # deg/30m
+POINT_ATOL = 1e-4

@@ -1,0 +1,6 @@
+# Release related dependencies only
+grpcio==1.69.0
+grpcio-tools==1.69.0
+numpy==2.2.1
+pydantic==2.10.4
+tomli==2.2.1

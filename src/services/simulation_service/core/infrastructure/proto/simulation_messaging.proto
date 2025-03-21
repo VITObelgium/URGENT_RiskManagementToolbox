@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package simulation_messaging;
+
+message SimulationInput{
+  string wells = 1;
+}
+
+message SimulationControlVector{
+  string content = 1;
+}
+
+message SimulationResult{
+  string result = 1;
+}
+
+enum JobStatus{
+  JOBSTATUS_UNSPECIFIED = 0;  // Default value; should not be used actively.
+  NEW = 1;                    // A new job has been created.
+  SUCCESS = 2;                // Job has completed successfully.
+  FAILED = 3;                 // Job has failed.
+  NO_JOB_AVAILABLE = 4;       // When no job is available for a worker.
+  ERROR = 5;                  // Represents an internal server error or failure.
+}
+
+enum Simulator{
+  SIMULATOR_UNSPECIFIED = 0;
+  OPENDARTS = 1;
+}
+
+message SimulationJob{
+  Simulation simulation = 1;
+  JobStatus status = 2;
+  string worker_id = 3;
+  Simulator simulator = 4;
+  int32 job_id = 5;
+}
+
+message RequestJob{
+  string worker_id = 1;
+}
+
+
+message Ack {
+  string message = 1;
+}
+
+message Simulation {
+  SimulationInput input = 1;
+  SimulationResult result = 2;
+  SimulationControlVector control_vector = 3;
+}
+
+message Simulations{
+  repeated Simulation simulations = 1;
+}
+
+message RequestModel{
+  string worker_id = 1;
+}
+
+enum ModelStatus{
+  MODELSTATUS_UNSPECIFIED = 0;
+  NO_MODEL_AVAILABLE = 1;
+  ON_SERVER = 2;
+}
+
+message SimulationModel{
+  bytes package_archive = 1;
+  ModelStatus status = 2;
+}
+
+service SimulationMessaging{
+
+  rpc TransferSimulationModel(SimulationModel) returns(Ack); // simulation service -> server
+  rpc PerformSimulations(Simulations) returns(Simulations); // simulation service -> server
+
+  rpc RequestSimulationJob (RequestJob) returns (SimulationJob); // worker -> server
+  rpc SubmitSimulationJob (SimulationJob) returns (Ack); // worker -> server
+
+  rpc RequestSimulationModel (RequestModel) returns (SimulationModel); // worker -> server
+
+}

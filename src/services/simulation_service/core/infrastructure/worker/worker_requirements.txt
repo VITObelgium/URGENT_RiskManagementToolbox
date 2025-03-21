@@ -1,0 +1,3 @@
+grpcio==1.69.0
+grpcio-tools==1.69.0
+open-darts==1.2.1

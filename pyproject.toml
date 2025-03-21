@@ -1,0 +1,65 @@
+[project]
+name = "urgent-riskmanagementtoolbox"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.12"
+
+[logging.output]
+log_to_console = true
+datetime_log_file = false
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "src/logger/u_logger.py",
+    "*_pb2.py",
+    "*_pb2_grpc.py",
+    "_build_proto.py",
+    "_test_.py"
+]
+exclude_lines = [
+    "if __name__ == '__main__':"
+]
+
+[tool.mypy]
+mypy_path = "src"
+files = ["src"]
+ignore_missing_imports = true
+allow_untyped_decorators = true
+exclude = [
+    "_grpc.py",
+    "_pb2.py",
+    "_pb2_grpc.py",
+    "_model",
+    "simulation_service.py",
+    "_test_.py",
+    "test_"
+]
+
+plugins = [
+    "pydantic.mypy",
+]
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+log_file = "log/test.log"
+log_file_format = "%(process)d %(thread)d %(asctime)s %(module)s:%(lineno)d %(levelname)s - %(message)s"
+log_level = "DEBUG"
+
+retries = 2
+retry_delay = 0.5
+cumulative_timing = false
+
+
+
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"

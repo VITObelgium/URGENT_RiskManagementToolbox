@@ -1,0 +1,8 @@
+# Handle line endings automatically for text files
+* text=auto
+
+# Set default behavior to automatically normalize line endings
+* text eol=lf
+# Treat png, zip files as binary to fix file corruption
+*.png binary
+*.zip binary

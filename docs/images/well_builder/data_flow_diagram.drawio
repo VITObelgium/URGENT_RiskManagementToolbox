@@ -1,0 +1,132 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 OPR/115.0.0.0" version="25.0.3">
+  <diagram name="Strona-1" id="ZX0fqdaZRsJvTVJ7zkl-">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="x9fNyT6pER4qqcEWO28L-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-1" target="x9fNyT6pER4qqcEWO28L-18">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="270" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-14" value="configuration" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-3">
+          <mxGeometry x="0.246" y="-2" relative="1" as="geometry">
+            <mxPoint x="-16" y="-2" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-1" value="Config file" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="10" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-29" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="x9fNyT6pER4qqcEWO28L-5">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="560.0000000000002" y="199.65999999999988" as="sourcePoint" />
+            <mxPoint x="697" y="199.65999999999988" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-55" value="Well Builder object" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-29">
+          <mxGeometry x="-0.0113" relative="1" as="geometry">
+            <mxPoint x="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-2" value="Create a Well Builder&amp;nbsp; for each well" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-5" target="x9fNyT6pER4qqcEWO28L-31">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="650" y="400" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-56" value="Trajectory" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-33">
+          <mxGeometry x="-0.0583" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-5" value="Create well trajectory by discretizing the sections" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-15" value="&lt;b&gt;Well Management Service&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="225" y="130" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-18" target="x9fNyT6pER4qqcEWO28L-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-22" value="Well Sections" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-21">
+          <mxGeometry x="-0.1103" y="2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-18" target="x9fNyT6pER4qqcEWO28L-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-24" value="Perforations" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-23">
+          <mxGeometry x="-0.1636" y="1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-18" value="Map configuration to I, J, S shape well models" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="220" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-19" value="&lt;b&gt;Well Management Service&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="130" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-25" value="&lt;b&gt;Well Builder&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="130" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-38" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-31" target="x9fNyT6pER4qqcEWO28L-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-57" value="Perforations" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-38">
+          <mxGeometry x="-0.0291" y="-2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-31" value="Find perforated points within the trajectory" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="290" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-32" value="&lt;b&gt;Well Builder&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="690" y="360" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.25;entryDx=0;entryDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-35" target="x9fNyT6pER4qqcEWO28L-39">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-46" value="Trajectory" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-45">
+          <mxGeometry x="-0.0048" y="-2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-47" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-35" target="x9fNyT6pER4qqcEWO28L-39">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-48" value="Perforations" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-47">
+          <mxGeometry x="-0.0366" y="-3" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-35" value="Return data" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="290" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-51" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="x9fNyT6pER4qqcEWO28L-39" target="x9fNyT6pER4qqcEWO28L-50">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-52" value="Results" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" connectable="0" vertex="1" parent="x9fNyT6pER4qqcEWO28L-51">
+          <mxGeometry x="0.3802" y="-1" relative="1" as="geometry">
+            <mxPoint x="19" y="1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-39" value="Prepare results file" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="225" y="290" width="110" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-41" value="&lt;b&gt;Well Builder&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="360" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-49" value="&lt;b&gt;Well Management Service&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="220" y="360" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="x9fNyT6pER4qqcEWO28L-50" value="Results file" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="10" y="290" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

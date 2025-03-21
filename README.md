@@ -1,5 +1,20 @@
 # Introduction
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project.
+
+This Python-based toolbox is designed to optimize geothermal reservoir development by combining advanced Thermo-Hydro-Mechanical (THM) numerical modeling, machine learning (ML) optimization routines, and automated feedback loops. The goal is to maximize total heat energy production while minimizing the risk of induced seismicity on known faults.
+
+## Core Components:
+
+1. THM Reservoir Models
+
+    Simulate the coupled thermal, hydraulic, and mechanical behavior of the subsurface, based on geological models derived from seismic data.
+
+2. Machine Learning Optimization
+
+    Algorithms adjust well locations and operational parameters (e.g., flow rate, injection temperature) to balance maximum heat recovery with minimal seismic risk.
+
+3. Linking & Automation Scripts
+
+    Scripts facilitate communication between the THM simulations and ML routines, enabling iterative simulation cycles to determine optimal well placement and operation.  
 
 ---
 

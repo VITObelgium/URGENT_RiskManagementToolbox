@@ -1,0 +1,12 @@
+# Development related dependencies only
+# =================================================================
+# This requirements must be install with requirements-release.txt !
+# =================================================================
+coverage==7.6.10
+mypy==1.15.0
+mypy-protobuf==3.6.0
+pre-commit==4.0.1
+protoletariat==3.3.9
+pytest==8.3.4
+pytest-mypy==0.10.3
+pytest-retry==1.7.0

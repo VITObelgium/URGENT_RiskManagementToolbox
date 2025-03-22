@@ -7,7 +7,6 @@ import pytest
 
 from services.simulation_service.core.connectors.common import (
     GridCell,
-    Point,
     WellManagementServiceResultSchema,
     WellName,
 )
@@ -1418,20 +1417,6 @@ def mock_struct_reservoir(
         nz: int = 10
         discretizer: _StructDiscretizerProtocol = mock_discretizer
         global_data: _GlobalData = global_data_mock
-
-        def find_cell_index(self, coord: Point) -> int:
-            """
-            Copied from open-darts repository
-            """
-            min_dis = None
-            idx = None
-            for j, centroid in enumerate(self.discretizer.centroids_all_cells):
-                dis = np.linalg.norm(np.array(coord) - centroid)
-                if (min_dis is not None and dis < min_dis) or min_dis is None:
-                    min_dis = dis
-                    idx = j
-            assert idx is not None  # added on top of open-darts to silence mypy
-            return idx
 
     return MockStructReservoir()
 

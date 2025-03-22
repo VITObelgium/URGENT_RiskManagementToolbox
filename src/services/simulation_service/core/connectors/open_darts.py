@@ -109,7 +109,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def run(
-            config: SerializedJson,
+        config: SerializedJson,
     ) -> SimulationResults:
         """
         Start reservoir simulator with given config and model in main.py
@@ -138,7 +138,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def _get_broadcast_results(
-            stdout: str,
+        stdout: str,
     ) -> SimulationResults:
         template = OpenDartsConnector.MsgTemplate
         re_key = r"(\w+)"  # str
@@ -161,7 +161,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def broadcast_result(
-            key: SimulationResultType, value: float | Sequence[float]
+        key: SimulationResultType, value: float | Sequence[float]
     ) -> None:
         """
         Use for broadcast given simulation results to stdout
@@ -173,8 +173,8 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def get_well_connection_cells(
-            well_management_service_result: WellManagementServiceResultSchema,
-            struct_reservoir: _StructReservoirProtocol,
+        well_management_service_result: WellManagementServiceResultSchema,
+        struct_reservoir: _StructReservoirProtocol,
     ) -> dict[WellName, tuple[GridCell, ...]]:
         """
         Retrieve the connection cells for a given well, identifying which reservoir grid cells
@@ -231,7 +231,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def _global_idx_to_grid_cell(
-            idx: int, struct_reservoir: _StructReservoirProtocol
+        idx: int, struct_reservoir: _StructReservoirProtocol
     ) -> GridCell:
         nx = struct_reservoir.nx
         ny = struct_reservoir.ny
@@ -244,8 +244,8 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def _filter_perforations_inside_reservoir(
-            struct_reservoir: _StructReservoirProtocol,
-            well_perforations_points: tuple[Point, ...],
+        struct_reservoir: _StructReservoirProtocol,
+        well_perforations_points: tuple[Point, ...],
     ) -> tuple[Point, ...]:
         dx = struct_reservoir.global_data["dx"]
         dy = struct_reservoir.global_data["dy"]
@@ -271,9 +271,9 @@ class OpenDartsConnector(ConnectorInterface):
 
 class _CellConnector:
     """
-        Notes:
-        - This class explicitly depends on 'scipy' for KD-tree spatial queries. Ensure 'scipy' is installed
-          through the 'open-darts' dependency specification
+    Notes:
+    - This class explicitly depends on 'scipy' for KD-tree spatial queries. Ensure 'scipy' is installed
+      through the 'open-darts' dependency specification
     """
 
     def __init__(self, discretizer: _StructDiscretizerProtocol) -> None:

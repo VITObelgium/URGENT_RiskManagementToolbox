@@ -185,11 +185,6 @@ class OpenDartsConnector(ConnectorInterface):
         wells and reservoir cells are accurately identified considering reservoir geometry,
         discretization, and perforation coordinates.
 
-        Args:
-            [Include parameters here, for example:]
-            well_name (str): Identifier or name of the well to locate perforation-related cells.
-            perforations (List[Tuple[float, float, float]]): List of perforation coordinates (X, Y, Z) associated with the well.
-
         Returns:
             List[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
 

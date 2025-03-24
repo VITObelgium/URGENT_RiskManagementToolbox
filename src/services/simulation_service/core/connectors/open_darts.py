@@ -8,6 +8,7 @@ from typing import Any, Callable, Protocol, Sequence, TypedDict
 
 import numpy as np
 import numpy.typing as npt
+from scipy.spatial import KDTree
 
 from .common import (
     ConnectorInterface,
@@ -66,8 +67,6 @@ class _StructReservoirProtocol(Protocol):
     nz: int
     discretizer: _StructDiscretizerProtocol
     global_data: _GlobalData
-
-    def find_cell_index(self, coord: Point) -> int: ...
 
 
 def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
@@ -177,10 +176,36 @@ class OpenDartsConnector(ConnectorInterface):
         well_management_service_result: WellManagementServiceResultSchema,
         struct_reservoir: _StructReservoirProtocol,
     ) -> dict[WellName, tuple[GridCell, ...]]:
+        """
+        Retrieve the connection cells for a given well, identifying which reservoir grid cells
+        correspond to the well's perforations.
+
+        This method maps well perforations onto the reservoir's discretized cells, potentially
+        using spatial querying (e.g., through a KD-tree). It ensures that connections between
+        wells and reservoir cells are accurately identified considering reservoir geometry,
+        discretization, and perforation coordinates.
+
+        Returns:
+            List[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
+
+        Raises:
+            ValueError: If provided perforation coordinates are invalid or outside the reservoir bounds.
+            RuntimeError: If internal spatial querying fails due to invalid KD-tree or spatial data setup.
+
+
+        Notes:
+            - Ensure that the internal KD-tree or spatial data used for find operations is initialized and updated accurately.
+            - Coordinate systems (units and orientation) must be consistent with reservoir modeling conventions.
+
+        """
+
         result: dict[WellName, tuple[GridCell, ...]] = {}
         wells_with_perforations_points: dict[WellName, tuple[Point, ...]] = (
             extract_well_with_perforations_points(well_management_service_result)
         )
+
+        cell_connector = _CellConnector(struct_reservoir.discretizer)
+
         for well_name, perforations_points in wells_with_perforations_points.items():
             filtered_perforations_points = (
                 OpenDartsConnector._filter_perforations_inside_reservoir(
@@ -188,8 +213,7 @@ class OpenDartsConnector(ConnectorInterface):
                 )
             )
             global_perforation_idx: list[int] = [
-                struct_reservoir.find_cell_index(p)
-                for p in filtered_perforations_points
+                cell_connector.find_cell_index(p) for p in filtered_perforations_points
             ]
             unique_global_perforation_idx = list(set(global_perforation_idx))
             unique_perforation_grid_cells = [
@@ -238,3 +262,18 @@ class OpenDartsConnector(ConnectorInterface):
         filtered_perforations_points = well_perforations_points_ar[in_bounds]
 
         return tuple(filtered_perforations_points)
+
+
+class _CellConnector:
+    """
+    Notes:
+    - This class explicitly depends on 'scipy' for KD-tree spatial queries. Ensure 'scipy' is installed
+      through the 'open-darts' dependency specification
+    """
+
+    def __init__(self, discretizer: _StructDiscretizerProtocol) -> None:
+        self._kd_tree = KDTree(discretizer.centroids_all_cells)
+
+    def find_cell_index(self, coord: Point) -> int:
+        _, idx = self._kd_tree.query(coord)
+        return idx

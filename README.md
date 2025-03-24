@@ -1,5 +1,5 @@
 
-# URGENT Risc Management Toolbox
+# URGENT Risk Management Toolbox
 <p align="center">
   <img src="
 https://urgent-project-heu.eu/wp-content/uploads/2024/11/logo-3.png" width="200">

@@ -1,18 +1,29 @@
-# Introduction
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/d25f9fd7-7610-4725-9a8e-bead501ce568" width="250">
+</p>
+
+![In Development](https://img.shields.io/badge/status-In%20Development-yellow?style=for-the-badge)
+
+![Python](https://img.shields.io/badge/Python-3.12-blue)  ![License](https://img.shields.io/badge/License-MIT-green)
+
+# URGENT Risk Management Toolbox
+
+## Introduction
 
 This Python-based toolbox is designed to optimize geothermal reservoir development by combining advanced Thermo-Hydro-Mechanical (THM) numerical modeling, machine learning (ML) optimization routines, and automated feedback loops. The goal is to maximize total heat energy production while minimizing the risk of induced seismicity on known faults.
 
 ## Core Components:
 
-1. THM Reservoir Models
+1. **THM Reservoir Models**
 
     Simulate the coupled thermal, hydraulic, and mechanical behavior of the subsurface, based on geological models derived from seismic data.
 
-2. Machine Learning Optimization
+2. **Machine Learning Optimization**
 
     Algorithms adjust well locations and operational parameters (e.g., flow rate, injection temperature) to balance maximum heat recovery with minimal seismic risk.
 
-3. Linking & Automation Scripts
+3. **Linking & Automation Scripts**
 
     Scripts facilitate communication between the THM simulations and ML routines, enabling iterative simulation cycles to determine optimal well placement and operation.
 

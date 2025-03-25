@@ -1,14 +1,13 @@
 
-# URGENT Risk Management Toolbox
 <p align="center">
-  <img src="
-https://urgent-project-heu.eu/wp-content/uploads/2024/11/logo-3.png" width="200">
+  <img src="https://github.com/user-attachments/assets/d25f9fd7-7610-4725-9a8e-bead501ce568" width="250">
 </p>
 
 ![In Development](https://img.shields.io/badge/status-In%20Development-yellow?style=for-the-badge)
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)  ![License](https://img.shields.io/badge/License-MIT-green)
 
+# URGENT Risk Management Toolbox
 
 ## Introduction
 

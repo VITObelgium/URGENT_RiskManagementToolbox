@@ -1,0 +1,33 @@
+name: "Task Template"
+description: "Template with editable markdown acceptance criteria"
+body:
+  - type: input
+    attributes:
+      label: "Title"
+      description: "Brief task title"
+      placeholder: "Enter task title..."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Description"
+      description: "What needs to be done and why?"
+      placeholder: |
+        - Objective:
+        - Reason:
+        - Notes:
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Acceptance Criteria"
+      description: "Minimum requirements (one per line)"
+      value: |
+        - [ ] First requirement
+        - [ ] Second requirement
+        - [ ] Third requirement
+      render: markdown
+    validations:
+      required: true

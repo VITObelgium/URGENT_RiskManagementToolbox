@@ -14,8 +14,8 @@ body:
       label: "Description"
       description: "What needs to be done and why?"
       placeholder: |
-        - Objective: 
-        - Reason: 
+        - Objective:
+        - Reason:
         - Notes:
     validations:
       required: true

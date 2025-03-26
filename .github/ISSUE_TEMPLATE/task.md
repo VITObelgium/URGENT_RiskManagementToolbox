@@ -1,14 +1,13 @@
----
-name: "Task"
-description: "Describe the task in detail."
-title: "[Task] <Short Description>"
-labels: []
-assignees: []
----
+### Description
+*What needs to be done and why?*
 
-## Description
+- [Objective]
+- [Why this is needed]
+- [Any relevant context/constraints]
 
-## Acceptance Criteria
+### Acceptance Criteria
+*Minimum requirements to complete the task:*
 
-- [ ]
-- [ ]
+- [ ] [First requirement]
+- [ ] [Second requirement]
+- [ ] [Third requirement]

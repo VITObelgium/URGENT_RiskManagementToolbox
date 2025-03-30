@@ -25,6 +25,7 @@ def run_risk_management(
     problem_definition: dict[str, Any],
     simulation_model_archive: bytes | str,
     n_size: int = 10,
+    iteration_count: int = 5,
 ):
     """
     Main entry point for running risk management.
@@ -33,6 +34,7 @@ def run_risk_management(
         problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
         n_size (int, optional): Number of samples for the dispatcher. Defaults to 10.
+        iteration_count (int, optional): Number of iterations for the risk management process. Defaults to 5.
     """
     logger.info("Starting risk management process...")
     logger.debug(
@@ -66,7 +68,7 @@ def run_risk_management(
             # Initialize solutions
             next_solutions: list[ControlVector] | None = None
 
-            for iteration in range(5):
+            for iteration in range(iteration_count):
                 logger.info("Starting iteration %d for risk management.", iteration + 1)
 
                 # Generate or update solutions

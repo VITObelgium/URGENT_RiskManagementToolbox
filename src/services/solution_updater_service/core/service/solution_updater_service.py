@@ -1,9 +1,11 @@
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 from logger.u_logger import get_logger
+from services.problem_dispatcher_service import ProblemDispatcherService
+from services.simulation_service import SimulationService
 from services.solution_updater_service.core.engines import (
     OptimizationEngineFactory,
     OptimizationEngineInterface,
@@ -322,12 +324,15 @@ class _Mapper:
 
 
 class SolutionUpdaterService:
-    def __init__(self, optimization_engine: OptimizationEngine) -> None:
+    def __init__(
+        self, optimization_engine: OptimizationEngine, iteration_count: int = 5
+    ) -> None:
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
             OptimizationEngineFactory.get_engine(optimization_engine)
         )
         self._logger = get_logger(__name__)
+        self.iteration_count = iteration_count
 
     def process_request(
         self, request_dict: dict[str, Any]
@@ -400,3 +405,62 @@ class SolutionUpdaterService:
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
         self._logger.info("Control vectors update request processed successfully.")
         return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
+
+    def run(
+        self,
+        dispatcher: ProblemDispatcherService,
+        simulation_case_generator: Callable,
+        simulation_service_mapper: Callable,
+    ) -> None:
+        self._logger.info("Fetching boundaries from ProblemDispatcherService.")
+        boundaries = dispatcher.get_boundaries()
+        self._logger.debug("Boundaries retrieved: %s", boundaries)
+
+        next_solutions = None
+        for iteration in range(self.iteration_count):
+            self._logger.info(
+                "Starting iteration %d for solution update.", iteration + 1
+            )
+
+            # Generate or update solutions
+            solutions = dispatcher.process_iteration(next_solutions)
+            self._logger.debug("Generated solutions: %s", solutions)
+
+            # Prepare simulation cases
+            sim_cases = simulation_case_generator(solutions)
+            self._logger.debug("Prepared simulation cases: %s", sim_cases)
+
+            # Process simulation with the simulation service
+            self._logger.info("Submitting simulation cases to SimulationService.")
+            completed_cases = SimulationService.process_request(
+                {"simulation_cases": sim_cases}
+            )
+            self._logger.debug("Completed simulation cases: %s", completed_cases)
+
+            # Update solutions based on simulation results
+            updated_solutions = [
+                {
+                    "control_vector": {"items": simulation_case.control_vector},
+                    "cost_function_results": {
+                        "values": ensure_not_none(simulation_case.results).model_dump()
+                    },
+                }
+                for simulation_case in completed_cases.simulation_cases
+            ]
+            self._logger.debug(
+                "Updated solutions for next iteration: %s", updated_solutions
+            )
+
+            # Map simulation service solutions to the ProblemDispatcherService format
+            next_solutions = simulation_service_mapper(
+                self.process_request(
+                    {
+                        "solution_candidates": updated_solutions,
+                        "optimization_constraints": {"boundaries": boundaries},
+                    }
+                ).next_iter_solutions
+            )
+            self._logger.info(
+                "Iteration %d successfully completed for risk management.",
+                iteration + 1,
+            )

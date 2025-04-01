@@ -32,12 +32,6 @@ def cli():
         default=10,
         help="Number of samples for the dispatcher. Default is 10.",
     )
-    parser.add_argument(
-        "--iteration-count",
-        type=int,
-        default=5,
-        help="Number of iterations for the risk management process. Default is 5.",
-    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -61,7 +55,6 @@ def cli():
             problem_definition=problem_definition,
             simulation_model_archive=args.model_file,
             n_size=args.n_size,
-            iteration_count=args.iteration_count,
         )
         logger.info("Risk management process completed successfully.")
     except Exception as e:

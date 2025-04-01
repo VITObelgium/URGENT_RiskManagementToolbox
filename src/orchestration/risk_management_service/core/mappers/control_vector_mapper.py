@@ -1,7 +1,7 @@
-from services.problem_dispatcher_service.core.models import (
+from services.problem_dispatcher_service import (
     ControlVector as PDControlVector,
 )
-from services.solution_updater_service.core.models import (
+from services.solution_updater_service import (
     ControlVector as SUControlVector,
 )
 

@@ -24,11 +24,13 @@ def run_risk_management(
     problem_definition: dict[str, Any],
     simulation_model_archive: bytes | str,
     n_size: int = 10,
+    max_generations: int = 10,
 ):
     """
     Main entry point for running risk management.
 
     Args:
+        max_generations: Maximum number of generations for the optimization process.
         problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
         n_size (int, optional): Number of samples for the dispatcher. Defaults to 10.
@@ -52,7 +54,8 @@ def run_risk_management(
                 "Initializing SolutionUpdaterService and ProblemDispatcherService."
             )
             solution_updater = SolutionUpdaterService(
-                optimization_engine=OptimizationEngine.PSO
+                optimization_engine=OptimizationEngine.PSO,
+                max_generations=max_generations,
             )
             dispatcher = ProblemDispatcherService(
                 problem_definition=problem_definition, n_size=n_size
@@ -69,8 +72,8 @@ def run_risk_management(
             try:
                 while loop_controller.running():
                     logger.info(
-                        "Starting iteration %d for risk management.",
-                        loop_controller.current_iteration + 1,
+                        "Starting generation %d for risk management.",
+                        loop_controller.current_generation,
                     )
 
                     # Generate or update solutions
@@ -114,13 +117,13 @@ def run_risk_management(
                         ).next_iter_solutions
                     )
                     logger.info(
-                        "Iteration %d successfully completed for risk management.",
-                        loop_controller.current_iteration + 1,
+                        "Generation %d successfully completed for risk management.",
+                        loop_controller.current_generation,
                     )
             except StopIteration as e:
                 logger.info(
-                    "Loop controller stopped at iteration %d: %s",
-                    loop_controller.current_iteration + 1,
+                    "Loop controller stopped at generation %d: %s",
+                    loop_controller.current_generation,
                     str(e),
                 )
         except Exception as e:

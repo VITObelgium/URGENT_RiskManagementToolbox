@@ -8,12 +8,13 @@ from services.problem_dispatcher_service import (
 )
 from services.simulation_service import (
     SimulationService,
-    simulation_cluster_contex_manager,
+    simulation_cluster_context_manager,
 )
 from services.solution_updater_service import (
     OptimizationEngine,
     SolutionUpdaterService,
 )
+from services.solution_updater_service.core.utils import ensure_not_none
 from services.well_management_service import WellManagementService
 
 logger = get_logger(__name__)
@@ -40,7 +41,7 @@ def run_risk_management(
         n_size,
     )
 
-    with simulation_cluster_contex_manager():
+    with simulation_cluster_context_manager():
         try:
             logger.info("Transferring simulation model archive to the cluster.")
             SimulationService.transfer_simulation_model(
@@ -57,12 +58,71 @@ def run_risk_management(
                 problem_definition=problem_definition, n_size=n_size
             )
 
-            solution_updater.run(
-                dispatcher=dispatcher,
-                simulation_case_generator=_prepare_simulation_cases,
-                simulation_service_mapper=ControlVectorMapper.convert_su_to_pd,
-            )
+            logger.info("Fetching boundaries from ProblemDispatcherService.")
+            boundaries = dispatcher.get_boundaries()
+            logger.debug("Boundaries retrieved: %s", boundaries)
 
+            # Initialize solutions
+            next_solutions = None
+
+            loop_controller = solution_updater.loop_controller
+            try:
+                while loop_controller.running():
+                    logger.info(
+                        "Starting iteration %d for risk management.",
+                        loop_controller.current_iteration + 1,
+                    )
+
+                    # Generate or update solutions
+                    solutions = dispatcher.process_iteration(next_solutions)
+                    logger.debug("Generated solutions: %s", solutions)
+
+                    # Prepare simulation cases
+                    sim_cases = _prepare_simulation_cases(solutions)
+                    logger.debug("Prepared simulation cases: %s", sim_cases)
+
+                    # Process simulation with the simulation service
+                    logger.info("Submitting simulation cases to SimulationService.")
+                    completed_cases = SimulationService.process_request(
+                        {"simulation_cases": sim_cases}
+                    )
+                    logger.debug("Completed simulation cases: %s", completed_cases)
+
+                    # Update solutions based on simulation results
+                    updated_solutions = [
+                        {
+                            "control_vector": {"items": simulation_case.control_vector},
+                            "cost_function_results": {
+                                "values": ensure_not_none(
+                                    simulation_case.results
+                                ).model_dump()
+                            },
+                        }
+                        for simulation_case in completed_cases.simulation_cases
+                    ]
+                    logger.debug(
+                        "Updated solutions for next iteration: %s", updated_solutions
+                    )
+
+                    # Map simulation service solutions to the ProblemDispatcherService format
+                    next_solutions = ControlVectorMapper.convert_su_to_pd(
+                        solution_updater.process_request(
+                            {
+                                "solution_candidates": updated_solutions,
+                                "optimization_constraints": {"boundaries": boundaries},
+                            }
+                        ).next_iter_solutions
+                    )
+                    logger.info(
+                        "Iteration %d successfully completed for risk management.",
+                        loop_controller.current_iteration + 1,
+                    )
+            except StopIteration as e:
+                logger.info(
+                    "Loop controller stopped at iteration %d: %s",
+                    loop_controller.current_iteration + 1,
+                    str(e),
+                )
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)
             raise

@@ -283,7 +283,7 @@ class SimulationService:
 
 
 @contextmanager
-def simulation_cluster_contex_manager():
+def simulation_cluster_context_manager():
     """
     Context manager for managing the simulation cluster lifecycle.
     """

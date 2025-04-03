@@ -5,7 +5,7 @@ from pathlib import Path
 from logger.u_logger import configure_logger, get_logger
 from services.simulation_service.core.service.simulation_service import (
     SimulationService,
-    simulation_cluster_contex_manager,
+    simulation_cluster_context_manager,
 )
 
 configure_logger()
@@ -68,4 +68,4 @@ def _initialize_images() -> None:
 
 _initialize_images()
 
-__all__ = ["SimulationService", "simulation_cluster_contex_manager"]
+__all__ = ["SimulationService", "simulation_cluster_context_manager"]

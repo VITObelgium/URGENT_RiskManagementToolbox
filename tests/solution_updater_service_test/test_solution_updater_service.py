@@ -84,7 +84,7 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
     config_json, expected_result_parameters, mocked_engine, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine)
+    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -140,7 +140,7 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
     monkeypatch,
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine)
+    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -210,7 +210,7 @@ def test_update_solution_with_boundaries_np(  # type: ignore
     config_json, expected_result_parameters, mocked_engine_with_bnb, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine)
+    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
 
     # Monkeypatch engine to use mocked behavior
     monkeypatch.setattr(service, "_engine", mocked_engine_with_bnb)
@@ -312,9 +312,12 @@ def test_optimization_service_full_round(test_case):
         "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
     }
 
-    service = SolutionUpdaterService(optimization_engine=engine)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=iterations
+    )
+    loop_controller = service.loop_controller
 
-    for _ in range(iterations):
+    while loop_controller.running():
         result = service.process_request(config)
         positions = np.array(
             [get_numpy_values(vec.items) for vec in result.next_iter_solutions]

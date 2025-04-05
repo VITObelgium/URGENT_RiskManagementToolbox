@@ -6,7 +6,7 @@
 \bigskip
 \textbf{Architecture}
 
-The service is built on a client-server architecture using gRPC for high-performance communication. It leverages a worker pool pattern to distribute simulation workloads efficiently across available computational resources. \texttt{SimulationService} system architecture is present in Fig. \ref{fig:SimulationServiceSystemArchitecture}. 
+The service is built on a client-server architecture using gRPC for high-performance communication. It leverages a worker pool pattern to distribute simulation workloads efficiently across available computational resources. \texttt{SimulationService} system architecture is present in Fig. \ref{fig:SimulationServiceSystemArchitecture}.
 
 \bigskip
 \textbf{System Components}
@@ -16,9 +16,9 @@ Main system components:
 
 \begin{itemize}
 	\item \textbf{Simulation Service} - main service class, where user or optimization system reach simulation cluster
-	
+
 	\item \textbf{Server} - Central coordinator of the simulation cluster, build from dedicated \textit{Dockerfile}. Launched as \textit{Docker container} via \textit{Docker compose}. Communication between \textbf{Simulation Service} and \textbf{Worker(s)} are handled using gRPC protocol.
-	
+
 	Responsibilities:
 	\begin{itemize}
 		\item Accepts simulation model uploads
@@ -36,12 +36,12 @@ Main system components:
 		\item Perform simulations using the provided model and case data.
 		\item Return simulation results to the server.
 	\end{itemize}
-	
+
 \end{itemize}
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=1.0\textwidth]{content/images/SimulationServiceArchitecture.pdf} 
+	\includegraphics[width=1.0\textwidth]{content/images/SimulationServiceArchitecture.pdf}
 	\caption{Simulation service system architecture}
 	\label{fig:SimulationServiceSystemArchitecture}
 \end{figure}
@@ -49,11 +49,11 @@ Main system components:
 \textbf{Public API}
 \begin{itemize}
 	\item \textbf{Cluster Management}
-		
+
 	 \csignature{\textit{start\_simulation\_cluster() $\rightarrow$ None}}
-	 
+
 	 Initializes and launches the simulation cluster with the configured number of worker processes.
-	 
+
 	 \textbf{Implementation Details:}
 	 \begin{itemize}
 	 	\item Validates environment configuration
@@ -62,13 +62,13 @@ Main system components:
 	 	\item Establishes communication channels between server and workers
 	 	\item Performs health checks to ensure cluster readiness
 	 \end{itemize}
-	 
+
 	 \textbf{Thread Safety:} Thread-safe, but should not be called concurrently with \texttt{shutdown\_simulation\_cluster()}
-	 
+
 	 \textbf{Error Handling:} Raises exceptions for configuration issues, network failures, or resource allocation problems
-	 
+
 	\csignature{\textit{shutdown\_simulation\_cluster() $\rightarrow$ None}}
-	
+
 	Safely terminates the simulation cluster and releases all resources.
 	\textbf{Implementation Details:}
 	\begin{itemize}
@@ -77,27 +77,27 @@ Main system components:
 		\item Closes network connections
 		\item Cleans up temporary files and resources
 	\end{itemize}
-	
+
 	\textbf{Thread Safety:} Thread-safe, but should not be called concurrently with \texttt{start\_simulation\_cluster()}
-	
+
 	\textbf{Error Handling:} Logs errors during shutdown but attempts to complete the process regardless of failures
-	
+
 	\item \textbf{Simulation Execution}
-	
+
 	\csignature{\textit{process\_request(request)}}
-	
+
 	Processes a simulation request by distributing tasks to the worker pool and aggregating results.
-	
+
 	\textbf{Parameters:}
 	\begin{itemize}
 		\item \texttt{request}: A simulation request object containing parameters and configuration for the simulation
 	\end{itemize}
-	
+
 	\textbf{Returns:}
 	\begin{itemize}
 		\item Processed simulation results based on the request type
 	\end{itemize}
-	
+
 	\textbf{Implementation Details:}
 	\begin{itemize}
 		\item Validates and normalizes the request
@@ -106,22 +106,22 @@ Main system components:
 		\item Monitors execution and handles failures
 		\item Aggregates and post-processes results
 	\end{itemize}
-	
+
 	\textbf{Thread Safety:} Thread-safe, can be called concurrently
-	
+
 	\textbf{Error Handling:} Returns error details for invalid requests, worker failures, or timeout issues
-	
+
 	\item \textbf{Model Management}
-	
+
 	\csignature{transfer\_simulation\_model(model)}
-	
+
 	Prepares and transfers a simulation model to all worker nodes in the cluster via simulation server.
-	
+
 	\textbf{Parameters:}
 	\begin{itemize}
 		\item \texttt{model}: The simulation model to distribute to the cluster
 	\end{itemize}
-	
+
 	\textbf{Implementation Details:}
 	\begin{itemize}
 		\item Serializes the model into an appropriate format
@@ -129,11 +129,11 @@ Main system components:
 		\item Distributes the model to all workers in the cluster
 		\item Verifies successful model installation on each worker
 	\end{itemize}
-	
+
 	\textbf{Thread Safety:} Thread-safe, but performance may degrade with concurrent transfers
-	
+
 	\textbf{Error Handling:} Raises exceptions for serialization failures, network issues, or worker-side installation problems
-	
+
 \end{itemize}
 
 \textbf{Data Models Schema}
@@ -145,13 +145,13 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		class SimulationResults(BaseModel):
 		"""
 		Container for simulation calculation results.
-		
+
 		Contains heat results that may be represented in various formats:
 		- Single value
 		- Sequence of values
 		- Matrix (sequence of sequences)
-		
-		Note: This implementation aligns with SimulationResultType 
+
+		Note: This implementation aligns with SimulationResultType
 		and SimulationResults from common.py
 		"""
 		Heat: float | Sequence[float] | Sequence[Sequence[float] | float]
@@ -165,7 +165,7 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		class SimulationCase(BaseModel):
 		"""
 		Represents a single simulation case with inputs and optional results.
-		
+
 		Attributes:
 		wells: Well configuration data from the WellManagement service
 		control_vector: Dictionary mapping control parameters to their values
@@ -184,7 +184,7 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		class SimulationServiceRequest(BaseModel):
 		"""
 		Container for a batch of simulation cases to be processed.
-		
+
 		Attributes:
 		simulation_cases: List of simulation cases to be executed
 		"""
@@ -199,7 +199,7 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		class SimulationServiceResponse(BaseModel):
 		"""
 		Container for processed simulation cases with results.
-		
+
 		Attributes:
 		simulation_cases: List of simulation cases with populated results
 		"""
@@ -212,19 +212,19 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 \textbf{Shared models:}
 \begin{enumerate}
 	\item Well Management Service Models
-	
+
 	The SimulationService integrates with the Well Management Service through a set of shared models that define well configurations, trajectories, and completions. These models provide the foundation for simulation cases.
-	
+
 	\begin{figure}[H]
 		\begin{lstlisting}[language=Python]
 			class SimulationWellPerforationModel(BaseModel):
 			"""
 			Represents a perforation in a well with a depth range and 3D coordinate points.
-			
+
 			Attributes:
 			range: Tuple defining the start and end depths of the perforation
 			points: Collection of 3D points (x,y,z) defining the perforation geometry
-			
+
 			Validation:
 			Ensures the start depth is less than the end depth
 			"""
@@ -233,13 +233,13 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		\end{lstlisting}
 		\caption{SimulationWellPerforationModel}
 	\end{figure}
-	
+
 	\begin{figure}[H]
 		\begin{lstlisting}[language=Python]
 			class SimulationWellCompletionModel(BaseModel):
 			"""
 			Represents the completion details of a well, containing perforations.
-			
+
 			Attributes:
 			perforations: Collection of perforation models defining the well's
 			completion design
@@ -248,14 +248,14 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		\end{lstlisting}
 		\caption{SimulationWellCompletionModel}
 	\end{figure}
-	
+
 	\begin{figure}[H]
 		\begin{lstlisting}[language=Python]
 			class SimulationWellModel(BaseModel):
 			"""
 			Represents a complete well with identifying information, trajectory,
 			and optional completion data.
-			
+
 			Attributes:
 			name: Unique identifier for the well
 			trajectory: Collection of 3D points (x,y,z) defining the well path
@@ -267,17 +267,17 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		\end{lstlisting}
 		\caption{SimulationWellModel}
 	\end{figure}
-	
+
 	\begin{figure}[H]
 		\begin{lstlisting}[language=Python]
 			class WellManagementServiceResult(BaseModel):
 			"""
 			Container for the results from the Well Management Service,
 			providing a collection of well models for simulation.
-			
+
 			Attributes:
 			wells: List of well models to be used in simulation
-			
+
 			Validation:
 			Ensures all well names are unique within the collection
 			"""
@@ -287,7 +287,7 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 	\end{figure}
 
 	The well management models form a hierarchical structure:
-	
+
 	\begin{itemize}
 		\item \textbf{WellManagementServiceResult} contains multiple \textbf{SimulationWellModel} objects
 		\item Each \textbf{SimulationWellModel} contains:
@@ -360,7 +360,7 @@ The models form a hierarchical structure:
 		\item Each simulation case contains:
 		\begin{itemize}
 			\item Well configurations - results of WellManagementService.
-			\item A control vector with simulation parameters - just to keep closely optimization configuration and simulation results, as worker can pull simulation case in any order. 
+			\item A control vector with simulation parameters - just to keep closely optimization configuration and simulation results, as worker can pull simulation case in any order.
 			\item A placeholder for results.
 		\end{itemize}
 	\end{itemize}
@@ -395,5 +395,3 @@ The models form a hierarchical structure:
 	\item Numpy/SciPy for numerical operations
 	\item Logging framework for operational monitoring
 \end{itemize}
-
-

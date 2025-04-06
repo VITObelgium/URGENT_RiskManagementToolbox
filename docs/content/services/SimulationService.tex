@@ -46,6 +46,13 @@ Main system components:
 	\label{fig:SimulationServiceSystemArchitecture}
 \end{figure}
 
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1.0\textwidth]{content/images/SimulationServiceUML.pdf}
+	\caption{Simulation service system UML}
+	\label{fig:SimulationServiceUML}
+\end{figure}
+
 \textbf{Public API}
 \begin{itemize}
 	\item \textbf{Cluster Management}
@@ -138,10 +145,10 @@ Main system components:
 
 \textbf{Data Models Schema}
 
-The \texttt{SimulationService} uses a well-defined set of data models for handling simulation requests, cases, and results. Understanding these models is essential for effectively using the service. Public models are presented in Figs. \ref{fig:SimulationService SimulationResults Model} - \ref{fig:SimulationService SimulationServiceResponse Model}.
+The \texttt{SimulationService} uses a well-defined set of data models for handling simulation requests, cases, and results. Understanding these models is essential for effectively using the service. 
 
 \begin{figure}[H]
-	\begin{lstlisting}[language=Python]
+	\begin{lstlisting}[language=Python, caption={SimulationResults Model}]
 		class SimulationResults(BaseModel):
 		"""
 		Container for simulation calculation results.
@@ -156,12 +163,10 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		"""
 		Heat: float | Sequence[float] | Sequence[Sequence[float] | float]
 	\end{lstlisting}
-	\caption{SimulationResults Model}
-	\label{fig:SimulationService SimulationResults Model}
 \end{figure}
 
 \begin{figure}[H]
-	\begin{lstlisting}[language=Python]
+	\begin{lstlisting}[language=Python, caption={SimulationCase Model}]
 		class SimulationCase(BaseModel):
 		"""
 		Represents a single simulation case with inputs and optional results.
@@ -175,12 +180,10 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		control_vector: dict[str, float]
 		results: SimulationResults | None = Field(default=None)
 	\end{lstlisting}
-	\caption{SimulationCase Model}
-	\label{fig:SimulationService SimulationCase Model}
 \end{figure}
 
 \begin{figure}[H]
-	\begin{lstlisting}[language=Python]
+	\begin{lstlisting}[language=Python, caption={SimulationServiceRequest Model}]
 		class SimulationServiceRequest(BaseModel):
 		"""
 		Container for a batch of simulation cases to be processed.
@@ -190,12 +193,10 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		"""
 		simulation_cases: list[SimulationCase]
 	\end{lstlisting}
-	\caption{SimulationServiceRequest Model}
-	\label{fig:SimulationService SimulationServiceRequest Model}
 \end{figure}
 
 \begin{figure}[h]
-	\begin{lstlisting}[language=Python]
+	\begin{lstlisting}[language=Python, caption={SimulationServiceResponse Model}]
 		class SimulationServiceResponse(BaseModel):
 		"""
 		Container for processed simulation cases with results.
@@ -205,8 +206,6 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 		"""
 		simulation_cases: list[SimulationCase]
 	\end{lstlisting}
-	\caption{SimulationServiceResponse Model}
-	\label{fig:SimulationService SimulationServiceResponse Model}
 \end{figure}
 
 \textbf{Shared models:}
@@ -216,7 +215,7 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 	The SimulationService integrates with the Well Management Service through a set of shared models that define well configurations, trajectories, and completions. These models provide the foundation for simulation cases.
 
 	\begin{figure}[H]
-		\begin{lstlisting}[language=Python]
+		\begin{lstlisting}[language=Python, caption={SimulationWellPerforation Model}]
 			class SimulationWellPerforationModel(BaseModel):
 			"""
 			Represents a perforation in a well with a depth range and 3D coordinate points.
@@ -231,11 +230,10 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 			range: tuple[float, float]
 			points: tuple[tuple[float, float, float], ...]
 		\end{lstlisting}
-		\caption{SimulationWellPerforationModel}
 	\end{figure}
 
 	\begin{figure}[H]
-		\begin{lstlisting}[language=Python]
+		\begin{lstlisting}[language=Python, caption={imulationWellCompletio nModel}]
 			class SimulationWellCompletionModel(BaseModel):
 			"""
 			Represents the completion details of a well, containing perforations.
@@ -246,11 +244,10 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 			"""
 			perforations: tuple[SimulationWellPerforationModel, ...]
 		\end{lstlisting}
-		\caption{SimulationWellCompletionModel}
 	\end{figure}
 
 	\begin{figure}[H]
-		\begin{lstlisting}[language=Python]
+		\begin{lstlisting}[language=Python, caption={SimulationWell Model}]
 			class SimulationWellModel(BaseModel):
 			"""
 			Represents a complete well with identifying information, trajectory,
@@ -265,11 +262,10 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 			trajectory: tuple[tuple[float, float, float], ...]
 			completion: SimulationWellCompletionModel | None = Field(default=None)
 		\end{lstlisting}
-		\caption{SimulationWellModel}
 	\end{figure}
 
 	\begin{figure}[H]
-		\begin{lstlisting}[language=Python]
+		\begin{lstlisting}[language=Python, caption={WellManagementServiceResult Model}]
 			class WellManagementServiceResult(BaseModel):
 			"""
 			Container for the results from the Well Management Service,
@@ -283,7 +279,6 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 			"""
 			wells: list[SimulationWellModel]
 		\end{lstlisting}
-		\caption{WellManagementServiceResult Model}
 	\end{figure}
 
 	The well management models form a hierarchical structure:
@@ -394,4 +389,10 @@ The models form a hierarchical structure:
 	\item Protobuf for data serialization
 	\item Numpy/SciPy for numerical operations
 	\item Logging framework for operational monitoring
+\end{itemize}
+
+\bigskip
+\textbf{Supported simulators}:
+\begin{itemize}
+	\item OpenDarts
 \end{itemize}

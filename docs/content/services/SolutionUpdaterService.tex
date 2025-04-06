@@ -21,13 +21,13 @@ The \texttt{SimulationUpdaterService} follows a layered architecture pattern tha
 Key Architectural Principles:
 \begin{enumerate}
 	\item \textbf{Separation of Concerns}: Each component has a specific responsibility in the optimization workflow.
-	
+
 	\item \textbf{Domain-Numerical Translation}: The architecture provides clean translation between domain-specific concepts (control vectors, simulation results) and their numerical representations.
-	
+
 	\item \textbf{Encapsulated Optimization}: The optimization engine is abstracted from the business logic of the service.
-	
+
 	\item \textbf{Stateful Process Management}: The service maintains state throughout the optimization process while providing a clean API.
-	
+
 	\item \textbf{Extensible Design}: The layered architecture allows for replacing components (e.g., optimization algorithms) without affecting the overall system.
 \end{enumerate}
 
@@ -116,11 +116,11 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 
 \begin{itemize}
 	\item SimulationUpdaterService Constructor
-	
+
 	Initializes a new instance of the \texttt{SimulationUpdaterService} class. This constructor sets up the internal components required for the optimization process, including the mapper, optimization engine, and loop controller.
-	
+
 	\textbf{Implementation Details}
-	
+
 	The constructor performs the following initialization steps:
 	\begin{itemize}
 		\item Creates a new instance of the \texttt{\_Mapper} class for domain-numerical translation
@@ -136,11 +136,11 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 	\end{itemize}
 
 	\item \csignature{process\_request(self, request)}
-	
+
 	Processes an optimization request by iteratively updating the solution based on simulation results. This method represents the core functionality of the service, orchestrating the complete optimization workflow from initial population to converged solutions.
-	
+
 	\textbf{Implementation Details}
-	
+
 	The method implements a complete optimization step:
 	\begin{enumerate}
 		\item Validates the input request for required fields and data consistency
@@ -161,20 +161,20 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 			\item Mismatch between population size and results size
 			\item Invalid configuration parameters (negative max generations, etc.)
 		\end{itemize}
-		
+
 		\item \textbf{TypeError}: Raised if the data types in the request are incompatible with the optimization process
 		\begin{itemize}
 			\item Non-numeric values in control vectors or results
 			\item Incompatible constraint formats
 		\end{itemize}
-		
+
 		\item \textbf{RuntimeError}: Raised if the optimization process encounters an unrecoverable error
 		\begin{itemize}
 			\item Optimization algorithm failure
 			\item Numerical stability issues
 			\item Resource limitations
 		\end{itemize}
-		
+
 		\item \textbf{Exception Handling}: The method includes comprehensive exception handling to:
 		\begin{itemize}
 			\item Log detailed diagnostic information
@@ -185,9 +185,9 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 	\end{itemize}
 
 	\item \textbf{Loop controller}
-	
+
 	A property that provides access to the optimization loop controller. The loop controller exposes information about the optimization process state and provides control over the execution of the optimization loop:
-	
+
 	\begin{itemize}
 		\item Maintains state about the current generation number
 		\item Tracks whether the optimization loop is currently running
@@ -195,9 +195,9 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 		\item Enforces maximum generation constraints
 		\item Supports early termination of the optimization process
 	\end{itemize}
-	
+
 	The controller is typically used internally by the \texttt{process\_request} method, but is exposed as a public property to allow advanced clients to access detailed state information or implement custom loop control if needed.
-	
+
 \end{itemize}
 
 \textbf{Data Models Schema}
@@ -207,7 +207,7 @@ The \texttt{SimulationUpdaterService} uses a structured set of data models to re
 \begin{lstlisting}[language=Python, caption={OptimizationEngine enumeration definition}]
 	class OptimizationEngine(Enum):
 	"""Enumeration of available optimization algorithms."""
-	
+
 	PSO = "particle_swarm_optimization"
 	# Other algorithm types can be added here
 \end{lstlisting}
@@ -217,10 +217,10 @@ The \texttt{OptimizationEngine} enumeration defines the available optimization a
 
 \begin{lstlisting}[language=Python, caption={ControlVector model definition}]
 	from pydantic import BaseModel, Field
-	
+
 	class ControlVector(BaseModel, extra="forbid"):
 	"""Represents a collection of optimization variables."""
-	
+
 	items: Dict[str, float]
 \end{lstlisting}
 
@@ -236,10 +236,10 @@ The \texttt{ControlVector} model represents the input parameters that control a 
 
 \begin{lstlisting}[language=Python, caption={CostFunctionResults model definition}]
 	from pydantic import BaseModel, Field
-	
+
 	class CostFunctionResults(BaseModel, extra="forbid"):
 	"""Stores the results of cost function calculations."""
-	
+
 	values: Dict[str, float]
 \end{lstlisting}
 
@@ -255,12 +255,12 @@ The \texttt{CostFunctionResults} model stores the output metrics from simulation
 
 \begin{lstlisting}[language=Python, caption={OptimizationConstrains model with validation logic}]
 	from pydantic import BaseModel, Field, model_validator
-	
+
 	class OptimizationConstrains(BaseModel, extra="forbid"):
 	"""Defines the constraints for the optimization variables."""
-	
+
 	boundaries: Dict[str, Tuple[float, float]]
-	
+
 	@model_validator(mode='after')
 	def validate_lower_bound_is_less_than_upper_bound(self) -> 'OptimizationConstrains':
 	"""Validates that lower bounds are less than upper bounds."""
@@ -286,10 +286,10 @@ The \texttt{OptimizationConstrains} model defines the valid ranges for optimizat
 
 \begin{lstlisting}[language=Python, caption={SolutionCandidate model definition}]
 	from pydantic import BaseModel, Field
-	
+
 	class SolutionCandidate(BaseModel, extra="forbid"):
 	"""Represents a complete solution with inputs and results."""
-	
+
 	control_vector: ControlVector
 	cost_function_results: CostFunctionResults
 \end{lstlisting}
@@ -307,22 +307,22 @@ The \texttt{SolutionCandidate} model represents a complete solution in the optim
 \begin{lstlisting}[language=Python, caption={SolutionUpdaterServiceRequest model with complex validation logic}]
 	from pydantic import BaseModel, Field, model_validator
 	from typing import List, Optional
-	
+
 	class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 	"""The complete request for optimization."""
-	
+
 	solution_candidates: List[SolutionCandidate]
 	optimization_constraints: Optional[OptimizationConstrains] = None
-	
+
 	@model_validator(mode='after')
 	def validate_solution_candidates_contain_the_same_cost_functions(self) -> 'SolutionUpdaterServiceRequest':
 	"""Validates that all solution candidates use the same set of cost functions."""
 	if not self.solution_candidates:
 	return self
-	
+
 	reference_candidate = self.solution_candidates[0]
 	reference_cost_functions = set(reference_candidate.cost_function_results.values.keys())
-	
+
 	for idx, candidate in enumerate(self.solution_candidates[1:], start=1):
 	candidate_cost_functions = set(candidate.cost_function_results.values.keys())
 	if reference_cost_functions != candidate_cost_functions:
@@ -333,16 +333,16 @@ The \texttt{SolutionCandidate} model represents a complete solution in the optim
 	f"Got: {candidate_cost_functions}"
 	)
 	return self
-	
+
 	@model_validator(mode='after')
 	def validate_solution_candidates_contain_the_same_optimization_variables(self) -> 'SolutionUpdaterServiceRequest':
 	"""Validates that all solution candidates use the same set of optimization variables."""
 	if not self.solution_candidates:
 	return self
-	
+
 	reference_candidate = self.solution_candidates[0]
 	reference_variables = set(reference_candidate.control_vector.items.keys())
-	
+
 	for idx, candidate in enumerate(self.solution_candidates[1:], start=1):
 	candidate_variables = set(candidate.control_vector.items.keys())
 	if reference_variables != candidate_variables:
@@ -353,17 +353,17 @@ The \texttt{SolutionCandidate} model represents a complete solution in the optim
 	f"Got: {candidate_variables}"
 	)
 	return self
-	
+
 	@model_validator(mode='after')
 	def validate_optimization_boundaries_contain_the_same_optimization_variables(self) -> 'SolutionUpdaterServiceRequest':
 	"""Validates that optimization boundaries match the variables used in solutions."""
 	if not self.solution_candidates or not self.optimization_constraints:
 	return self
-	
+
 	reference_candidate = self.solution_candidates[0]
 	reference_variables = set(reference_candidate.control_vector.items.keys())
 	boundary_variables = set(self.optimization_constraints.boundaries.keys())
-	
+
 	if reference_variables != boundary_variables:
 	raise ValueError(
 	f"Optimization boundaries must contain the same variables as solution candidates. "
@@ -371,7 +371,7 @@ The \texttt{SolutionCandidate} model represents a complete solution in the optim
 	f"Boundary variables: {boundary_variables}"
 	)
 	return self
-	
+
 	@model_validator(mode='after')
 	def reorder_solution_candidates_optimization_variables_and_cost_functions(self) -> 'SolutionUpdaterServiceRequest':
 	"""Reorders variables and cost functions for consistent processing."""
@@ -409,14 +409,14 @@ The model includes several validation methods to ensure consistency across the s
 The optimization process within the \texttt{SimulationUpdaterService} follows a systematic workflow that translates domain-specific inputs into optimized outputs through several processing stages.
 
 \begin{enumerate}
-	
+
 \item Initialization Phase
 
 \begin{enumerate}
 	\item \textbf{Request Validation}: The service validates the incoming request to ensure it contains the required data.
-	
+
 	\item \textbf{Mapper Initialization}: On first execution, the mapper analyzes the structure of control vectors and results to create appropriate mappings.
-	
+
 	\item \textbf{State Preparation}: The service initializes the optimization state, including:
 	\begin{itemize}
 		\item Population arrays
@@ -425,7 +425,7 @@ The optimization process within the \texttt{SimulationUpdaterService} follows a 
 		\item Variable bounds
 		\item Generation counters
 	\end{itemize}
-	
+
 	\item \textbf{Engine Configuration}: The optimization engine is configured with appropriate parameters for the specific problem.
 \end{enumerate}
 
@@ -435,20 +435,20 @@ The main optimization step executes the following steps for each generation:
 
 \begin{enumerate}
 	\item \textbf{Population Conversion}: Control vectors are converted to numerical arrays using the mapper.
-	
+
 	\item \textbf{Fitness Evaluation}: The fitness of each solution is calculated based on simulation results.
-	
+
 	\item \textbf{Selection}: The most promising individuals are selected for producing the next generation.
-	
+
 	\item \textbf{Variation Operations}: The optimization engine applies:
 	\begin{itemize}
 		\item Crossover between selected individuals
 		\item Mutation to maintain diversity
 		\item Constraint handling to ensure valid solutions
 	\end{itemize}
-	
+
 	\item \textbf{Population Update}: The new generation replaces the previous one.
-	
+
 	\item \textbf{Convergence Check}: The service evaluates whether the optimization has converged using:
 	\begin{itemize}
 		\item Change in objective function values
@@ -456,7 +456,7 @@ The main optimization step executes the following steps for each generation:
 		\item Constraint satisfaction levels
 		\item Stability of the best solution
 	\end{itemize}
-	
+
 	\item \textbf{Loop Control}: The controller updates generation counters and checks for termination conditions.
 \end{enumerate}
 
@@ -466,9 +466,9 @@ After the optimization step completes (either through convergence or reaching ma
 
 \begin{enumerate}
 	\item \textbf{Result Translation}: The final numerical solutions are converted back to domain-specific control vectors.
-	
+
 	\item \textbf{Metrics Compilation}: Convergence metrics and optimization statistics are compiled.
-	
+
 	\item \textbf{Response Preparation}: A structured response is created containing:
 	\begin{itemize}
 		\item Optimized control vectors
@@ -476,7 +476,7 @@ After the optimization step completes (either through convergence or reaching ma
 		\item Termination reason
 		\item Generation statistics
 	\end{itemize}
-	
+
 	\item \textbf{Resource Cleanup}: Any temporary resources used during optimization are released.
 \end{enumerate}
 

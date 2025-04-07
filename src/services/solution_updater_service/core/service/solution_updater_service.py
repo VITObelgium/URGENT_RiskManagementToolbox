@@ -405,7 +405,7 @@ class SolutionUpdaterService:
 
         self._patience_left -= 1
 
-        if not self._patience_left:
+        if self._patience_left <= 0:
             self._logger.info(
                 f"Optimization process has not improved the best solution for {self._base_patience} consecutive iterations, stopping service."
             )

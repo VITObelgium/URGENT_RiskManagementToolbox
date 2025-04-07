@@ -335,3 +335,42 @@ def test_optimization_service_full_round(test_case):
     assert (
         best_result <= tol
     ), f"Best result {best_result} is not close enough to the global minimum value."
+
+
+def test_patience_exceeded_parameter(mocked_engine, monkeypatch):
+    # Arrange
+    service = SolutionUpdaterService(
+        optimization_engine=engine, patience=2
+    )  # Set patience to 2 for testing
+    monkeypatch.setattr(service, "_engine", mocked_engine)
+
+    # Test data
+    config_json = {
+        "solution_candidates": [
+            {
+                "control_vector": {"items": {"param1": 1.0, "param2": 2.0}},
+                "cost_function_results": {"values": {"metric1": 10.0}},
+            }
+        ],
+    }
+
+    # Act & Assert - First call
+    result = service.process_request(config_json)
+    assert isinstance(result, SolutionUpdaterServiceResponse)
+    assert (
+        result.patience_exceeded is False
+    ), "Patience should not be exceeded on first call"
+
+    # Act & Assert - Second call
+    result = service.process_request(config_json)
+    assert isinstance(result, SolutionUpdaterServiceResponse)
+    assert (
+        result.patience_exceeded is True
+    ), "Patience should not be exceeded on second call"
+
+    # Act & Assert - Third call (patience should be exceeded)
+    result = service.process_request(config_json)
+    assert isinstance(result, SolutionUpdaterServiceResponse)
+    assert (
+        result.patience_exceeded is True
+    ), "Patience should be exceeded after patience iterations"

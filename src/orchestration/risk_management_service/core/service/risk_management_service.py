@@ -25,6 +25,7 @@ def run_risk_management(
     problem_definition: dict[str, Any],
     simulation_model_archive: bytes | str,
     n_size: int = 10,
+    patience: int = 10,
 ):
     """
     Main entry point for running risk management.
@@ -53,7 +54,7 @@ def run_risk_management(
                 "Initializing SolutionUpdaterService and ProblemDispatcherService."
             )
             solution_updater = SolutionUpdaterService(
-                optimization_engine=OptimizationEngine.PSO
+                optimization_engine=OptimizationEngine.PSO, patience=patience
             )
             dispatcher = ProblemDispatcherService(
                 problem_definition=problem_definition, n_size=n_size

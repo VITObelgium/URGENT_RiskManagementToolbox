@@ -101,18 +101,27 @@ def run_risk_management(
                 )
 
                 # Map simulation service solutions to the ProblemDispatcherService format
-                next_solutions = ControlVectorMapper.convert_su_to_pd(
-                    solution_updater.process_request(
-                        {
-                            "solution_candidates": updated_solutions,
-                            "optimization_constraints": {"boundaries": boundaries},
-                        }
-                    ).next_iter_solutions
+                response = solution_updater.process_request(
+                    {
+                        "solution_candidates": updated_solutions,
+                        "optimization_constraints": {"boundaries": boundaries},
+                    }
                 )
+
+                next_solutions = ControlVectorMapper.convert_su_to_pd(
+                    response.next_iter_solutions
+                )
+
                 logger.info(
                     "Iteration %d successfully completed for risk management.",
                     iteration + 1,
                 )
+
+                if response.patience_exceeded:
+                    logger.info(
+                        "Updater Service stopped due to exceeding pattience, exiting optimization loop."
+                    )
+                    break
 
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)

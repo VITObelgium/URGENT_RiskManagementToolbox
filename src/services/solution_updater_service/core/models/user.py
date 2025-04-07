@@ -10,6 +10,7 @@ type OptimizationVariable = str
 type CostFunction = str
 type LowerBound = float
 type UpperBound = float
+type PatienceExceeded = bool
 
 
 class OptimizationEngine(StrEnum):
@@ -183,3 +184,4 @@ class SolutionUpdaterServiceResponse(BaseModel, extra="forbid"):
     """
 
     next_iter_solutions: list[ControlVector]
+    patience_exceeded: PatienceExceeded

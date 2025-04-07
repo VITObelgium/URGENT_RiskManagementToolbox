@@ -322,16 +322,19 @@ class _Mapper:
 
 
 class SolutionUpdaterService:
-    def __init__(self, optimization_engine: OptimizationEngine) -> None:
+    def __init__(
+        self, optimization_engine: OptimizationEngine, patience: int = 10
+    ) -> None:
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
             OptimizationEngineFactory.get_engine(optimization_engine)
         )
+        self._base_patience, self._patience_left = patience, patience
         self._logger = get_logger(__name__)
 
     def process_request(
         self, request_dict: dict[str, Any]
-    ) -> SolutionUpdaterServiceResponse:
+    ) -> SolutionUpdaterServiceResponse:  # Create a flag insite SolutionResponse with
         """
         Updates the solution space for the next optimization iteration.
 
@@ -399,4 +402,17 @@ class SolutionUpdaterService:
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
         self._logger.info("Control vectors update request processed successfully.")
-        return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
+
+        self._patience_left -= 1
+
+        if not self._patience_left:
+            self._logger.info(
+                f"Optimization process has not improved the best solution for {self._base_patience} consecutive iterations, stopping service."
+            )
+            patience_exceeded = True
+        else:
+            patience_exceeded = False
+
+        return SolutionUpdaterServiceResponse(
+            next_iter_solutions=next_iter_solutions, patience_exceeded=patience_exceeded
+        )

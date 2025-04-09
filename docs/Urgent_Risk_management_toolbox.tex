@@ -6,6 +6,7 @@
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage[inkscapeformat=png]{svg}
 \usepackage{gensymb}
 \usepackage{tikz}
 \setlength\parindent{0pt}
@@ -45,20 +46,6 @@
 
 \begin{document}
 	\maketitle
-	\section{Introduction}
-	\section{System architecture}
-	\subsection{High-level}
-	\subsection{Services}
-	\input{content/services/WellManagementService}
-	\input{content/services/SimulationService}
-	\input{content/services/SolutionUpdaterService}
-	\input{content/services/ProblemDispatcherService}
-	\subsection{Orchestration}
-	\subsection{Data flow}
-	\subsection{Dependencies}
-
-
-
-
-
+	\input{chapters/010_Introduction}
+	\input{chapters/020_Architecture}
 \end{document}

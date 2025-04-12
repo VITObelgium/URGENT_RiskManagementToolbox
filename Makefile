@@ -23,6 +23,9 @@ install-latex:
 	$(log) "Installing LaTeX and TeXstudio..."
 	sudo apt install -y texlive-latex-extra texstudio
 	$(log) "LaTeX and TeXstudio installed successfully."
+	$(log) "Installing inkscape..."
+	sudo apt-get install inkscape
+	$(log) "Inkscape installed successfully."
 
 install-docker: prerequisites
 	$(log) "Removing old Docker packages..."
@@ -88,11 +91,11 @@ run-check:
 	$(log) "Pre-commit checks complete."
 
 edit-docs:
-	@if command -v texstudio >/dev/null 2>&1; then \
+	@if command -v texstudio >/dev/null 2>&1 && command -v inkscape >/dev/null 2>&1; then \
 		$(log) "Opening documentation in TeXstudio..."; \
 		texstudio docs/Urgent_Risk_management_toolbox.tex; \
 	else \
-		echo "TeXstudio is not installed."; \
+		echo "TeXstudio or its dependencies are not installed."; \
 		read -p "Do you want to install it now? [y/N] " response; \
 		if [ "$$response" = "y" ]; then \
 			$(MAKE) install-latex; \

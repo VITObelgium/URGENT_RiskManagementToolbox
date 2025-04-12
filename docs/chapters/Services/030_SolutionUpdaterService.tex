@@ -309,74 +309,74 @@ The \texttt{SolutionCandidate} model represents a complete solution in the optim
 	from typing import List, Optional
 
 	class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
-	"""The complete request for optimization."""
+		"""The complete request for optimization."""
 
-	solution_candidates: List[SolutionCandidate]
-	optimization_constraints: Optional[OptimizationConstrains] = None
+		solution_candidates: List[SolutionCandidate]
+		optimization_constraints: Optional[OptimizationConstrains] = None
 
 	@model_validator(mode='after')
 	def validate_solution_candidates_contain_the_same_cost_functions(self) -> 'SolutionUpdaterServiceRequest':
-	"""Validates that all solution candidates use the same set of cost functions."""
-	if not self.solution_candidates:
-	return self
+		"""Validates that all solution candidates use the same set of cost functions."""
+		if not self.solution_candidates:
+			return self
 
-	reference_candidate = self.solution_candidates[0]
-	reference_cost_functions = set(reference_candidate.cost_function_results.values.keys())
+		reference_candidate = self.solution_candidates[0]
+		reference_cost_functions = set(reference_candidate.cost_function_results.values.keys())
 
-	for idx, candidate in enumerate(self.solution_candidates[1:], start=1):
-	candidate_cost_functions = set(candidate.cost_function_results.values.keys())
-	if reference_cost_functions != candidate_cost_functions:
-	raise ValueError(
-	f"All solution candidates must contain the same cost functions. "
-	f"Mismatch at candidate {idx}. "
-	f"Expected: {reference_cost_functions}, "
-	f"Got: {candidate_cost_functions}"
-	)
-	return self
+		for idx, candidate in enumerate(self.solution_candidates[1:], start=1):
+			candidate_cost_functions = set(candidate.cost_function_results.values.keys())
+			if reference_cost_functions != candidate_cost_functions:
+				raise ValueError(
+					f"All solution candidates must contain the same cost functions. "
+					f"Mismatch at candidate {idx}. "
+					f"Expected: {reference_cost_functions}, "
+					f"Got: {candidate_cost_functions}"
+				)
+		return self
 
 	@model_validator(mode='after')
 	def validate_solution_candidates_contain_the_same_optimization_variables(self) -> 'SolutionUpdaterServiceRequest':
-	"""Validates that all solution candidates use the same set of optimization variables."""
-	if not self.solution_candidates:
-	return self
+		"""Validates that all solution candidates use the same set of optimization variables."""
+		if not self.solution_candidates:
+			return self
 
-	reference_candidate = self.solution_candidates[0]
-	reference_variables = set(reference_candidate.control_vector.items.keys())
+		reference_candidate = self.solution_candidates[0]
+		reference_variables = set(reference_candidate.control_vector.items.keys())
 
-	for idx, candidate in enumerate(self.solution_candidates[1:], start=1):
-	candidate_variables = set(candidate.control_vector.items.keys())
-	if reference_variables != candidate_variables:
-	raise ValueError(
-	f"All solution candidates must contain the same optimization variables. "
-	f"Mismatch at candidate {idx}. "
-	f"Expected: {reference_variables}, "
-	f"Got: {candidate_variables}"
-	)
-	return self
+		for idx, candidate in enumerate(self.solution_candidates[1:], start=1):
+			candidate_variables = set(candidate.control_vector.items.keys())
+			if reference_variables != candidate_variables:
+				raise ValueError(
+					f"All solution candidates must contain the same optimization variables. "
+					f"Mismatch at candidate {idx}. "
+					f"Expected: {reference_variables}, "
+					f"Got: {candidate_variables}"
+				)
+		return self
 
 	@model_validator(mode='after')
 	def validate_optimization_boundaries_contain_the_same_optimization_variables(self) -> 'SolutionUpdaterServiceRequest':
-	"""Validates that optimization boundaries match the variables used in solutions."""
-	if not self.solution_candidates or not self.optimization_constraints:
-	return self
+		"""Validates that optimization boundaries match the variables used in solutions."""
+		if not self.solution_candidates or not self.optimization_constraints:
+			return self
 
-	reference_candidate = self.solution_candidates[0]
-	reference_variables = set(reference_candidate.control_vector.items.keys())
-	boundary_variables = set(self.optimization_constraints.boundaries.keys())
+		reference_candidate = self.solution_candidates[0]
+		reference_variables = set(reference_candidate.control_vector.items.keys())
+		boundary_variables = set(self.optimization_constraints.boundaries.keys())
 
-	if reference_variables != boundary_variables:
-	raise ValueError(
-	f"Optimization boundaries must contain the same variables as solution candidates. "
-	f"Solution variables: {reference_variables}, "
-	f"Boundary variables: {boundary_variables}"
-	)
-	return self
+		if reference_variables != boundary_variables:
+			raise ValueError(
+				f"Optimization boundaries must contain the same variables as solution candidates. "
+				f"Solution variables: {reference_variables}, "
+				f"Boundary variables: {boundary_variables}"
+			)
+			return self
 
 	@model_validator(mode='after')
 	def reorder_solution_candidates_optimization_variables_and_cost_functions(self) -> 'SolutionUpdaterServiceRequest':
-	"""Reorders variables and cost functions for consistent processing."""
-	# Implementation handles consistency of ordering across solution candidates
-	return self
+		"""Reorders variables and cost functions for consistent processing."""
+		# Implementation handles consistency of ordering across solution candidates
+		return self
 \end{lstlisting}
 
 \textbf{Description:}

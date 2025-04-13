@@ -120,7 +120,7 @@ def run_risk_management(
 
                 if response.patience_exceeded:
                     logger.info(
-                        "Updater Service stopped due to exceeding pattience, exiting optimization loop."
+                        "Updater Service stopped due to exceeding patience, exitting optimization loop."
                     )
                     break
 

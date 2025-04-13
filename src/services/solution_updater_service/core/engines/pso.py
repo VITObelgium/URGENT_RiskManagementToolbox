@@ -63,6 +63,10 @@ class PSOEngine(OptimizationEngineInterface):
         new_positions = self._calculate_new_position(parameters, new_velocities)
         return self._reflect_and_clip_positions(new_positions, lb, ub)
 
+    @property
+    def state(self):
+        return self._state
+
     def _initialize_state_on_first_call(
         self, parameters: npt.NDArray[np.float64], results: npt.NDArray[np.float64]
     ) -> None:

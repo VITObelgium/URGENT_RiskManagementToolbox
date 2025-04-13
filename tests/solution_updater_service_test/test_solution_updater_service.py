@@ -13,6 +13,10 @@ from services.solution_updater_service.core.utils import get_numpy_values
 engine = OptimizationEngine.PSO
 
 
+class StaticState:
+    global_best_result = -1
+
+
 @pytest.fixture
 def mocked_engine():  # type: ignore
     """Fixture for a mocked OptimizationEngineInterface."""
@@ -23,6 +27,10 @@ def mocked_engine():  # type: ignore
         ):
             # Mock behavior: Add 1.0 to each parameter value as a simple transformation
             return parameters + 1.0
+
+        @property
+        def state(self):
+            return StaticState
 
     return MockedOptimizationEngine()
 
@@ -38,6 +46,10 @@ def mocked_engine_with_bnb():  # type: ignore
             # Simulate parameter transformation and ensure constraints are applied
             updated_parameters = np.clip(parameters + 1.0, lb, ub)
             return updated_parameters
+
+        @property
+        def state(self):
+            return StaticState
 
     return MockedOptimizationEngine()
 
@@ -365,12 +377,20 @@ def test_patience_exceeded_parameter(mocked_engine, monkeypatch):
     result = service.process_request(config_json)
     assert isinstance(result, SolutionUpdaterServiceResponse)
     assert (
-        result.patience_exceeded is True
-    ), "Patience should not be exceeded on second call"
+        result.patience_exceeded is False
+    ), "Patience should be exceeded on second call"
 
     # Act & Assert - Third call (patience should be exceeded)
     result = service.process_request(config_json)
     assert isinstance(result, SolutionUpdaterServiceResponse)
     assert (
         result.patience_exceeded is True
-    ), "Patience should be exceeded after patience iterations"
+    ), "Patience should be exceeded after three iterations"
+
+    # Act & Assert - Fourth call, reset patience (patience should be exceeded now)
+    service._patience_left = 2
+    result = service.process_request(config_json)
+    assert isinstance(result, SolutionUpdaterServiceResponse)
+    assert (
+        result.patience_exceeded is False
+    ), "Patience should not be exceeded after patience reset"

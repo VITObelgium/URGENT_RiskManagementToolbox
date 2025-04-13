@@ -330,6 +330,7 @@ class SolutionUpdaterService:
             OptimizationEngineFactory.get_engine(optimization_engine)
         )
         self._base_patience, self._patience_left = patience, patience
+        self._last_global_best_result = None
         self._logger = get_logger(__name__)
 
     def process_request(
@@ -403,16 +404,26 @@ class SolutionUpdaterService:
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
         self._logger.info("Control vectors update request processed successfully.")
 
-        self._patience_left -= 1
+        self._update_patience()
 
         if self._patience_left <= 0:
             self._logger.info(
                 f"Optimization process has not improved the best solution for {self._base_patience} consecutive iterations, stopping service."
             )
-            patience_exceeded = True
-        else:
-            patience_exceeded = False
+            return SolutionUpdaterServiceResponse(
+                next_iter_solutions=next_iter_solutions, patience_exceeded=True
+            )
 
         return SolutionUpdaterServiceResponse(
-            next_iter_solutions=next_iter_solutions, patience_exceeded=patience_exceeded
+            next_iter_solutions=next_iter_solutions, patience_exceeded=False
         )
+
+    def _update_patience(self):
+        global_best_result = self._engine.state.global_best_result
+
+        if global_best_result == self._last_global_best_result:
+            self._patience_left -= 1
+        else:
+            self._patience_left == self._base_patience
+
+        self._last_global_best_result = global_best_result

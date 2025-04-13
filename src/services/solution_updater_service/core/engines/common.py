@@ -13,3 +13,7 @@ class OptimizationEngineInterface(ABC):
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]: ...
+
+    @property
+    @abstractmethod
+    def state(self): ...

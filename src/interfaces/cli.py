@@ -32,6 +32,12 @@ def cli():
         default=10,
         help="Number of samples for the dispatcher. Default is 10.",
     )
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=10,
+        help="Iterations limit without better result. Default is 10.",
+    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -55,6 +61,7 @@ def cli():
             problem_definition=problem_definition,
             simulation_model_archive=args.model_file,
             n_size=args.n_size,
+            patience=args.patience,
         )
         logger.info("Risk management process completed successfully.")
     except Exception as e:

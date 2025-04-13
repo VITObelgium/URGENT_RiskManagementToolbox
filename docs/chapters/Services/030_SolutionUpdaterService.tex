@@ -1,5 +1,5 @@
-\subsubsection{Solution updater service}
-\textbf{Overview}
+\subsection{Solution updater service}
+\subsubsection{Overview}
 
 The \texttt{SimulationUpdaterService} is a specialized optimization component that iteratively refines simulation models based on result feedback. It serves as the core engine for solution convergence in complex simulation workflows by:
 
@@ -13,8 +13,7 @@ The \texttt{SimulationUpdaterService} is a specialized optimization component th
 
 This service is designed for high-performance computing environments where simulations are computationally expensive and optimization requires sophisticated numerical processing. It integrates with larger simulation workflows to provide continuous refinement of model parameters.
 
-\bigskip
-\textbf{Architecture}
+\subsubsection{Architecture}
 
 The \texttt{SimulationUpdaterService} follows a layered architecture pattern that separates concerns between different components of the optimization process.
 
@@ -33,13 +32,12 @@ Key Architectural Principles:
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=1.0\textwidth]{content/images/SolutionUpdaterUML.pdf}
+	\includesvg[width=1.0\textwidth]{content/images/SolutionUpdaterServiceUML}
 	\caption{Simulation updater service system UML}
 	\label{fig:SolutionUpdaterServiceUML}
 \end{figure}
 
-\bigskip
-\textbf{System Components}
+\subsubsection{System Components}
 
 The \texttt{SimulationUpdaterService} consists of several interconnected components that work together to provide optimization capabilities:
 
@@ -110,7 +108,7 @@ Encapsulated component that implements the mathematical optimization algorithms.
 
 \end{itemize}
 
-\textbf{Public API}
+\subsubsection{Public API}
 
 The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API that provides access to its optimization capabilities. This section details each public method, its parameters, return values, and implementation details.
 
@@ -135,7 +133,9 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 		\item If dependencies are not available or incorrectly configured, appropriate import or initialization errors will be raised
 	\end{itemize}
 
-	\item \csignature{process\_request(self, request)}
+\begin{verbatim}
+process_request(self, request_dict: dict[str, Any]) -> SolutionUpdaterServiceResponse
+\end{verbatim}
 
 	Processes an optimization request by iteratively updating the solution based on simulation results. This method represents the core functionality of the service, orchestrating the complete optimization workflow from initial population to converged solutions.
 
@@ -200,7 +200,9 @@ The \texttt{SimulationUpdaterService} exposes a minimal yet powerful public API 
 
 \end{itemize}
 
-\textbf{Data Models Schema}
+
+
+\subsubsection{Data Models Schema}
 
 The \texttt{SimulationUpdaterService} uses a structured set of data models to represent optimization problems, solution candidates, and constraints. This section details the schemas of these models and their relationships.
 
@@ -398,14 +400,11 @@ The model includes several validation methods to ensure consistency across the s
 	\item If constraints are provided, they must cover the same variable names
 \end{itemize}
 
+\subsubsection{Shared models}
 
+Service do not use any shared data models.
 
-
-
-
-
-\bigskip
-\textbf{Detailed Workflow}
+\subsubsection{Detailed Workflow}
 The optimization process within the \texttt{SimulationUpdaterService} follows a systematic workflow that translates domain-specific inputs into optimized outputs through several processing stages.
 
 \begin{enumerate}
@@ -481,3 +480,11 @@ After the optimization step completes (either through convergence or reaching ma
 \end{enumerate}
 
 \end{enumerate}
+
+\subsubsection{Dependencies}
+
+\begin{itemize}
+	\item Numpy/SciPy for numerical operations
+	\item Logging framework for operational monitoring
+	\item Pydantic for data validation
+\end{itemize}

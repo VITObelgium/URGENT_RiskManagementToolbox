@@ -1,17 +1,14 @@
-\subsubsection{Simulation service}
-\textbf{Overview}
+\subsection{Simulation service}
+\subsubsection{Overview}
 
 \texttt{SimulationService} is a high-performance distributed simulation management system designed to orchestrate, execute, and monitor simulation tasks across a computational cluster. The service provides a robust API for transferring simulation models, processing requests, and managing the lifecycle of the simulation infrastructure.
 
-\bigskip
-\textbf{Architecture}
+\subsubsection{Architecture}
 
 The service is built on a client-server architecture using gRPC for high-performance communication. It leverages a worker pool pattern to distribute simulation workloads efficiently across available computational resources. \texttt{SimulationService} system architecture is present in Fig. \ref{fig:SimulationServiceSystemArchitecture}.
 
-\bigskip
-\textbf{System Components}
+\subsubsection{System Components}
 
-\bigskip
 Main system components:
 
 \begin{itemize}
@@ -39,12 +36,12 @@ Main system components:
 
 \end{itemize}
 
-% \begin{figure}[H]
-% 	\centering
-% 	\includesvg[width=1.0\textwidth]{content/images/SimulationServiceArchitecture}
-% 	\caption{Simulation service system architecture}
-% 	\label{fig:SimulationServiceSystemArchitecture}
-% \end{figure}
+\begin{figure}[H]
+ 	\centering
+ 	\includesvg[width=1.0\textwidth]{content/images/SimulationServiceArchitecture}
+ 	\caption{Simulation service system architecture}
+ 	\label{fig:SimulationServiceSystemArchitecture}
+ \end{figure}
 
 \begin{figure}[H]
 	\centering
@@ -53,11 +50,12 @@ Main system components:
 	\label{fig:SimulationServiceUML}
 \end{figure}
 
-\textbf{Public API}
+\subsubsection{Public API}
 \begin{itemize}
 	\item \textbf{Cluster Management}
-
-	 \csignature{\textit{start\_simulation\_cluster() $\rightarrow$ None}}
+	\begin{verbatim}
+		start_simulation_cluster() -> None
+	\end{verbatim}
 
 	 Initializes and launches the simulation cluster with the configured number of worker processes.
 
@@ -74,7 +72,11 @@ Main system components:
 
 	 \textbf{Error Handling:} Raises exceptions for configuration issues, network failures, or resource allocation problems
 
-	\csignature{\textit{shutdown\_simulation\_cluster() $\rightarrow$ None}}
+
+	\begin{verbatim}
+		shutdown_simulation_cluster() -> None
+	\end{verbatim}
+
 
 	Safely terminates the simulation cluster and releases all resources.
 	\textbf{Implementation Details:}
@@ -90,8 +92,9 @@ Main system components:
 	\textbf{Error Handling:} Logs errors during shutdown but attempts to complete the process regardless of failures
 
 	\item \textbf{Simulation Execution}
-
-	\csignature{\textit{process\_request(request)}}
+	\begin{verbatim}
+		process_request(request_dict: dict[str, Any]) -> SimulationServiceResponse:
+	\end{verbatim}
 
 	Processes a simulation request by distributing tasks to the worker pool and aggregating results.
 
@@ -120,7 +123,15 @@ Main system components:
 
 	\item \textbf{Model Management}
 
-	\csignature{transfer\_simulation\_model(model)}
+be called concurrently with \texttt{start\_simulation\_cluster()}
+
+\textbf{Error Handling:} Logs errors during shutdown but attempts to complete the process regardless of failures
+
+\item \textbf{Simulation Execution}
+
+\begin{verbatim}
+	transfer_simulation_model(simulation_model_archive: bytes | str) -> None
+\end{verbatim}
 
 	Prepares and transfers a simulation model to all worker nodes in the cluster via simulation server.
 
@@ -143,7 +154,7 @@ Main system components:
 
 \end{itemize}
 
-\textbf{Data Models Schema}
+\subsubsection{Data Models Schema}
 
 The \texttt{SimulationService} uses a well-defined set of data models for handling simulation requests, cases, and results. Understanding these models is essential for effectively using the service.
 
@@ -208,7 +219,7 @@ The \texttt{SimulationService} uses a well-defined set of data models for handli
 	\end{lstlisting}
 \end{figure}
 
-\textbf{Shared models:}
+\subsubsection{Shared models}
 \begin{enumerate}
 	\item Well Management Service Models
 
@@ -318,7 +329,7 @@ The models form a hierarchical structure:
 
 
 
-\textbf{Detailed Workflow}
+\subsubsection{Detailed Workflow}
 \begin{enumerate}
 	\item Cluster Initialization
 	\begin{itemize}
@@ -381,18 +392,17 @@ The models form a hierarchical structure:
 	\end{itemize}
 \end{enumerate}
 
-\bigskip
-\textbf{Dependencies}
+\subsubsection{Dependencies}
 
 \begin{itemize}
 	\item gRPC framework for communication
 	\item Protobuf for data serialization
 	\item Numpy/SciPy for numerical operations
 	\item Logging framework for operational monitoring
+	\item Pydantic for data validation
 \end{itemize}
 
-\bigskip
-\textbf{Supported simulators}:
+\subsubsection{Supported simulators}
 \begin{itemize}
 	\item OpenDarts
 \end{itemize}

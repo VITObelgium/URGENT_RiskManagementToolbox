@@ -353,7 +353,7 @@ class SolutionUpdaterService:
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
-        
+
         Args:
             optimization_engine (OptimizationEngine): The optimization algorithm to use.
             max_generations (int): Maximum number of optimization iterations to perform.
@@ -461,7 +461,7 @@ class SolutionUpdaterService:
     def _update_patience(self):
         """
         Updates the remaining patience counter based on optimization progress.
-        
+
         Decrements the patience counter if the global best result hasn't improved
         since the last iteration. Resets the patience counter to its initial value
         when an improvement is detected. This mechanism enables early stopping when

@@ -177,6 +177,10 @@ class SolutionUpdaterServiceResponse(BaseModel, extra="forbid"):
         next_iter_solutions (list[ControlVector]): A list of `ControlVector` instances representing
             the next iteration's optimal solutions determined by the optimization process. Each
             control vector contains the parameters and their corresponding optimized values.
+        patience_exceeded (PatienceExceeded): A boolean flag indicating whether the optimization
+            process has reached its patience limit. When True, it signals that the solution has not
+            improved for the specified number of consecutive iterations, suggesting convergence
+            or a local minimum.
 
     Notes:
         The `extra="forbid"` option ensures that no additional fields are allowed beyond the explicitly

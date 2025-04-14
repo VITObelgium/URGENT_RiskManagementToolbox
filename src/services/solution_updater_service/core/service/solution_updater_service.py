@@ -351,6 +351,15 @@ class SolutionUpdaterService:
         max_generations: int,
         patience: int = 10,
     ) -> None:
+        """
+        Initializes the SolutionUpdaterService with specified optimization engine and parameters.
+        
+        Args:
+            optimization_engine (OptimizationEngine): The optimization algorithm to use.
+            max_generations (int): Maximum number of optimization iterations to perform.
+            patience (int, optional): Number of consecutive iterations without improvement
+                before early stopping is triggered. Defaults to 10.
+        """
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
             OptimizationEngineFactory.get_engine(optimization_engine)
@@ -362,7 +371,7 @@ class SolutionUpdaterService:
 
     def process_request(
         self, request_dict: dict[str, Any]
-    ) -> SolutionUpdaterServiceResponse:  # Create a flag insite SolutionResponse with
+    ) -> SolutionUpdaterServiceResponse:
         """
         Updates the solution space for the next optimization iteration.
 
@@ -397,6 +406,8 @@ class SolutionUpdaterService:
                 An object containing the updated solution control vectors for the next
                 optimization iteration. It includes:
                 - `next_iter_solutions`: A list of updated `ControlVector` instances.
+                - `patience_exceeded`: A boolean flag indicating whether the optimization
+                  process has reached its patience limit due to lack of improvement.
 
         Raises:
             RuntimeError:
@@ -448,6 +459,14 @@ class SolutionUpdaterService:
         )
 
     def _update_patience(self):
+        """
+        Updates the remaining patience counter based on optimization progress.
+        
+        Decrements the patience counter if the global best result hasn't improved
+        since the last iteration. Resets the patience counter to its initial value
+        when an improvement is detected. This mechanism enables early stopping when
+        the optimization process stagnates.
+        """
         global_best_result = self._engine.state.global_best_result
 
         if global_best_result == self._last_global_best_result:

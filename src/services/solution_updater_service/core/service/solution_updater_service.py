@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -322,13 +324,23 @@ class _Mapper:
 
 
 class _SolutionUpdaterServiceLoopController:
-    def __init__(self, max_generations: int) -> None:
+    def __init__(
+        self,
+        max_generations: int,
+        patience: int,
+        solution_updater_service: SolutionUpdaterService,
+    ) -> None:
         """
         Helper class to control the loop of the solution updater service.
         This class manages the number of iterations for the optimization process, and raises StopIteration exception when convergence fails.
         """
+        self._solution_updater_service = solution_updater_service
+
         self._max_generations = max_generations
         self.current_generation = 0
+
+        self.base_patience, self.patience_left = patience, patience
+
         self._is_running = True
 
     def running(self) -> bool:
@@ -338,10 +350,33 @@ class _SolutionUpdaterServiceLoopController:
         Returns:
             bool: True if the loop controller is running, False otherwise.
         """
-        if self.current_generation >= self._max_generations:
+        if self._max_generation_reached():
+            self._solution_updater_service._logger.info(
+                "Max Generation %d reached, stopping optimization loop.",
+                self.current_generation,
+            )
             self._is_running = False
-        self.current_generation += 1
+
+        if self._patience_reached():
+            self._solution_updater_service._logger.info(
+                "Max Generation %d reached, stopping optimization loop.",
+                self.current_generation,
+            )
+            self._is_running = False
+
         return self._is_running
+
+    def _update_generations(self) -> None:
+        self.current_generation += 1
+
+    # def _update_patience(self) -> None:
+    #     if self._solution_updater_service._engine.state.global_best_result
+
+    def _max_generation_reached(self) -> bool:
+        return self.current_generation >= self._max_generations
+
+    def _patience_reached(self) -> bool:
+        return self.patience_left <= 0
 
 
 class SolutionUpdaterService:
@@ -367,7 +402,9 @@ class SolutionUpdaterService:
         self._base_patience, self._patience_left = patience, patience
         self._last_global_best_result = None
         self._logger = get_logger(__name__)
-        self.loop_controller = _SolutionUpdaterServiceLoopController(max_generations)
+        self.loop_controller = _SolutionUpdaterServiceLoopController(
+            max_generations, patience, self
+        )
 
     def process_request(
         self, request_dict: dict[str, Any]

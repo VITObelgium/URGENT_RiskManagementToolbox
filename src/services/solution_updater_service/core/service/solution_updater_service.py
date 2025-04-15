@@ -364,6 +364,8 @@ class _SolutionUpdaterServiceLoopController:
             )
             self._is_running = False
 
+        self._update_generations()
+
         return self._is_running
 
     def _update_generations(self) -> None:

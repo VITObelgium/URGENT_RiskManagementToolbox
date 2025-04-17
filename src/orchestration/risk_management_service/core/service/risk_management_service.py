@@ -126,6 +126,12 @@ def run_risk_management(
                     loop_controller.current_generation,
                     str(e),
                 )
+            finally:
+                logger.info(
+                    "Optimization results: Fitness value = %f Control vector = %s",
+                    solution_updater.global_best_result,
+                    str(solution_updater.global_best_controll_vector.items),
+                )
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)
             raise

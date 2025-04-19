@@ -2,7 +2,7 @@
 import random
 from typing import Any, Callable
 
-from logger.u_logger import get_logger
+from logger import get_logger
 from services.problem_dispatcher_service.core.builder import TaskBuilder
 from services.problem_dispatcher_service.core.models import (
     ControlVector,

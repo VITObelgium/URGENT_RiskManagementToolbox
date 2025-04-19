@@ -1,6 +1,6 @@
 from typing import Any
 
-from logger.u_logger import get_logger
+from logger import get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,

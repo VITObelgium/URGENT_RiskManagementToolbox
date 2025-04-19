@@ -2,7 +2,7 @@ from typing import Sequence
 
 import numpy as np
 
-from logger.u_logger import get_logger
+from logger import get_logger
 from services.well_management_service.core.models import (
     PerforationRange,
     Point,

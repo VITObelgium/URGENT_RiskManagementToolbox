@@ -16,4 +16,8 @@ class OptimizationEngineInterface(ABC):
 
     @property
     @abstractmethod
-    def state(self): ...
+    def global_best_result(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def global_best_controll_vector(self) -> npt.NDArray[np.float64]: ...

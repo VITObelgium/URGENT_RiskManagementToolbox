@@ -408,6 +408,17 @@ class SolutionUpdaterService:
             max_generations, patience, self
         )
 
+    @property
+    def global_best_result(self) -> float:
+        return self._engine.global_best_result
+
+    @property
+    def global_best_controll_vector(self) -> ControlVector:
+        # cast to array
+        control_vector_array = np.array([self._engine.global_best_controll_vector])
+        first_index = 0
+        return self._mapper.to_control_vectors(control_vector_array)[first_index]
+
     def process_request(
         self, request_dict: dict[str, Any]
     ) -> SolutionUpdaterServiceResponse:

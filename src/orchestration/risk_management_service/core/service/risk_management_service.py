@@ -6,6 +6,9 @@ from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
 )
+from services.problem_dispatcher_service.core.utils.utils import (
+    parse_flat_dict_to_nested,
+)
 from services.simulation_service import (
     SimulationService,
     simulation_cluster_context_manager,
@@ -142,6 +145,12 @@ def run_risk_management(
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)
             raise
+
+    logger.info(
+        "Optimization results: Fitness value = %f Control vector = %s",
+        solution_updater.global_best_result,
+        parse_flat_dict_to_nested(solution_updater.global_best_controll_vector.items),
+    )
 
 
 def _prepare_simulation_cases(solutions):

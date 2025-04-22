@@ -46,6 +46,14 @@ class PSOEngine(OptimizationEngineInterface):
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
 
+    @property
+    def global_best_result(self) -> float:
+        return ensure_not_none(self._state).global_best_result
+
+    @property
+    def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+        return ensure_not_none(self._state).global_best_position
+
     def update_solution_to_next_iter(
         self,
         parameters: npt.NDArray[np.float64],

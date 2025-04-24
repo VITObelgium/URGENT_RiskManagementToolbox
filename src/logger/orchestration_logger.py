@@ -1,55 +1,122 @@
+import os
 import subprocess
 from logging import Logger
 from pathlib import Path
+from typing import List
 
 from logger.utils import get_external_console_logging
 
+TAIL_LINES = 100
+WORKER_PREFIX = "worker"
+SIM_SERVICE_NAME = "simulation_server"
 
-def log_docker_logs(logger: Logger):
-    """Fetch and log docker logs in a separate terminal window or only to file."""
+
+def get_services() -> List[str]:
+    """Return a list of all docker compose service names."""
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "ps", "--services"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip().splitlines()
+    except Exception:
+        return []
+
+
+def _start_external_log_terminal(title: str, command: str) -> None:
+    """Start an xterm window with the specified log command."""
+    subprocess.Popen(["xterm", "-hold", "-T", title, "-e", "bash", "-c", command])
+
+
+def _start_external_log_tmux_terminal(title: str, command: str) -> None:
+    """Start a tmux session with the specified log command."""
+
+    session_name = f"log_{title.replace(' ', '_').lower()}"
+
+    create_session_cmd = (
+        f"tmux new-session -d -s {session_name} 'bash -c \"{command}\"'"
+    )
+    subprocess.run(create_session_cmd, shell=True, check=True)
+
+    rename_window_cmd = f"tmux rename-window -t {session_name}:0 '{title}'"
+    subprocess.run(rename_window_cmd, shell=True, check=True)
+
+    try:
+        wt_command = f"wt.exe new-tab --title \"{title}\" wsl.exe -d {os.environ.get('WSL_DISTRO_NAME', 'Ubuntu')} -e bash -c \"tmux attach-session -t {session_name}\""
+        subprocess.Popen(wt_command, shell=True)
+    except (OSError, subprocess.SubprocessError):
+        try:
+            cmd_command = (
+                f'cmd.exe /c start bash.exe -c "tmux attach-session -t {session_name}"'
+            )
+            subprocess.Popen(cmd_command, shell=True)
+        except (OSError, subprocess.SubprocessError):
+            # Fallback to xterm if both Windows Terminal and cmd fail
+            _start_external_log_terminal(
+                title, f"tmux attach-session -t {session_name}"
+            )
+
+
+def _start_file_logging(command: str) -> None:
+    """Start a background process that logs output to a file."""
+    subprocess.Popen(
+        ["bash", "-c", command],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def log_docker_logs(logger: Logger) -> None:
+    """Fetch and log docker logs for workers and simulation service."""
     assert logger is not None, "Logger must be initialized before logging Docker logs."
+
     project_root = Path(__file__).resolve().parents[2]
     log_dir = project_root / "log"
-    docker_log_path = log_dir / "docker_compose.log"
-    abs_log_path = docker_log_path.resolve()
+    log_dir.mkdir(exist_ok=True)
 
-    docker_command = "docker compose logs --tail 100 --follow"
+    services = get_services()
+    logger.info(f"Found services: {services}")
+    if not services:
+        logger.warning("No services found. Ensure Docker Compose is running.")
+        return
+
+    worker_services = sorted([s for s in services if s.startswith(WORKER_PREFIX)])
+
+    worker_log_path = (log_dir / "docker_workers.log").resolve()
+    sim_log_path = (log_dir / "docker_simulation_server.log").resolve()
+
+    for session in subprocess.check_output(
+        ["tmux", "list-sessions"], text=True, stderr=subprocess.DEVNULL
+    ).splitlines():
+        if session.startswith("log_"):
+            session_name = session.split(":")[0]
+            subprocess.run(["tmux", "kill-session", "-t", session_name], check=True)
+
+    if worker_services:
+        worker_cmd = f"docker compose logs --tail {TAIL_LINES} --follow {' '.join(worker_services)}"
+
+        if get_external_console_logging():
+            _start_external_log_tmux_terminal(
+                "Docker Worker Logs", f"{worker_cmd} | tee '{worker_log_path}'"
+            )
+            logger.info(
+                f"Opened external terminal for worker logs (also logging to {worker_log_path})."
+            )
+
+        _start_file_logging(f"{worker_cmd} > '{worker_log_path}'")
+        logger.info(f"Logging worker logs to file: {worker_log_path}")
+
+    sim_cmd = f"docker logs --tail {TAIL_LINES} --follow {SIM_SERVICE_NAME}"
 
     if get_external_console_logging():
-        tee_command = f"{docker_command} | tee '{abs_log_path}'"
-        xterm_command = [
-            "xterm",
-            "-hold",
-            "-T",
-            "Docker Logs",
-            "-e",
-            "bash",
-            "-c",
-            tee_command,
-        ]
-        try:
-            subprocess.Popen(xterm_command)
-            logger.info(
-                "Opened external terminal for Docker logs (also logging to file)."
-            )
-        except (OSError, subprocess.CalledProcessError) as log_err:
-            logger.error(
-                "Error opening external terminal for docker logs:\n%s",
-                getattr(log_err, "stderr", str(log_err)),
-            )
-            raise
-    else:
-        file_command = f"{docker_command} > '{abs_log_path}'"
-        try:
-            subprocess.Popen(
-                ["bash", "-c", file_command],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            logger.info("Logging Docker logs only to file: %s", abs_log_path)
-        except (OSError, subprocess.CalledProcessError) as log_err:
-            logger.error(
-                "Error logging docker logs to file:\n%s",
-                getattr(log_err, "stderr", str(log_err)),
-            )
-            raise
+        _start_external_log_tmux_terminal(
+            "Docker Simulation Service Logs", f"{sim_cmd} | tee '{sim_log_path}'"
+        )
+        logger.info(
+            f"Opened external terminal for simulation logs (also logging to {sim_log_path})."
+        )
+
+    _start_file_logging(f"{sim_cmd} > '{sim_log_path}'")
+    logger.info(f"Logging simulation logs to file: {sim_log_path}")

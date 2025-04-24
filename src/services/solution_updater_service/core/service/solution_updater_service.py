@@ -334,14 +334,23 @@ class _SolutionUpdaterServiceLoopController:
         Helper class to control the loop of the solution updater service.
         This class manages the number of iterations for the optimization process, and raises StopIteration exception when convergence fails.
         """
+        self._info = "Loop controller running"
         self._solution_updater_service = solution_updater_service
 
         self._max_generations = max_generations
-        self.current_generation = 0
+        self._current_generation = 0
 
-        self.base_patience, self.patience_left = patience, patience
+        self._base_patience, self._patience_left = patience, patience
 
-        self._is_running = True
+        self._last_run_global_best_result: float | None = None
+
+    @property
+    def current_generation(self) -> int:
+        return self._current_generation
+
+    @property
+    def info(self) -> str:
+        return self._info
 
     def running(self) -> bool:
         """
@@ -350,35 +359,49 @@ class _SolutionUpdaterServiceLoopController:
         Returns:
             bool: True if the loop controller is running, False otherwise.
         """
+        self._update_generation()
+        self._update_patience()
+
+        running = True
         if self._max_generation_reached():
-            self._solution_updater_service._logger.info(
-                "Max Generation %d reached, stopping optimization loop.",
-                self.current_generation,
+            self._info = f"Max Generation {self._max_generations} reached, stopping optimization loop."
+            running = False
+
+        elif self._patience_reached():
+            self._info = (
+                f"Patience {self._base_patience} reached, stopping optimization loop."
             )
-            self._is_running = False
+            running = False
 
-        if self._patience_reached():
-            self._solution_updater_service._logger.info(
-                "Max Generation %d reached, stopping optimization loop.",
-                self.current_generation,
+        return running
+
+    def _update_generation(self) -> None:
+        self._current_generation += 1
+
+    def _update_patience(self) -> None:
+        if self._current_generation < 1:
+            raise ValueError(
+                f"Generation cant be lower than 0. Current generation: {self._current_generation}"
             )
-            self._is_running = False
 
-        self._update_generations()
+        if self._current_generation == 1:
+            return
 
-        return self._is_running
+        last_best = self._last_run_global_best_result
+        current_best = self._solution_updater_service.global_best_result
 
-    def _update_generations(self) -> None:
-        self.current_generation += 1
+        if last_best == current_best:
+            self._patience_left -= 1
+        else:
+            self._patience_left = self._base_patience
 
-    # def _update_patience(self) -> None:
-    #     if self._solution_updater_service._engine.state.global_best_result
+        self._last_run_global_best_result = current_best
 
     def _max_generation_reached(self) -> bool:
-        return self.current_generation >= self._max_generations
+        return self._current_generation > self._max_generations
 
     def _patience_reached(self) -> bool:
-        return self.patience_left <= 0
+        return self._patience_left < 0
 
 
 class SolutionUpdaterService:
@@ -401,8 +424,6 @@ class SolutionUpdaterService:
         self._engine: OptimizationEngineInterface = (
             OptimizationEngineFactory.get_engine(optimization_engine)
         )
-        self._base_patience, self._patience_left = patience, patience
-        self._last_global_best_result = None
         self._logger = get_logger(__name__)
         self.loop_controller = _SolutionUpdaterServiceLoopController(
             max_generations, patience, self
@@ -494,37 +515,7 @@ class SolutionUpdaterService:
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
         self._logger.info("Control vectors update request processed successfully.")
 
-        self._update_patience()
-
-        if self._patience_left <= 0:
-            self._logger.info(
-                f"Optimization process has not improved the best solution for {self._base_patience} consecutive iterations, stopping service."
-            )
-            return SolutionUpdaterServiceResponse(
-                next_iter_solutions=next_iter_solutions, patience_exceeded=True
-            )
-
-        return SolutionUpdaterServiceResponse(
-            next_iter_solutions=next_iter_solutions, patience_exceeded=False
-        )
-
-    def _update_patience(self):
-        """
-        Updates the remaining patience counter based on optimization progress.
-
-        Decrements the patience counter if the global best result hasn't improved
-        since the last iteration. Resets the patience counter to its initial value
-        when an improvement is detected. This mechanism enables early stopping when
-        the optimization process stagnates.
-        """
-        global_best_result = self._engine.state.global_best_result
-
-        if global_best_result == self._last_global_best_result:
-            self._patience_left -= 1
-        else:
-            self._patience_left == self._base_patience
-
-        self._last_global_best_result = global_best_result
+        return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
 
     def _check_convergence(
         self, solution: list[SolutionCandidate], tol: float = 1e-4

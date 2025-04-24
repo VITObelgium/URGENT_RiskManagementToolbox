@@ -74,73 +74,66 @@ def run_risk_management(
             next_solutions = None
 
             loop_controller = solution_updater.loop_controller
-            try:
-                while loop_controller.running():
-                    logger.info(
-                        "Starting generation %d for risk management.",
-                        loop_controller.current_generation,
-                    )
 
-                    # Generate or update solutions
-                    solutions = dispatcher.process_iteration(next_solutions)
-                    logger.debug("Generated solutions: %s", solutions)
-
-                    # Prepare simulation cases
-                    sim_cases = _prepare_simulation_cases(solutions)
-                    logger.debug("Prepared simulation cases: %s", sim_cases)
-
-                    # Process simulation with the simulation service
-                    logger.info("Submitting simulation cases to SimulationService.")
-                    completed_cases = SimulationService.process_request(
-                        {"simulation_cases": sim_cases}
-                    )
-                    logger.debug("Completed simulation cases: %s", completed_cases)
-
-                    # Update solutions based on simulation results
-                    updated_solutions = [
-                        {
-                            "control_vector": {"items": simulation_case.control_vector},
-                            "cost_function_results": {
-                                "values": ensure_not_none(
-                                    simulation_case.results
-                                ).model_dump()
-                            },
-                        }
-                        for simulation_case in completed_cases.simulation_cases
-                    ]
-                    logger.debug(
-                        "Updated solutions for next iteration: %s", updated_solutions
-                    )
-
-                    # Map simulation service solutions to the ProblemDispatcherService format
-                    response = solution_updater.process_request(
-                        {
-                            "solution_candidates": updated_solutions,
-                            "optimization_constraints": {"boundaries": boundaries},
-                        }
-                    )
-
-                    next_solutions = ControlVectorMapper.convert_su_to_pd(
-                        response.next_iter_solutions
-                    )
-
-                    logger.info(
-                        "Generation %d successfully completed for risk management.",
-                        loop_controller.current_generation,
-                    )
-
-                    if response.patience_exceeded:
-                        logger.info(
-                            "Updater Service stopped due to exceeding patience, exitting optimization loop."
-                        )
-                        break
-
-            except StopIteration as e:
+            while loop_controller.running():
                 logger.info(
-                    "Loop controller stopped at generation %d: %s",
+                    "Starting generation %d for risk management.",
                     loop_controller.current_generation,
-                    str(e),
                 )
+
+                # Generate or update solutions
+                solutions = dispatcher.process_iteration(next_solutions)
+                logger.debug("Generated solutions: %s", solutions)
+
+                # Prepare simulation cases
+                sim_cases = _prepare_simulation_cases(solutions)
+                logger.debug("Prepared simulation cases: %s", sim_cases)
+
+                # Process simulation with the simulation service
+                logger.info("Submitting simulation cases to SimulationService.")
+                completed_cases = SimulationService.process_request(
+                    {"simulation_cases": sim_cases}
+                )
+                logger.debug("Completed simulation cases: %s", completed_cases)
+
+                # Update solutions based on simulation results
+                updated_solutions = [
+                    {
+                        "control_vector": {"items": simulation_case.control_vector},
+                        "cost_function_results": {
+                            "values": ensure_not_none(
+                                simulation_case.results
+                            ).model_dump()
+                        },
+                    }
+                    for simulation_case in completed_cases.simulation_cases
+                ]
+                logger.debug(
+                    "Updated solutions for next iteration: %s", updated_solutions
+                )
+
+                # Map simulation service solutions to the ProblemDispatcherService format
+                response = solution_updater.process_request(
+                    {
+                        "solution_candidates": updated_solutions,
+                        "optimization_constraints": {"boundaries": boundaries},
+                    }
+                )
+
+                next_solutions = ControlVectorMapper.convert_su_to_pd(
+                    response.next_iter_solutions
+                )
+
+                logger.info(
+                    "Generation %d successfully completed for risk management.",
+                    loop_controller.current_generation,
+                )
+
+            logger.info(
+                "Loop controller stopped at generation %d. Info: %s",
+                loop_controller.current_generation,
+                loop_controller.info,
+            )
 
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)

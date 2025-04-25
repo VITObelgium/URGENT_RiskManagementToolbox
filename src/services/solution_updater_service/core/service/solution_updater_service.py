@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -363,11 +364,12 @@ class _SolutionUpdaterServiceLoopController:
         self._update_patience()
 
         running = True
+
         if self._max_generation_reached():
             self._info = f"Max Generation {self._max_generations} reached, stopping optimization loop."
             running = False
 
-        elif self._patience_reached():
+        if self._patience_reached():
             self._info = (
                 f"Patience {self._base_patience} reached, stopping optimization loop."
             )
@@ -390,7 +392,12 @@ class _SolutionUpdaterServiceLoopController:
         last_best = self._last_run_global_best_result
         current_best = self._solution_updater_service.global_best_result
 
-        if last_best == current_best:
+        # Ensure we're not comparing None with a float
+        if last_best is None:
+            self._last_run_global_best_result = current_best
+            return
+
+        if math.isclose(last_best, current_best, rel_tol=1e-9):
             self._patience_left -= 1
         else:
             self._patience_left = self._base_patience
@@ -409,7 +416,7 @@ class SolutionUpdaterService:
         self,
         optimization_engine: OptimizationEngine,
         max_generations: int,
-        patience: int = 10,
+        patience: int,
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
@@ -426,7 +433,9 @@ class SolutionUpdaterService:
         )
         self._logger = get_logger(__name__)
         self.loop_controller = _SolutionUpdaterServiceLoopController(
-            max_generations, patience, self
+            max_generations=max_generations,
+            patience=patience,
+            solution_updater_service=self,
         )
 
     @property
@@ -498,8 +507,6 @@ class SolutionUpdaterService:
         if not config.solution_candidates:
             raise RuntimeError("Nothing to optimize")
 
-        self._check_convergence(config.solution_candidates)
-
         control_vector, cost_function_values = self._mapper.to_numpy(
             config.solution_candidates
         )
@@ -516,17 +523,3 @@ class SolutionUpdaterService:
         self._logger.info("Control vectors update request processed successfully.")
 
         return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
-
-    def _check_convergence(
-        self, solution: list[SolutionCandidate], tol: float = 1e-4
-    ) -> None:
-        """
-        Should raise StopIteration exception when convergence reach desired value.
-        Args:
-            tol: function convergence tolerance
-            solution: list of SolutionCandidate
-
-        Returns:
-
-        """
-        pass

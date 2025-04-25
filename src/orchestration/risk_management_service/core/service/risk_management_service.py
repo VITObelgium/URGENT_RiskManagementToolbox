@@ -34,6 +34,7 @@ def run_risk_management(
     Main entry point for running risk management.
 
     Args:
+        patience: Patience limit for the optimization process.
         max_generations: Maximum number of generations for the optimization process.
         problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
@@ -59,8 +60,8 @@ def run_risk_management(
             )
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,
-                patience=patience,
                 max_generations=max_generations,
+                patience=patience,
             )
             dispatcher = ProblemDispatcherService(
                 problem_definition=problem_definition, n_size=n_size

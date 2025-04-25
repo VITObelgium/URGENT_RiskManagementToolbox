@@ -110,7 +110,9 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
     config_json, expected_result_parameters, mocked_engine, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -166,7 +168,9 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
     monkeypatch,
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -236,7 +240,9 @@ def test_update_solution_with_boundaries_np(  # type: ignore
     config_json, expected_result_parameters, mocked_engine_with_bnb, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine to use mocked behavior
     monkeypatch.setattr(service, "_engine", mocked_engine_with_bnb)

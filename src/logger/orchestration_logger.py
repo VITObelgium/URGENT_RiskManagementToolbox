@@ -4,6 +4,8 @@ from logging import Logger
 from pathlib import Path
 from typing import List
 
+import docker
+
 from logger.utils import get_external_console_logging
 
 TAIL_LINES = 100
@@ -12,16 +14,22 @@ SIM_SERVICE_NAME = "simulation_server"
 
 
 def get_services() -> List[str]:
-    """Return a list of all docker compose service names."""
+    """Return a list of all docker compose service names using Docker SDK."""
     try:
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--services"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip().splitlines()
-    except Exception:
+        client = docker.from_env()
+        containers = client.containers.list()
+
+        # Extract service names from running containers
+        services = []
+        for container in containers:
+            if "com.docker.compose.service" in container.labels:
+                service_name = container.labels["com.docker.compose.service"]
+                if service_name not in services:
+                    services.append(service_name)
+
+        return services
+    except Exception as e:
+        print(f"Unexpected error in get_services: {e}")
         return []
 
 
@@ -38,31 +46,23 @@ def _start_external_log_tmux_terminal(title: str, command: str) -> None:
     create_session_cmd = (
         f"tmux new-session -d -s {session_name} 'bash -c \"{command}\"'"
     )
-    subprocess.run(create_session_cmd, shell=True, check=True)
+    subprocess.Popen(create_session_cmd, shell=True)
 
     rename_window_cmd = f"tmux rename-window -t {session_name}:0 '{title}'"
-    subprocess.run(rename_window_cmd, shell=True, check=True)
+    subprocess.Popen(rename_window_cmd, shell=True)
 
     try:
         wt_command = f"wt.exe new-tab --title \"{title}\" wsl.exe -d {os.environ.get('WSL_DISTRO_NAME', 'Ubuntu')} -e bash -c \"tmux attach-session -t {session_name}\""
         subprocess.Popen(wt_command, shell=True)
     except (OSError, subprocess.SubprocessError):
-        try:
-            cmd_command = (
-                f'cmd.exe /c start bash.exe -c "tmux attach-session -t {session_name}"'
-            )
-            subprocess.Popen(cmd_command, shell=True)
-        except (OSError, subprocess.SubprocessError):
-            # Fallback to xterm if both Windows Terminal and cmd fail
-            _start_external_log_terminal(
-                title, f"tmux attach-session -t {session_name}"
-            )
+        _start_external_log_terminal(title, f"tmux attach-session -t {session_name}")
 
 
 def _start_file_logging(command: str) -> None:
     """Start a background process that logs output to a file."""
+    buffered_command = f"stdbuf -oL -eL {command}"
     subprocess.Popen(
-        ["bash", "-c", command],
+        ["bash", "-c", buffered_command],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -87,19 +87,24 @@ def log_docker_logs(logger: Logger) -> None:
     worker_log_path = (log_dir / "docker_workers.log").resolve()
     sim_log_path = (log_dir / "docker_simulation_server.log").resolve()
 
-    for session in subprocess.check_output(
-        ["tmux", "list-sessions"], text=True, stderr=subprocess.DEVNULL
-    ).splitlines():
-        if session.startswith("log_"):
-            session_name = session.split(":")[0]
-            subprocess.run(["tmux", "kill-session", "-t", session_name], check=True)
+    try:
+        for session in subprocess.check_output(
+            ["tmux", "list-sessions"], text=True, stderr=subprocess.DEVNULL
+        ).splitlines():
+            if session.startswith("log_"):
+                session_name = session.split(":")[0]
+                logger.info(f"Killing existing tmux session: {session_name}")
+                subprocess.Popen(["tmux", "kill-session", "-t", session_name])
+    except subprocess.CalledProcessError:
+        pass
 
     if worker_services:
         worker_cmd = f"docker compose logs --tail {TAIL_LINES} --follow {' '.join(worker_services)}"
 
         if get_external_console_logging():
             _start_external_log_tmux_terminal(
-                "Docker Worker Logs", f"{worker_cmd} | tee '{worker_log_path}'"
+                "Docker Worker Logs",
+                f"{worker_cmd} | stdbuf -oL -eL tee '{worker_log_path}'",
             )
             logger.info(
                 f"Opened external terminal for worker logs (also logging to {worker_log_path})."
@@ -112,7 +117,8 @@ def log_docker_logs(logger: Logger) -> None:
 
     if get_external_console_logging():
         _start_external_log_tmux_terminal(
-            "Docker Simulation Service Logs", f"{sim_cmd} | tee '{sim_log_path}'"
+            "Docker Simulation Service Logs",
+            f"{sim_cmd} | stdbuf -oL -eL tee '{sim_log_path}'",
         )
         logger.info(
             f"Opened external terminal for simulation logs (also logging to {sim_log_path})."

@@ -18,6 +18,10 @@ def mocked_engine():  # type: ignore
     """Fixture for a mocked OptimizationEngineInterface."""
 
     class MockedOptimizationEngine:
+        def __init__(self):
+            constant_best = 0
+            self.global_best_result = constant_best
+
         def update_solution_to_next_iter(  # type: ignore
             self, parameters, results, lb, ub
         ):
@@ -38,6 +42,28 @@ def mocked_engine_with_bnb():  # type: ignore
             # Simulate parameter transformation and ensure constraints are applied
             updated_parameters = np.clip(parameters + 1.0, lb, ub)
             return updated_parameters
+
+    return MockedOptimizationEngine()
+
+
+@pytest.fixture
+def mocked_engine_with_2_stagnant_result():  # type: ignore
+    """Fixture for a mocked OptimizationEngineInterface."""
+
+    class MockedOptimizationEngine:
+        def __init__(self):
+            self.global_best_result = 1000
+            self._iter = 1
+            self.stagnation_break = 3
+
+        def update_solution_to_next_iter(  # type: ignore
+            self, parameters, results, lb, ub
+        ):
+            if self._iter % self.stagnation_break == 0:
+                self.global_best_result -= 1
+
+            self._iter += 1
+            return parameters + 1
 
     return MockedOptimizationEngine()
 
@@ -84,7 +110,9 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
     config_json, expected_result_parameters, mocked_engine, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -140,7 +168,9 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
     monkeypatch,
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -210,7 +240,9 @@ def test_update_solution_with_boundaries_np(  # type: ignore
     config_json, expected_result_parameters, mocked_engine_with_bnb, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine to use mocked behavior
     monkeypatch.setattr(service, "_engine", mocked_engine_with_bnb)
@@ -298,6 +330,7 @@ def test_optimization_service_full_round(test_case):
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 50
     iterations = 1000
+    patience = 1001  # infinite patience
 
     np.random.seed(42)
 
@@ -313,7 +346,7 @@ def test_optimization_service_full_round(test_case):
     }
 
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=iterations
+        optimization_engine=engine, max_generations=iterations, patience=patience
     )
     loop_controller = service.loop_controller
 
@@ -338,3 +371,84 @@ def test_optimization_service_full_round(test_case):
     assert (
         best_result <= tol
     ), f"Best result {best_result} is not close enough to the global minimum value."
+
+
+@pytest.mark.parametrize(
+    "patience, engine_fixture, patience_checks",
+    [
+        # Case 1: Engine that updates global_best_result every 3 iterations
+        (
+            2,
+            "mocked_engine_with_2_stagnant_result",
+            [
+                {"generation": 1, "running": True, "patience_left": 2},
+                {"generation": 2, "running": True, "patience_left": 1},
+                {
+                    "generation": 3,
+                    "running": True,
+                    "patience_left": 2,
+                },  # Reset due to improvement
+            ],
+        ),
+        # Case 2: Engine with constant result (no improvement)
+        (
+            1,
+            "mocked_engine",
+            [
+                {"generation": 1, "running": True, "patience_left": 1},
+                {"generation": 2, "running": True, "patience_left": 0},
+                {
+                    "generation": 3,
+                    "running": False,
+                    "patience_left": -1,
+                },  # Should stop here
+            ],
+        ),
+    ],
+)
+def test_patience_handling(
+    patience, engine_fixture, patience_checks, request, monkeypatch
+):
+    # Arrange
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=10, patience=patience
+    )
+
+    # Get the engine fixture based on the parameter
+    mocked_engine = request.getfixturevalue(engine_fixture)
+    monkeypatch.setattr(service, "_engine", mocked_engine)
+
+    # Test data
+    config_json = {
+        "solution_candidates": [
+            {
+                "control_vector": {"items": {"param1": 1.0, "param2": 2.0}},
+                "cost_function_results": {"values": {"metric1": 10.0}},
+            }
+        ],
+    }
+
+    loop_controller = service.loop_controller
+
+    # Initial check
+    assert (
+        loop_controller.running() is True
+    ), "Loop controller should be running after initialization"
+
+    # Run through the patience checks
+    for i, check in enumerate(patience_checks, 1):
+        service.process_request(config_json)
+
+        expected_generation = check["generation"]
+        expected_running = check["running"]
+        expected_patience = check["patience_left"]
+
+        assert (
+            loop_controller.current_generation == expected_generation
+        ), f"Iteration {i}: wrong generation count"
+        assert (
+            loop_controller.running() is expected_running
+        ), f"Iteration {i}: wrong running state - expected {expected_running}"
+        assert (
+            loop_controller._patience_left == expected_patience
+        ), f"Iteration {i}: wrong patience value - expected {expected_patience}, got {loop_controller._patience_left}"

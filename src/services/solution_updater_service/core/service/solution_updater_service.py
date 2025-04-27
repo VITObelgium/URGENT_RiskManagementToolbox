@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -369,7 +368,7 @@ class _SolutionUpdaterServiceLoopController:
             self._info = f"Max Generation {self._max_generations} reached, stopping optimization loop."
             running = False
 
-        if self._patience_reached():
+        elif self._patience_reached():
             self._info = (
                 f"Patience {self._base_patience} reached, stopping optimization loop."
             )
@@ -392,12 +391,7 @@ class _SolutionUpdaterServiceLoopController:
         last_best = self._last_run_global_best_result
         current_best = self._solution_updater_service.global_best_result
 
-        # Ensure we're not comparing None with a float
-        if last_best is None:
-            self._last_run_global_best_result = current_best
-            return
-
-        if math.isclose(last_best, current_best, rel_tol=1e-9):
+        if last_best == current_best:
             self._patience_left -= 1
         else:
             self._patience_left = self._base_patience

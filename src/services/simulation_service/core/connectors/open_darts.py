@@ -1,3 +1,8 @@
+"""
+NOTE:
+This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
+"""
+
 import json
 import re
 import subprocess

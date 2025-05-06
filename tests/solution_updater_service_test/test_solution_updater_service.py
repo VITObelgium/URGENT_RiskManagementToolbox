@@ -1,6 +1,8 @@
 import numpy as np
+import numpy.typing as npt
 import pytest
 
+from services.solution_updater_service.core.engines import SolutionMetrics
 from services.solution_updater_service.core.models import (
     OptimizationEngine,
     SolutionUpdaterServiceResponse,
@@ -9,6 +11,7 @@ from services.solution_updater_service.core.service import (
     SolutionUpdaterService,
 )
 from services.solution_updater_service.core.utils import get_numpy_values
+from services.solution_updater_service.core.utils.type_checks import ensure_not_none
 
 engine = OptimizationEngine.PSO
 
@@ -64,6 +67,60 @@ def mocked_engine_with_2_stagnant_result():  # type: ignore
 
             self._iter += 1
             return parameters + 1
+
+    return MockedOptimizationEngine()
+
+
+@pytest.fixture
+def mocked_engine_with_metrics():  # type: ignore
+    """Fixture for a mocked OptimizationEngineInterface that tracks metrics."""
+
+    class MockedOptimizationEngine:
+        def __init__(self) -> None:
+            self._metrics: SolutionMetrics | None = None
+            self._results_history: list[npt.NDArray[np.float64]] = []
+
+        def update_solution_to_next_iter(
+            self,
+            parameters: npt.NDArray[np.float64],
+            results: npt.NDArray[np.float64],
+            lb: npt.NDArray[np.float64],
+            ub: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
+            self._results_history.append(results)
+            self._update_metrics(results)
+            return parameters + 1.0
+
+        def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
+            batch_min = float(new_results.min())
+            batch_max = float(new_results.max())
+            batch_avg = float(np.average(new_results))
+            batch_std = float(np.std(new_results))
+
+            if self._metrics is None:  # first run
+                global_min = batch_min
+            else:
+                global_min = min(batch_min, self._metrics.global_min)
+
+            self._metrics = SolutionMetrics(
+                global_min=global_min,
+                last_batch_min=batch_min,
+                last_batch_max=batch_max,
+                last_batch_avg=batch_avg,
+                last_batch_std=batch_std,
+            )
+
+        @property
+        def metrics(self) -> SolutionMetrics:
+            return ensure_not_none(self._metrics)
+
+        @property
+        def global_best_result(self) -> float:
+            return self.metrics.global_min
+
+        @property
+        def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+            return np.array([0.0])  # Mock value
 
     return MockedOptimizationEngine()
 
@@ -452,3 +509,128 @@ def test_patience_handling(
         assert (
             loop_controller._patience_left == expected_patience
         ), f"Iteration {i}: wrong patience value - expected {expected_patience}, got {loop_controller._patience_left}"
+
+
+def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
+    """Test that SolutionMetrics are properly calculated and updated.
+
+    This test verifies that:
+    1. Metrics are properly initialized on first run
+    2. Global minimum is correctly updated when better values are found
+    3. Global minimum is preserved when no better values are found
+    4. All batch statistics are correctly calculated
+    5. The metrics object is properly updated after each iteration
+    """
+    # Arrange
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=3, patience=4
+    )
+    monkeypatch.setattr(service, "_engine", mocked_engine_with_metrics)
+
+    # Test data with known values for easy verification
+    test_cases = [
+        # First batch: [1.0, 2.0, 3.0]
+        {
+            "request": {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 1.0}},
+                        "cost_function_results": {"values": {"metric1": 1.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 2.0}},
+                        "cost_function_results": {"values": {"metric1": 2.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 3.0}},
+                        "cost_function_results": {"values": {"metric1": 3.0}},
+                    },
+                ],
+            },
+            "expected_metrics": {
+                "global_min": 1.0,
+                "last_batch_min": 1.0,
+                "last_batch_max": 3.0,
+                "last_batch_avg": 2.0,
+                "last_batch_std": 0.816496580927726,  # sqrt(2/3)
+            },
+        },
+        # Second batch: [0.5, 1.5, 2.5] - new global min
+        {
+            "request": {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 0.5}},
+                        "cost_function_results": {"values": {"metric1": 0.5}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 1.5}},
+                        "cost_function_results": {"values": {"metric1": 1.5}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 2.5}},
+                        "cost_function_results": {"values": {"metric1": 2.5}},
+                    },
+                ],
+            },
+            "expected_metrics": {
+                "global_min": 0.5,  # Updated global min
+                "last_batch_min": 0.5,
+                "last_batch_max": 2.5,
+                "last_batch_avg": 1.5,
+                "last_batch_std": 0.816496580927726,  # sqrt(2/3)
+            },
+        },
+        # Third batch: [2.0, 3.0, 4.0] - no new global min
+        {
+            "request": {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 2.0}},
+                        "cost_function_results": {"values": {"metric1": 2.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 3.0}},
+                        "cost_function_results": {"values": {"metric1": 3.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 4.0}},
+                        "cost_function_results": {"values": {"metric1": 4.0}},
+                    },
+                ],
+            },
+            "expected_metrics": {
+                "global_min": 0.5,  # Keeps previous global min
+                "last_batch_min": 2.0,
+                "last_batch_max": 4.0,
+                "last_batch_avg": 3.0,
+                "last_batch_std": 0.816496580927726,  # sqrt(2/3)
+            },
+        },
+    ]
+
+    # Act & Assert
+    for i, test_case in enumerate(test_cases, 1):
+        # Process the request
+        service.process_request(test_case["request"])
+
+        # Get the current metrics
+        metrics = service.get_optimization_metrics()
+        expected = test_case["expected_metrics"]
+
+        # Verify all metric values
+        assert (
+            metrics.global_min == expected["global_min"]
+        ), f"Batch {i}: Wrong global minimum"
+        assert (
+            metrics.last_batch_min == expected["last_batch_min"]
+        ), f"Batch {i}: Wrong batch minimum"
+        assert (
+            metrics.last_batch_max == expected["last_batch_max"]
+        ), f"Batch {i}: Wrong batch maximum"
+        assert np.isclose(
+            metrics.last_batch_avg, expected["last_batch_avg"]
+        ), f"Batch {i}: Wrong batch average"
+        assert np.isclose(
+            metrics.last_batch_std, expected["last_batch_std"]
+        ), f"Batch {i}: Wrong batch standard deviation"

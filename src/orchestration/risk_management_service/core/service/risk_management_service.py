@@ -129,6 +129,15 @@ def run_risk_management(
                     "Generation %d successfully completed for risk management.",
                     loop_controller.current_generation,
                 )
+                metrics = solution_updater.get_optimization_metrics()
+                logger.info(
+                    "Generation statistics: global_min=%.4f, batch_min=%.4f, batch_max=%.4f, batch_avg=%.4f, batch_std=%.4f",
+                    metrics.global_min,
+                    metrics.last_batch_min,
+                    metrics.last_batch_max,
+                    metrics.last_batch_avg,
+                    metrics.last_batch_std,
+                )
 
             logger.info(
                 "Loop controller stopped at generation %d. Info: %s",

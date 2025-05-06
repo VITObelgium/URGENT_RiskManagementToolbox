@@ -3,8 +3,6 @@ from logging import Logger
 from pathlib import Path
 from typing import List
 
-import docker
-
 from logger.utils import get_external_console_logging
 
 TAIL_LINES = 100
@@ -13,23 +11,31 @@ SIM_SERVICE_NAME = "simulation_server"
 
 
 def get_services() -> List[str]:
-    """Return a list of all docker compose service names using Docker SDK."""
+    """Return a list of all docker compose service names."""
     try:
-        client = docker.from_env()
-        containers = client.containers.list()
+        container_ids = subprocess.check_output(
+            ["docker", "ps", "-q"], text=True
+        ).splitlines()
 
-        # Extract service names from running containers
-        services = []
-        for container in containers:
-            if "com.docker.compose.service" in container.labels:
-                service_name = container.labels["com.docker.compose.service"]
-                if service_name not in services:
-                    services.append(service_name)
-
-        return services
+        services = set()
+        for cid in container_ids:
+            inspect_output = subprocess.check_output(
+                [
+                    "docker",
+                    "inspect",
+                    "--format",
+                    '{{ index .Config.Labels "com.docker.compose.service" }}',
+                    cid,
+                ],
+                text=True,
+            ).strip()
+            if inspect_output and inspect_output != "<no value>":
+                services.add(inspect_output)
+        return list(services)
     except Exception as e:
-        print(f"Unexpected error in get_services: {e}")
-        return []
+        raise RuntimeError(
+            "Failed to get Docker services. Ensure Docker is running and you have access to it."
+        ) from e
 
 
 def _start_external_xterm_log_terminal(title: str, command: str) -> None:
@@ -72,7 +78,12 @@ def log_docker_logs(logger: Logger) -> None:
     log_dir = project_root / "log"
     log_dir.mkdir(exist_ok=True)
 
-    services = get_services()
+    try:
+        services = get_services()
+    except RuntimeError as e:
+        logger.error(f"Error fetching Docker services: {e}")
+        return
+
     logger.info(f"Found services: {services}")
     if not services:
         logger.warning("No services found. Ensure Docker Compose is running.")

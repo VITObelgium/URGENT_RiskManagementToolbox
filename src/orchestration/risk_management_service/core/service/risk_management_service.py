@@ -1,5 +1,6 @@
 from typing import Any
 
+from logger.numeric_logger import get_csv_logger
 from logger.u_logger import get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
 from services.problem_dispatcher_service import (
@@ -65,6 +66,19 @@ def run_risk_management(
             )
             dispatcher = ProblemDispatcherService(
                 problem_definition=problem_definition, n_size=n_size
+            )
+
+            # Initialize metrics logger
+            metrics_logger = get_csv_logger(
+                "optimization_metrics.csv",
+                columns=[
+                    "generation",
+                    "global_min",
+                    "batch_min",
+                    "batch_max",
+                    "batch_avg",
+                    "batch_std",
+                ],
             )
 
             logger.info("Fetching boundaries from ProblemDispatcherService.")
@@ -137,6 +151,11 @@ def run_risk_management(
                     metrics.last_batch_max,
                     metrics.last_batch_avg,
                     metrics.last_batch_std,
+                )
+
+                # Log metrics to CSV
+                metrics_logger.info(
+                    f"{loop_controller.current_generation},{metrics.global_min:.4f},{metrics.last_batch_min:.4f},{metrics.last_batch_max:.4f},{metrics.last_batch_avg:.4f},{metrics.last_batch_std:.4f}"
                 )
 
             logger.info(

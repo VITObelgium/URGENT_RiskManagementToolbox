@@ -37,6 +37,7 @@ class _StructDiscretizerProtocol(Protocol):
     len_cell_ydir: npt.NDArray[np.float64]
     len_cell_zdir: npt.NDArray[np.float64]
 
+
 class _GlobalData(TypedDict):
     """
     Global Data Protocol (dictionary)
@@ -46,11 +47,11 @@ class _GlobalData(TypedDict):
     dz
     start_z
     """
+
     dx: npt.NDArray[np.float64]
     dy: npt.NDArray[np.float64]
     dz: npt.NDArray[np.float64]
     start_z: float
-
 
 
 class _StructReservoirProtocol(Protocol):
@@ -111,7 +112,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def run(
-            config: SerializedJson,
+        config: SerializedJson,
     ) -> SimulationResults:
         """
         Start reservoir simulator with given config and model in main.py
@@ -140,7 +141,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def _get_broadcast_results(
-            stdout: str,
+        stdout: str,
     ) -> SimulationResults:
         template = OpenDartsConnector.MsgTemplate
         re_key = r"(\w+)"  # str
@@ -163,7 +164,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def broadcast_result(
-            key: SimulationResultType, value: float | Sequence[float]
+        key: SimulationResultType, value: float | Sequence[float]
     ) -> None:
         """
         Use for broadcast given simulation results to stdout
@@ -175,8 +176,8 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def get_well_connection_cells(
-            well_management_service_result: WellManagementServiceResultSchema,
-            struct_reservoir: _StructReservoirProtocol,
+        well_management_service_result: WellManagementServiceResultSchema,
+        struct_reservoir: _StructReservoirProtocol,
     ) -> dict[WellName, tuple[GridCell, ...]]:
         """
         Retrieve the connection cells for a given well, identifying which reservoir grid cells
@@ -228,7 +229,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def _global_idx_to_grid_cell(
-            idx: int, struct_reservoir: _StructReservoirProtocol
+        idx: int, struct_reservoir: _StructReservoirProtocol
     ) -> GridCell:
         nx = struct_reservoir.nx
         ny = struct_reservoir.ny
@@ -241,8 +242,8 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def _filter_perforations_inside_reservoir(
-            struct_reservoir: _StructReservoirProtocol,
-            well_perforations_points: tuple[Point, ...],
+        struct_reservoir: _StructReservoirProtocol,
+        well_perforations_points: tuple[Point, ...],
     ) -> tuple[Point, ...]:
         dx = struct_reservoir.global_data["dx"]
         dy = struct_reservoir.global_data["dy"]
@@ -274,7 +275,10 @@ class _CellConnector:
       through the 'open-darts' dependency specification
     """
 
-    def __init__(self, struct_reservoir: _StructReservoirProtocol, ) -> None:
+    def __init__(
+        self,
+        struct_reservoir: _StructReservoirProtocol,
+    ) -> None:
         centroids = _calculate_centroids(struct_reservoir)
         self._kd_tree = KDTree(centroids)
 
@@ -312,22 +316,29 @@ def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDAr
 
     centroids_all_cells = np.zeros((nx, ny, nz, 3))  # 3 - for x,y,z coordinates
     # fill z-coordinates using DZ
-    centroids_all_cells[:, :, 0, 2] = start_z + len_cell_zdir[:, :,
-                                                0] * 0.5  # nx*ny array of current layer's depths
+    centroids_all_cells[:, :, 0, 2] = (
+        start_z + len_cell_zdir[:, :, 0] * 0.5
+    )  # nx*ny array of current layer's depths
     if nz > 1:
         d_cumsum = len_cell_zdir.cumsum(axis=2)
-        centroids_all_cells[:, :, 1:, 2] = start_z + (d_cumsum[:, :, :-1] + d_cumsum[:, :, 1:]) * 0.5
+        centroids_all_cells[:, :, 1:, 2] = (
+            start_z + (d_cumsum[:, :, :-1] + d_cumsum[:, :, 1:]) * 0.5
+        )
 
     # fill y-coordinates using DY
     centroids_all_cells[:, 0, :, 1] = len_cell_ydir[:, 0, :] * 0.5  # nx*nz array
     if ny > 1:
         d_cumsum = len_cell_ydir.cumsum(axis=1)
-        centroids_all_cells[:, 1:, :, 1] = (d_cumsum[:, :-1, :] + d_cumsum[:, 1:, :]) * 0.5
+        centroids_all_cells[:, 1:, :, 1] = (
+            d_cumsum[:, :-1, :] + d_cumsum[:, 1:, :]
+        ) * 0.5
 
     # fill x-coordinates using DX
     centroids_all_cells[0, :, :, 0] = len_cell_xdir[0, :, :] * 0.5  # ny*nz array
     if nx > 1:
         d_cumsum = len_cell_xdir.cumsum(axis=0)
-        centroids_all_cells[1:, :, :, 0] = (d_cumsum[:-1, :, :] + d_cumsum[1:, :, :]) * 0.5
+        centroids_all_cells[1:, :, :, 0] = (
+            d_cumsum[:-1, :, :] + d_cumsum[1:, :, :]
+        ) * 0.5
 
-    return np.reshape(centroids_all_cells, (nx * ny * nz, 3), order='F')
+    return np.reshape(centroids_all_cells, (nx * ny * nz, 3), order="F")

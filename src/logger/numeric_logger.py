@@ -7,7 +7,7 @@ def get_csv_logger(
     filename: str,
     logger_name: str = "csv",
     level: int = logging.INFO,
-    columns: Optional[List[str]] = None,
+    columns: List[str] | None = None,
 ) -> logging.Logger:
     """
     Get a logger for CSV data output.

@@ -1,4 +1,3 @@
-# numeric_logger.py
 import logging
 import os
 from typing import List, Optional
@@ -35,6 +34,7 @@ def get_csv_logger(
     # Create logger
     logger = logging.getLogger(logger_name)
     logger.setLevel(level)
+    logger.propagate = False
 
     # Create directory if it doesn't exist
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -45,7 +45,7 @@ def get_csv_logger(
 
     # Create formatter (simple CSV format)
     formatter = logging.Formatter(
-        "%(asctime)s,%(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        "%(asctime)s.%(msecs)03d,%(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     file_handler.setFormatter(formatter)
 

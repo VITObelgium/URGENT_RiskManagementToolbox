@@ -92,22 +92,22 @@ def mocked_engine_with_metrics():  # type: ignore
             return parameters + 1.0
 
         def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
-            batch_min = float(new_results.min())
-            batch_max = float(new_results.max())
-            batch_avg = float(np.average(new_results))
-            batch_std = float(np.std(new_results))
+            population_min = float(new_results.min())
+            population_max = float(new_results.max())
+            population_avg = float(np.average(new_results))
+            population_std = float(np.std(new_results))
 
             if self._metrics is None:  # first run
-                global_min = batch_min
+                global_min = population_min
             else:
-                global_min = min(batch_min, self._metrics.global_min)
+                global_min = min(population_min, self._metrics.global_min)
 
             self._metrics = SolutionMetrics(
                 global_min=global_min,
-                last_batch_min=batch_min,
-                last_batch_max=batch_max,
-                last_batch_avg=batch_avg,
-                last_batch_std=batch_std,
+                last_population_min=population_min,
+                last_population_max=population_max,
+                last_population_avg=population_avg,
+                last_population_std=population_std,
             )
 
         @property
@@ -518,7 +518,7 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
     1. Metrics are properly initialized on first run
     2. Global minimum is correctly updated when better values are found
     3. Global minimum is preserved when no better values are found
-    4. All batch statistics are correctly calculated
+    4. All population statistics are correctly calculated
     5. The metrics object is properly updated after each iteration
     """
     # Arrange
@@ -529,7 +529,7 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
 
     # Test data with known values for easy verification
     test_cases = [
-        # First batch: [1.0, 2.0, 3.0]
+        # First population: [1.0, 2.0, 3.0]
         {
             "request": {
                 "solution_candidates": [
@@ -549,13 +549,13 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
             },
             "expected_metrics": {
                 "global_min": 1.0,
-                "last_batch_min": 1.0,
-                "last_batch_max": 3.0,
-                "last_batch_avg": 2.0,
-                "last_batch_std": 0.816496580927726,  # sqrt(2/3)
+                "last_population_min": 1.0,
+                "last_population_max": 3.0,
+                "last_population_avg": 2.0,
+                "last_population_std": 0.816496580927726,  # sqrt(2/3)
             },
         },
-        # Second batch: [0.5, 1.5, 2.5] - new global min
+        # Second population: [0.5, 1.5, 2.5] - new global min
         {
             "request": {
                 "solution_candidates": [
@@ -575,13 +575,13 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
             },
             "expected_metrics": {
                 "global_min": 0.5,  # Updated global min
-                "last_batch_min": 0.5,
-                "last_batch_max": 2.5,
-                "last_batch_avg": 1.5,
-                "last_batch_std": 0.816496580927726,  # sqrt(2/3)
+                "last_population_min": 0.5,
+                "last_population_max": 2.5,
+                "last_population_avg": 1.5,
+                "last_population_std": 0.816496580927726,  # sqrt(2/3)
             },
         },
-        # Third batch: [2.0, 3.0, 4.0] - no new global min
+        # Third population: [2.0, 3.0, 4.0] - no new global min
         {
             "request": {
                 "solution_candidates": [
@@ -601,10 +601,10 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
             },
             "expected_metrics": {
                 "global_min": 0.5,  # Keeps previous global min
-                "last_batch_min": 2.0,
-                "last_batch_max": 4.0,
-                "last_batch_avg": 3.0,
-                "last_batch_std": 0.816496580927726,  # sqrt(2/3)
+                "last_population_min": 2.0,
+                "last_population_max": 4.0,
+                "last_population_avg": 3.0,
+                "last_population_std": 0.816496580927726,  # sqrt(2/3)
             },
         },
     ]
@@ -621,16 +621,16 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
         # Verify all metric values
         assert (
             metrics.global_min == expected["global_min"]
-        ), f"Batch {i}: Wrong global minimum"
+        ), f"Population {i}: Wrong global minimum"
         assert (
-            metrics.last_batch_min == expected["last_batch_min"]
-        ), f"Batch {i}: Wrong batch minimum"
+            metrics.last_population_min == expected["last_population_min"]
+        ), f"Population {i}: Wrong population minimum"
         assert (
-            metrics.last_batch_max == expected["last_batch_max"]
-        ), f"Batch {i}: Wrong batch maximum"
+            metrics.last_population_max == expected["last_population_max"]
+        ), f"Population {i}: Wrong population maximum"
         assert np.isclose(
-            metrics.last_batch_avg, expected["last_batch_avg"]
-        ), f"Batch {i}: Wrong batch average"
+            metrics.last_population_avg, expected["last_population_avg"]
+        ), f"Population {i}: Wrong population average"
         assert np.isclose(
-            metrics.last_batch_std, expected["last_batch_std"]
-        ), f"Batch {i}: Wrong batch standard deviation"
+            metrics.last_population_std, expected["last_population_std"]
+        ), f"Population {i}: Wrong population standard deviation"

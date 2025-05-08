@@ -13,10 +13,10 @@ from services.solution_updater_service.core.utils.type_checks import ensure_not_
 class SolutionMetrics:
     global_min: float
 
-    last_batch_min: float
-    last_batch_max: float
-    last_batch_avg: float
-    last_batch_std: float
+    last_population_min: float
+    last_population_max: float
+    last_population_avg: float
+    last_population_std: float
 
 
 class OptimizationEngineInterface(ABC):
@@ -45,20 +45,20 @@ class OptimizationEngineInterface(ABC):
     def global_best_controll_vector(self) -> npt.NDArray[np.float64]: ...
 
     def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
-        batch_min = float(new_results.min())
-        batch_max = float(new_results.max())
-        batch_avg = float(np.average(new_results))
-        batch_std = float(np.std(new_results))
+        population_min = float(new_results.min())
+        population_max = float(new_results.max())
+        population_avg = float(np.average(new_results))
+        population_std = float(np.std(new_results))
 
         if self._metrics is None:  # first run
-            global_min = batch_min
+            global_min = population_min
         else:
-            global_min = min(batch_min, self._metrics.global_min)
+            global_min = min(population_min, self._metrics.global_min)
 
         self._metrics = SolutionMetrics(
             global_min=global_min,
-            last_batch_min=batch_min,
-            last_batch_max=batch_max,
-            last_batch_avg=batch_avg,
-            last_batch_std=batch_std,
+            last_population_min=population_min,
+            last_population_max=population_max,
+            last_population_avg=population_avg,
+            last_population_std=population_std,
         )

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, Optional
+from typing import List
 
 
 def get_csv_logger(

@@ -84,7 +84,7 @@ install-dev: install-python-and-uv install-latex install-docker verify-docker in
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && pre-commit install
 	$(log) "Development setup complete."
 
-install-release: install-python-and-uv install-docker verify-docker
+install-release: install-python-and-uv install-docker verify-docker install-xterm
 	$(log) "Installing release packages and pre-commit hooks..."
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-release.txt
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && pre-commit install

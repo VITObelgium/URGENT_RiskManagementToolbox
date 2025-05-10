@@ -1,6 +1,8 @@
 import numpy as np
+import numpy.typing as npt
 import pytest
 
+from services.solution_updater_service.core.engines import SolutionMetrics
 from services.solution_updater_service.core.models import (
     OptimizationEngine,
     SolutionUpdaterServiceResponse,
@@ -9,6 +11,7 @@ from services.solution_updater_service.core.service import (
     SolutionUpdaterService,
 )
 from services.solution_updater_service.core.utils import get_numpy_values
+from services.solution_updater_service.core.utils.type_checks import ensure_not_none
 
 engine = OptimizationEngine.PSO
 
@@ -18,6 +21,10 @@ def mocked_engine():  # type: ignore
     """Fixture for a mocked OptimizationEngineInterface."""
 
     class MockedOptimizationEngine:
+        def __init__(self):
+            constant_best = 0
+            self.global_best_result = constant_best
+
         def update_solution_to_next_iter(  # type: ignore
             self, parameters, results, lb, ub
         ):
@@ -38,6 +45,82 @@ def mocked_engine_with_bnb():  # type: ignore
             # Simulate parameter transformation and ensure constraints are applied
             updated_parameters = np.clip(parameters + 1.0, lb, ub)
             return updated_parameters
+
+    return MockedOptimizationEngine()
+
+
+@pytest.fixture
+def mocked_engine_with_2_stagnant_result():  # type: ignore
+    """Fixture for a mocked OptimizationEngineInterface."""
+
+    class MockedOptimizationEngine:
+        def __init__(self):
+            self.global_best_result = 1000
+            self._iter = 1
+            self.stagnation_break = 3
+
+        def update_solution_to_next_iter(  # type: ignore
+            self, parameters, results, lb, ub
+        ):
+            if self._iter % self.stagnation_break == 0:
+                self.global_best_result -= 1
+
+            self._iter += 1
+            return parameters + 1
+
+    return MockedOptimizationEngine()
+
+
+@pytest.fixture
+def mocked_engine_with_metrics():  # type: ignore
+    """Fixture for a mocked OptimizationEngineInterface that tracks metrics."""
+
+    class MockedOptimizationEngine:
+        def __init__(self) -> None:
+            self._metrics: SolutionMetrics | None = None
+            self._results_history: list[npt.NDArray[np.float64]] = []
+
+        def update_solution_to_next_iter(
+            self,
+            parameters: npt.NDArray[np.float64],
+            results: npt.NDArray[np.float64],
+            lb: npt.NDArray[np.float64],
+            ub: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
+            self._results_history.append(results)
+            self._update_metrics(results)
+            return parameters + 1.0
+
+        def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
+            population_min = float(new_results.min())
+            population_max = float(new_results.max())
+            population_avg = float(np.average(new_results))
+            population_std = float(np.std(new_results))
+
+            if self._metrics is None:  # first run
+                global_min = population_min
+            else:
+                global_min = min(population_min, self._metrics.global_min)
+
+            self._metrics = SolutionMetrics(
+                global_min=global_min,
+                last_population_min=population_min,
+                last_population_max=population_max,
+                last_population_avg=population_avg,
+                last_population_std=population_std,
+            )
+
+        @property
+        def metrics(self) -> SolutionMetrics:
+            return ensure_not_none(self._metrics)
+
+        @property
+        def global_best_result(self) -> float:
+            return self.metrics.global_min
+
+        @property
+        def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+            return np.array([0.0])  # Mock value
 
     return MockedOptimizationEngine()
 
@@ -84,7 +167,9 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
     config_json, expected_result_parameters, mocked_engine, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -140,7 +225,9 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
     monkeypatch,
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
@@ -210,7 +297,9 @@ def test_update_solution_with_boundaries_np(  # type: ignore
     config_json, expected_result_parameters, mocked_engine_with_bnb, monkeypatch
 ):
     # Arrange
-    service = SolutionUpdaterService(optimization_engine=engine, max_generations=100)
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=100, patience=101
+    )
 
     # Monkeypatch engine to use mocked behavior
     monkeypatch.setattr(service, "_engine", mocked_engine_with_bnb)
@@ -298,6 +387,7 @@ def test_optimization_service_full_round(test_case):
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 50
     iterations = 1000
+    patience = 1001  # infinite patience
 
     np.random.seed(42)
 
@@ -313,7 +403,7 @@ def test_optimization_service_full_round(test_case):
     }
 
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=iterations
+        optimization_engine=engine, max_generations=iterations, patience=patience
     )
     loop_controller = service.loop_controller
 
@@ -338,3 +428,209 @@ def test_optimization_service_full_round(test_case):
     assert (
         best_result <= tol
     ), f"Best result {best_result} is not close enough to the global minimum value."
+
+
+@pytest.mark.parametrize(
+    "patience, engine_fixture, patience_checks",
+    [
+        # Case 1: Engine that updates global_best_result every 3 iterations
+        (
+            2,
+            "mocked_engine_with_2_stagnant_result",
+            [
+                {"generation": 1, "running": True, "patience_left": 2},
+                {"generation": 2, "running": True, "patience_left": 1},
+                {
+                    "generation": 3,
+                    "running": True,
+                    "patience_left": 2,
+                },  # Reset due to improvement
+            ],
+        ),
+        # Case 2: Engine with constant result (no improvement)
+        (
+            1,
+            "mocked_engine",
+            [
+                {"generation": 1, "running": True, "patience_left": 1},
+                {"generation": 2, "running": True, "patience_left": 0},
+                {
+                    "generation": 3,
+                    "running": False,
+                    "patience_left": -1,
+                },  # Should stop here
+            ],
+        ),
+    ],
+)
+def test_patience_handling(
+    patience, engine_fixture, patience_checks, request, monkeypatch
+):
+    # Arrange
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=10, patience=patience
+    )
+
+    # Get the engine fixture based on the parameter
+    mocked_engine = request.getfixturevalue(engine_fixture)
+    monkeypatch.setattr(service, "_engine", mocked_engine)
+
+    # Test data
+    config_json = {
+        "solution_candidates": [
+            {
+                "control_vector": {"items": {"param1": 1.0, "param2": 2.0}},
+                "cost_function_results": {"values": {"metric1": 10.0}},
+            }
+        ],
+    }
+
+    loop_controller = service.loop_controller
+
+    # Initial check
+    assert (
+        loop_controller.running() is True
+    ), "Loop controller should be running after initialization"
+
+    # Run through the patience checks
+    for i, check in enumerate(patience_checks, 1):
+        service.process_request(config_json)
+
+        expected_generation = check["generation"]
+        expected_running = check["running"]
+        expected_patience = check["patience_left"]
+
+        assert (
+            loop_controller.current_generation == expected_generation
+        ), f"Iteration {i}: wrong generation count"
+        assert (
+            loop_controller.running() is expected_running
+        ), f"Iteration {i}: wrong running state - expected {expected_running}"
+        assert (
+            loop_controller._patience_left == expected_patience
+        ), f"Iteration {i}: wrong patience value - expected {expected_patience}, got {loop_controller._patience_left}"
+
+
+def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
+    """Test that SolutionMetrics are properly calculated and updated.
+
+    This test verifies that:
+    1. Metrics are properly initialized on first run
+    2. Global minimum is correctly updated when better values are found
+    3. Global minimum is preserved when no better values are found
+    4. All population statistics are correctly calculated
+    5. The metrics object is properly updated after each iteration
+    """
+    # Arrange
+    service = SolutionUpdaterService(
+        optimization_engine=engine, max_generations=3, patience=4
+    )
+    monkeypatch.setattr(service, "_engine", mocked_engine_with_metrics)
+
+    # Test data with known values for easy verification
+    test_cases = [
+        # First population: [1.0, 2.0, 3.0]
+        {
+            "request": {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 1.0}},
+                        "cost_function_results": {"values": {"metric1": 1.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 2.0}},
+                        "cost_function_results": {"values": {"metric1": 2.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 3.0}},
+                        "cost_function_results": {"values": {"metric1": 3.0}},
+                    },
+                ],
+            },
+            "expected_metrics": {
+                "global_min": 1.0,
+                "last_population_min": 1.0,
+                "last_population_max": 3.0,
+                "last_population_avg": 2.0,
+                "last_population_std": 0.816496580927726,  # sqrt(2/3)
+            },
+        },
+        # Second population: [0.5, 1.5, 2.5] - new global min
+        {
+            "request": {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 0.5}},
+                        "cost_function_results": {"values": {"metric1": 0.5}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 1.5}},
+                        "cost_function_results": {"values": {"metric1": 1.5}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 2.5}},
+                        "cost_function_results": {"values": {"metric1": 2.5}},
+                    },
+                ],
+            },
+            "expected_metrics": {
+                "global_min": 0.5,  # Updated global min
+                "last_population_min": 0.5,
+                "last_population_max": 2.5,
+                "last_population_avg": 1.5,
+                "last_population_std": 0.816496580927726,  # sqrt(2/3)
+            },
+        },
+        # Third population: [2.0, 3.0, 4.0] - no new global min
+        {
+            "request": {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 2.0}},
+                        "cost_function_results": {"values": {"metric1": 2.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 3.0}},
+                        "cost_function_results": {"values": {"metric1": 3.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 4.0}},
+                        "cost_function_results": {"values": {"metric1": 4.0}},
+                    },
+                ],
+            },
+            "expected_metrics": {
+                "global_min": 0.5,  # Keeps previous global min
+                "last_population_min": 2.0,
+                "last_population_max": 4.0,
+                "last_population_avg": 3.0,
+                "last_population_std": 0.816496580927726,  # sqrt(2/3)
+            },
+        },
+    ]
+
+    # Act & Assert
+    for i, test_case in enumerate(test_cases, 1):
+        # Process the request
+        service.process_request(test_case["request"])
+
+        # Get the current metrics
+        metrics = service.get_optimization_metrics()
+        expected = test_case["expected_metrics"]
+
+        # Verify all metric values
+        assert (
+            metrics.global_min == expected["global_min"]
+        ), f"Population {i}: Wrong global minimum"
+        assert (
+            metrics.last_population_min == expected["last_population_min"]
+        ), f"Population {i}: Wrong population minimum"
+        assert (
+            metrics.last_population_max == expected["last_population_max"]
+        ), f"Population {i}: Wrong population maximum"
+        assert np.isclose(
+            metrics.last_population_avg, expected["last_population_avg"]
+        ), f"Population {i}: Wrong population average"
+        assert np.isclose(
+            metrics.last_population_std, expected["last_population_std"]
+        ), f"Population {i}: Wrong population standard deviation"

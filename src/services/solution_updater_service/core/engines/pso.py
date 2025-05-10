@@ -42,9 +42,14 @@ class PSOEngine(OptimizationEngineInterface):
                 movement. A higher value makes the particle more socially conscious, urging it to move closer to the global best
                 solution.
         """
+        super().__init__()
         self.w, self.c1, self.c2 = w, c1, c2
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
+
+    @property
+    def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+        return ensure_not_none(self._state).global_best_position
 
     def update_solution_to_next_iter(
         self,
@@ -53,14 +58,14 @@ class PSOEngine(OptimizationEngineInterface):
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-        """Updates particles' positions based on their velocities and applies reflection boundary."""
+        """Updates particles positions based on their velocities and applies reflection boundary."""
         if self._state is None:
             self._initialize_state_on_first_call(parameters, results)
-
         self._update_state_positions(parameters, results)
         new_velocities = self._calculate_new_velocity(parameters)
         self._update_state_velocities(new_velocities)
         new_positions = self._calculate_new_position(parameters, new_velocities)
+        self._update_metrics(results)
         return self._reflect_and_clip_positions(new_positions, lb, ub)
 
     def _initialize_state_on_first_call(

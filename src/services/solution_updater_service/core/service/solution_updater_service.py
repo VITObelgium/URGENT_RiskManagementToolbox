@@ -504,6 +504,8 @@ class SolutionUpdaterService:
         control_vector, cost_function_values = self._mapper.to_numpy(
             config.solution_candidates
         )
+        # TODO: Temporary fix to allow finding the max instead of min
+        cost_function_values = -cost_function_values
 
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints

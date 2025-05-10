@@ -6,7 +6,7 @@ from typing import Any, Generator, Sequence
 
 import grpc
 
-from logger.u_logger import get_logger
+from logger import get_logger, log_docker_logs
 from services.simulation_service.core.infrastructure.generated import (
     simulation_messaging_pb2 as sm,
 )
@@ -89,7 +89,6 @@ class SimulationService:
             SimulationService._SERVER_HOST,
             SimulationService._SERVER_PORT,
         )
-
         with core_directory():
             try:
                 result = subprocess.run(
@@ -107,6 +106,14 @@ class SimulationService:
                 )
                 logger.debug("Docker compose output:\n%s", result.stdout)
                 logger.info("Simulation cluster successfully started.")
+                log_docker_logs(logger)
+            except Exception as e:
+                logger.error(
+                    "Error starting the simulation cluster: %s",
+                    getattr(e, "stderr", str(e)),
+                )
+                raise
+
             except subprocess.CalledProcessError as e:
                 logger.error("Error starting the simulation cluster:\n%s", e.stderr)
                 raise

@@ -69,14 +69,22 @@ install-python-and-uv: prerequisites
 	curl -LsSf https://astral.sh/uv/install.sh | sh
 	. "$$HOME/.local/bin/env" && uv venv --python $(PYTHON_VERSION)
 
-install-dev: install-python-and-uv install-latex install-docker verify-docker
+install-xterm: # needed for external terminal for logging
+	$(log) "Installing xterm..."
+	sudo apt-get install -y xterm
+	$(log) "xterm installed successfully."
+	$(log) "Installing xfonts-base..."
+	sudo apt-get install -y xfonts-base
+	$(log) "xfonts-base installed successfully."
+
+install-dev: install-python-and-uv install-latex install-docker verify-docker install-xterm
 	$(log) "Installing development packages and pre-commit hooks..."
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-dev.txt
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-release.txt
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && pre-commit install
 	$(log) "Development setup complete."
 
-install-release: install-python-and-uv install-docker verify-docker
+install-release: install-python-and-uv install-docker verify-docker install-xterm
 	$(log) "Installing release packages and pre-commit hooks..."
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-release.txt
 	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && pre-commit install

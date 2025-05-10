@@ -5,7 +5,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import numpy.typing as npt
 
-from logger.u_logger import get_logger
+from logger import get_logger
 from services.solution_updater_service.core.engines import (
     OptimizationEngineFactory,
     OptimizationEngineInterface,

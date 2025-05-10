@@ -2,7 +2,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from logger.u_logger import configure_logger, get_logger
+from logger import configure_logger, get_logger
 from services.simulation_service.core.service.simulation_service import (
     SimulationService,
     simulation_cluster_context_manager,

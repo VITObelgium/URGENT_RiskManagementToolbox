@@ -1,5 +1,6 @@
 from typing import Any
 
+from logger.numeric_logger import get_csv_logger
 from logger.u_logger import get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
 from services.problem_dispatcher_service import (
@@ -67,6 +68,19 @@ def run_risk_management(
                 problem_definition=problem_definition, n_size=n_size
             )
 
+            # Initialize metrics logger
+            metrics_logger = get_csv_logger(
+                "optimization_metrics.csv",
+                columns=[
+                    "generation",
+                    "global_min",
+                    "population_min",
+                    "population_max",
+                    "population_avg",
+                    "population_std",
+                ],
+            )
+
             logger.info("Fetching boundaries from ProblemDispatcherService.")
             boundaries = dispatcher.get_boundaries()
             logger.debug("Boundaries retrieved: %s", boundaries)
@@ -128,6 +142,20 @@ def run_risk_management(
                 logger.info(
                     "Generation %d successfully completed for risk management.",
                     loop_controller.current_generation,
+                )
+                metrics = solution_updater.get_optimization_metrics()
+                logger.info(
+                    "Generation statistics: global_min=%.6f, population_min=%.6f, population_max=%.6f, population_avg=%.6f, population_std=%.6f",
+                    metrics.global_min,
+                    metrics.last_population_min,
+                    metrics.last_population_max,
+                    metrics.last_population_avg,
+                    metrics.last_population_std,
+                )
+
+                # Log metrics to CSV
+                metrics_logger.info(
+                    f"{loop_controller.current_generation},{metrics.global_min:.9f},{metrics.last_population_min:.9f},{metrics.last_population_max:.9f},{metrics.last_population_avg:.9f},{metrics.last_population_std:.9f}"
                 )
 
             logger.info(

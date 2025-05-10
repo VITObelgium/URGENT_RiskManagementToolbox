@@ -9,6 +9,7 @@ from logger.u_logger import get_logger
 from services.solution_updater_service.core.engines import (
     OptimizationEngineFactory,
     OptimizationEngineInterface,
+    SolutionMetrics,
 )
 from services.solution_updater_service.core.models import (
     ControlVector,
@@ -432,6 +433,9 @@ class SolutionUpdaterService:
             solution_updater_service=self,
         )
 
+    def get_optimization_metrics(self) -> SolutionMetrics:
+        return self._engine.metrics
+
     @property
     def global_best_result(self) -> float:
         return self._engine.global_best_result
@@ -516,6 +520,7 @@ class SolutionUpdaterService:
         )
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
+
         self._logger.info("Control vectors update request processed successfully.")
 
         return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)

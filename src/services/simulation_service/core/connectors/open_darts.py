@@ -126,7 +126,7 @@ class OpenDartsConnector(ConnectorInterface):
 
         """
 
-        #TODO: do proper implementation of TIMEOUT for simulation
+        # TODO: do proper implementation of TIMEOUT for simulation
         try:
             process = subprocess.run(
                 ["python3", "main.py", config],
@@ -143,7 +143,7 @@ class OpenDartsConnector(ConnectorInterface):
             )
 
         except subprocess.TimeoutExpired:
-            broadcast_results = {k: float("inf") for k in SimulationResultType}
+            broadcast_results = {k: float(-1e3) for k in SimulationResultType}
 
         return broadcast_results
 

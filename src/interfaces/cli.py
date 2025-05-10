@@ -1,7 +1,7 @@
 import argparse
 import json
 
-from logger import get_logger, configure_logger
+from logger import configure_logger, get_logger
 from orchestration.risk_management_service import run_risk_management
 
 

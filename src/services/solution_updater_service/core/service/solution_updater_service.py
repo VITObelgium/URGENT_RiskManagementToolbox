@@ -15,6 +15,7 @@ from services.solution_updater_service.core.models import (
     ControlVector,
     OptimizationConstrains,
     OptimizationEngine,
+    OptimizationStrategy,
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
     SolutionUpdaterServiceResponse,
@@ -412,6 +413,7 @@ class SolutionUpdaterService:
         optimization_engine: OptimizationEngine,
         max_generations: int,
         patience: int,
+        optimization_strategy: OptimizationStrategy = OptimizationStrategy.MINIMIZE,
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
@@ -432,6 +434,7 @@ class SolutionUpdaterService:
             patience=patience,
             solution_updater_service=self,
         )
+        self._optimization_strategy = optimization_strategy
 
     def get_optimization_metrics(self) -> SolutionMetrics:
         return self._engine.metrics
@@ -508,8 +511,8 @@ class SolutionUpdaterService:
         control_vector, cost_function_values = self._mapper.to_numpy(
             config.solution_candidates
         )
-        # TODO: Temporary fix to allow finding the max instead of min
-        cost_function_values = -cost_function_values
+        if self._optimization_strategy == OptimizationStrategy.MAXIMIZE:
+            cost_function_values = -cost_function_values
 
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints

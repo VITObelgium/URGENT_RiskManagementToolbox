@@ -1,3 +1,8 @@
+"""
+NOTE:
+This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
+"""
+
 import json
 import re
 import subprocess
@@ -26,12 +31,11 @@ from .common import (
 class _StructDiscretizerProtocol(Protocol):
     """
     Struct Discretizer Protocol
-
-    required properties:
-    centroids_all_cells
     """
 
-    centroids_all_cells: npt.NDArray[np.float64]
+    len_cell_xdir: npt.NDArray[np.float64]
+    len_cell_ydir: npt.NDArray[np.float64]
+    len_cell_zdir: npt.NDArray[np.float64]
 
 
 class _GlobalData(TypedDict):
@@ -41,11 +45,13 @@ class _GlobalData(TypedDict):
     dx
     dy
     dz
+    start_z
     """
 
     dx: npt.NDArray[np.float64]
     dy: npt.NDArray[np.float64]
     dz: npt.NDArray[np.float64]
+    start_z: float
 
 
 class _StructReservoirProtocol(Protocol):
@@ -57,9 +63,6 @@ class _StructReservoirProtocol(Protocol):
     nz,
     discretizer
     global_data
-
-    required methods:
-    find_cell_index
     """
 
     nx: int
@@ -122,17 +125,25 @@ class OpenDartsConnector(ConnectorInterface):
         If process terminate with non-zero error code then SimulationResults will be empty (?TBC)
 
         """
-        process = subprocess.run(
-            ["python3", "main.py", config],
-            capture_output=True,
-            text=True,  # main.py must be present on worker side
-        )
 
-        if process.returncode != 0:
-            raise RuntimeError(f"Error: {process.stderr}")
+        # TODO: do proper implementation of TIMEOUT for simulation
+        try:
+            process = subprocess.run(
+                ["python3", "main.py", config],
+                capture_output=True,
+                text=True,  # main.py must be present on worker side
+                timeout=15 * 60,
+            )
+            if process.returncode != 0:
+                raise RuntimeError(f"Error: {process.stderr}")
 
-        process_stdout = process.stdout
-        broadcast_results = OpenDartsConnector._get_broadcast_results(process_stdout)
+            process_stdout = process.stdout
+            broadcast_results = OpenDartsConnector._get_broadcast_results(
+                process_stdout
+            )
+
+        except subprocess.TimeoutExpired:
+            broadcast_results = {k: float(-1e3) for k in SimulationResultType}
 
         return broadcast_results
 
@@ -204,7 +215,7 @@ class OpenDartsConnector(ConnectorInterface):
             extract_well_with_perforations_points(well_management_service_result)
         )
 
-        cell_connector = _CellConnector(struct_reservoir.discretizer)
+        cell_connector = _CellConnector(struct_reservoir)
 
         for well_name, perforations_points in wells_with_perforations_points.items():
             filtered_perforations_points = (
@@ -246,7 +257,8 @@ class OpenDartsConnector(ConnectorInterface):
         dy = struct_reservoir.global_data["dy"]
         dz = struct_reservoir.global_data["dz"]
 
-        cell1, cell2 = struct_reservoir.discretizer.centroids_all_cells[[0, -1]]
+        centroids = _calculate_centroids(struct_reservoir)
+        cell1, cell2 = centroids[[0, -1]]
         bounds_min = cell1 - 0.5 * np.array([dx[0, 0, 0], dy[0, 0, 0], dz[0, 0, 0]])
         bounds_max = cell2 + 0.5 * np.array(
             [dx[-1, -1, -1], dy[-1, -1, -1], dz[-1, -1, -1]]
@@ -271,9 +283,70 @@ class _CellConnector:
       through the 'open-darts' dependency specification
     """
 
-    def __init__(self, discretizer: _StructDiscretizerProtocol) -> None:
-        self._kd_tree = KDTree(discretizer.centroids_all_cells)
+    def __init__(
+        self,
+        struct_reservoir: _StructReservoirProtocol,
+    ) -> None:
+        centroids = _calculate_centroids(struct_reservoir)
+        self._kd_tree = KDTree(centroids)
 
     def find_cell_index(self, coord: Point) -> int:
         _, idx = self._kd_tree.query(coord)
         return idx
+
+
+def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDArray:
+    """
+    Calculates the centroids of grid cells within a 3D structured reservoir. Centroids are computed
+    based on the structured reservoir's dimensions and its discretization parameters in the x, y,
+    and z directions. The centroids represent the geometric centers of each grid cell in terms of
+    their x, y, and z coordinates.
+
+    Args:
+        struct_reservoir: A data structure implementing the _StructReservoirProtocol. It contains
+            reservoir configuration including dimensions (nx, ny, nz), the starting depth along the
+            z-direction ("start_z"), and length of each cell in the x, y, and z directions (accessible
+            via its discretizer attribute).
+
+    Returns:
+        npt.NDArray: A 2D NumPy array of shape (nx * ny * nz, 3), where each row represents the [x, y, z]
+        coordinates of a cell's centroid in column-major order.
+    """
+    nx = struct_reservoir.nx
+    ny = struct_reservoir.ny
+    nz = struct_reservoir.nz
+
+    start_z = struct_reservoir.global_data["start_z"]
+
+    len_cell_zdir = struct_reservoir.discretizer.len_cell_zdir
+    len_cell_ydir = struct_reservoir.discretizer.len_cell_ydir
+    len_cell_xdir = struct_reservoir.discretizer.len_cell_xdir
+
+    centroids_all_cells = np.zeros((nx, ny, nz, 3))  # 3 - for x,y,z coordinates
+    # fill z-coordinates using DZ
+    centroids_all_cells[:, :, 0, 2] = (
+        start_z + len_cell_zdir[:, :, 0] * 0.5
+    )  # nx*ny array of current layer's depths
+    if nz > 1:
+        d_cumsum = len_cell_zdir.cumsum(axis=2)
+        centroids_all_cells[:, :, 1:, 2] = (
+            start_z + (d_cumsum[:, :, :-1] + d_cumsum[:, :, 1:]) * 0.5
+        )
+
+    # fill y-coordinates using DY
+    centroids_all_cells[:, 0, :, 1] = len_cell_ydir[:, 0, :] * 0.5  # nx*nz array
+    if ny > 1:
+        d_cumsum = len_cell_ydir.cumsum(axis=1)
+        centroids_all_cells[:, 1:, :, 1] = (
+            d_cumsum[:, :-1, :] + d_cumsum[:, 1:, :]
+        ) * 0.5
+
+    # fill x-coordinates using DX
+    centroids_all_cells[0, :, :, 0] = len_cell_xdir[0, :, :] * 0.5  # ny*nz array
+    if nx > 1:
+        d_cumsum = len_cell_xdir.cumsum(axis=0)
+        centroids_all_cells[1:, :, :, 0] = (
+            d_cumsum[:-1, :, :] + d_cumsum[1:, :, :]
+        ) * 0.5
+
+    return np.reshape(centroids_all_cells, (nx * ny * nz, 3), order="F")

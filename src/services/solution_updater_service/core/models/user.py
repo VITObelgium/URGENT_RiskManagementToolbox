@@ -12,6 +12,11 @@ type LowerBound = float
 type UpperBound = float
 
 
+class OptimizationStrategy(StrEnum):
+    MINIMIZE = "minimize"
+    MAXIMIZE = "maximize"
+
+
 class OptimizationEngine(StrEnum):
     PSO = "PSO"
 

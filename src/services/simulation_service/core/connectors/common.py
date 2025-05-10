@@ -1,10 +1,15 @@
-from abc import ABC, abstractmethod
-from enum import StrEnum
-from typing import Sequence, TypedDict
+"""
+NOTE:
+This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
+"""
 
-type WellName = str
-type GridCell = tuple[int, int, int]
-type Point = tuple[float, float, float]
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Sequence, TypeAlias, TypedDict
+
+WellName: TypeAlias = str
+GridCell: TypeAlias = tuple[int, int, int]
+Point: TypeAlias = tuple[float, float, float]
 
 
 class PerforationSchema(TypedDict):
@@ -41,7 +46,7 @@ def extract_well_with_perforations_points(
     return results
 
 
-class SimulationResultType(StrEnum):
+class SimulationResultType(str, Enum):
     """
     NOTES:
         please make sure that implementation of SimulationResultType is aligned with:
@@ -51,11 +56,11 @@ class SimulationResultType(StrEnum):
     Heat = "Heat"
 
 
-type SimulationResults = dict[
+SimulationResults: TypeAlias = dict[
     SimulationResultType, float | Sequence[float] | Sequence[Sequence[float] | float]
 ]
 
-type SerializedJson = str
+SerializedJson: TypeAlias = str
 
 
 class ConnectorInterface(ABC):

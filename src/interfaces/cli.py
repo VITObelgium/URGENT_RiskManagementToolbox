@@ -1,7 +1,7 @@
 import argparse
 import json
 
-from logger import get_logger
+from logger import configure_logger, get_logger
 from orchestration.risk_management_service import run_risk_management
 
 
@@ -43,9 +43,9 @@ def cli():
     args = parser.parse_args()
 
     # Apply the logging level
-
+    configure_logger()
     logger = get_logger(__name__)
-    logger.info("Starting risk management process...")
+    logger.info("Risk management toolbox started from CLI.")
 
     # Load the problem_definition from the JSON file
     try:

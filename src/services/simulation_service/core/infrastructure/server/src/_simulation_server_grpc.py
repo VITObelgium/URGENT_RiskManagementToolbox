@@ -7,6 +7,12 @@ import generated.simulation_messaging_pb2_grpc as sm_grpc
 import grpc
 from grpc import aio
 
+from logger.u_logger import configure_logger, get_logger
+
+configure_logger()
+
+logger = get_logger(__name__)
+
 
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     def __init__(self) -> None:
@@ -18,13 +24,13 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
     async def TransferSimulationModel(self, request, context):
         self._simulation_model_archive = None
-        print("Received simulation model archive")
+        logger.info("Received simulation model archive")
         simulation_model_archive = request.package_archive
         self._simulation_model_archive = simulation_model_archive
         return sm.Ack(message="Simulation model archive stored on server")
 
     async def PerformSimulations(self, request, context):
-        print("Initializing simulations...")
+        logger.info("Initializing simulations...")
 
         self._jobs = SimpleQueue()
         self._running_jobs.clear()
@@ -34,22 +40,22 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             self._jobs.put((i, sim))
             self._running_jobs[i] = None  # Mark job as waiting
 
-        print(f"Queued {len(request.simulations)} simulation(s).")
+        logger.info(f"Queued {len(request.simulations)} simulation(s).")
 
         # Wait for all jobs to complete
         while self._running_jobs:
             await self._job_event.wait()  # Wait for job completion signal
             self._job_event.clear()
 
-        print("All simulations completed.")
+        logger.info("All simulations completed.")
         simulations_jobs = self._completed_jobs.values()
         simulations = [j.simulation for j in simulations_jobs]
-        print(f"Returning {simulations} completed simulation(s).")
+        logger.info(f"Returning {simulations} completed simulation(s).")
         return sm.Simulations(simulations=simulations)
 
     async def RequestSimulationJob(self, request, context):
         if self._jobs.empty():
-            print(f"Worker {request.worker_id}: No jobs available.")
+            logger.info(f"Worker {request.worker_id}: No jobs available.")
             return sm.SimulationJob(
                 simulation=sm.Simulation(),
                 status=sm.JobStatus.NO_JOB_AVAILABLE,
@@ -57,12 +63,12 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                 simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
             )
 
-        print(f"Worker {request.worker_id}: Requested a job")
+        logger.info(f"Worker {request.worker_id}: Requested a job")
 
         job_id, simulation = self._jobs.get()
         self._running_jobs[job_id] = simulation  # Mark job as running
 
-        print(f"Worker {request.worker_id}: Assigned job {job_id}")
+        logger.info(f"Worker {request.worker_id}: Assigned job {job_id}")
 
         return sm.SimulationJob(
             simulation=simulation,
@@ -87,11 +93,14 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         ]:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(f"Invalid job status '{simulation_job.status}'")
+            logger.warning(
+                f"Worker {simulation_job.worker_id}: Invalid job status '{simulation_job.status}'"
+            )
             return sm.Ack(
                 message=f"Invalid job status from Worker {simulation_job.worker_id}"
             )
 
-        print(
+        logger.info(
             f"Worker {simulation_job.worker_id}: Returned job with status {simulation_job.status}"
         )
 
@@ -104,7 +113,9 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         return sm.Ack(message=f"Job {job_id} completed.")
 
     async def RequestSimulationModel(self, request, context):
-        print(f"Worker {request.worker_id}: Requested a simulation model archive.")
+        logger.info(
+            f"Worker {request.worker_id}: Requested a simulation model archive."
+        )
         if not self._simulation_model_archive:
             return sm.SimulationModel(
                 package_archive=bytes(), status=sm.ModelStatus.NO_MODEL_AVAILABLE
@@ -123,12 +134,12 @@ async def serve() -> None:
     )
     manager_port = os.environ.get("SERVER_PORT", "50051")
     server.add_insecure_port(f"[::]:{manager_port}")
-    print(f"Async gRPC Server started on port {manager_port}.")
+    logger.info(f"Async gRPC Server started on port {manager_port}.")
     await server.start()
     try:
         await server.wait_for_termination()
     except asyncio.CancelledError:
-        print("Server shutdown gracefully")
+        logger.info("Server shutdown gracefully")
 
 
 if __name__ == "__main__":

@@ -68,6 +68,21 @@ class SimulationService:
             SimulationService._SERVER_HOST,
             SimulationService._SERVER_PORT,
         )
+
+        # Clean up dangling images before starting cluster.
+        # Note: dangling images are images with both <none> as their repository and tag
+        try:
+            logger.info("Pruning dangling Docker images...")
+            result = subprocess.run(
+                ["docker", "image", "prune", "-f"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception as e:
+            logger.warning("Failed to prune Docker images: %s", str(e))
+            raise
+
         with core_directory():
             try:
                 result = subprocess.run(

@@ -76,6 +76,9 @@ install-xterm: # needed for external terminal for logging
 	$(log) "Installing xfonts-base..."
 	sudo apt-get install -y xfonts-base
 	$(log) "xfonts-base installed successfully."
+	$(log) "Installing tmux...
+	sudo apt-get install -y tmux
+	$(log) "tmux installed successfully."
 
 install-dev: install-python-and-uv install-latex install-docker verify-docker install-xterm
 	$(log) "Installing development packages and pre-commit hooks..."

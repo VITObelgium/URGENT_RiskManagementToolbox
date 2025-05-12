@@ -449,3 +449,6 @@ TSWLatexianTemp*
 
 # .idea directory
 .idea/
+
+# csv log
+log/*.csv

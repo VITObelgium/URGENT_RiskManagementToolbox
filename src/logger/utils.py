@@ -2,6 +2,19 @@ import os
 from typing import Any, Dict
 
 
+def get_logger_profile() -> str:
+    """
+    Get the logger profile from the environment variable.
+    If the environment variable is not set, return "default".
+
+    Returns
+    -------
+    str
+        The logger profile.
+    """
+    return os.environ.get("URGENT_LOGGER_PROFILE", "default")
+
+
 def get_log_to_console_value() -> bool:
     """
     Get the value of log_to_console from pyproject.toml.
@@ -12,8 +25,6 @@ def get_log_to_console_value() -> bool:
         The value of log_to_console.
 
     """
-    if os.getenv("FORCE_CONSOLE_LOGGING") == "1":
-        return True
     return bool(get_logging_output()["log_to_console"])
 
 

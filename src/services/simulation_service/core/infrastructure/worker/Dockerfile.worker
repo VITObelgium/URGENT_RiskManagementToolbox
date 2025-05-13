@@ -19,7 +19,7 @@ COPY src/logger /app/logger
 COPY --from=builder /install /usr/local/lib/python3.12/site-packages
 
 ENV PYTHONPATH=/app:/app/generated
-ENV FORCE_CONSOLE_LOGGING=1
+ENV URGENT_LOGGER_PROFILE=worker
 
 ARG _SERVER_PORT
 ARG _SERVER_HOST

@@ -42,9 +42,9 @@ class _GlobalData(TypedDict):
     """
     Global Data Protocol (dictionary)
     required keys:
-    dx
-    dy
-    dz
+    - dx
+    - dy
+    - dz
     start_z
     """
 
@@ -58,11 +58,11 @@ class _StructReservoirProtocol(Protocol):
     """
     Struct Reservoir Protocol
     required properties:
-    nx
-    ny
-    nz,
-    discretizer
-    global_data
+    - nx
+    - ny
+    - nz,
+    - discretizer
+    - global_data
     """
 
     nx: int
@@ -176,8 +176,8 @@ class OpenDartsConnector(ConnectorInterface):
     ) -> None:
         """
         Use for broadcast given simulation results to stdout
-        key - SimulationResultsType
-        value - float or sequence of floats
+            key: SimulationResultsType
+            value: float or sequence of floats
         """
         broadcast_template = OpenDartsConnector.MsgTemplate.format(key, value)
         print(broadcast_template)

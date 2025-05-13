@@ -44,9 +44,7 @@ def _start_external_xterm_log_terminal(title: str, command: str) -> None:
 
 
 def _start_external_log_terminal(title: str, command: str) -> None:
-    """Start a tmux session with the specified log command."""
-
-    session_name = f"log_{title.replace(' ', '_').lower()}"
+    """Start an external terminal session with the specified log command."""
 
     try:
         escaped_command = command.replace('"', '\\"')
@@ -56,7 +54,8 @@ def _start_external_log_terminal(title: str, command: str) -> None:
         subprocess.run(wt_command, shell=True)
     except (OSError, subprocess.SubprocessError):
         _start_external_xterm_log_terminal(
-            title, f"tmux attach-session -t {session_name}"
+            title,
+            command,
         )
 
 
@@ -93,17 +92,6 @@ def log_docker_logs(logger: Logger) -> None:
 
     worker_log_path = (log_dir / "docker_workers.log").resolve()
     sim_log_path = (log_dir / "docker_simulation_server.log").resolve()
-
-    try:
-        for session in subprocess.check_output(
-            ["tmux", "list-sessions"], text=True, stderr=subprocess.DEVNULL
-        ).splitlines():
-            if session.startswith("log_"):
-                session_name = session.split(":")[0]
-                logger.info(f"Killing existing tmux session: {session_name}")
-                subprocess.Popen(["tmux", "kill-session", "-t", session_name])
-    except subprocess.CalledProcessError:
-        pass
 
     if worker_services:
         worker_cmd = f"docker compose logs --tail {TAIL_LINES} --follow {' '.join(worker_services)}"

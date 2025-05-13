@@ -10,12 +10,17 @@ import grpc.aio
 from connectors.common import SimulationResults
 from connectors.factory import ConnectorFactory
 from utils.converters import json_to_str
-
 from logger.u_logger import configure_logger, get_logger
+
 
 configure_logger()
 
 logger = get_logger(__name__)
+
+channel_options = [
+    ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
+    ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
+]
 
 
 def _run_simulator(simulation_job) -> SimulationResults:
@@ -84,7 +89,9 @@ async def ask_for_simulation_model(worker_id: str) -> None:
             server_port = os.environ.get("SERVER_PORT", "50051")
 
             grpc_target = f"{server_host}:{server_port}"
-            async with grpc.aio.insecure_channel(grpc_target) as channel:
+            async with grpc.aio.insecure_channel(
+                grpc_target, options=channel_options
+            ) as channel:
                 stub = sm_grpc.SimulationMessagingStub(channel)
                 logger.info(
                     f"Worker {worker_id}: Requesting a simulation model archive..."
@@ -132,7 +139,9 @@ async def run_simulation_loop(worker_id: str) -> None:
             server_port = os.environ.get("SERVER_PORT", "50051")
 
             grpc_target = f"{server_host}:{server_port}"
-            async with grpc.aio.insecure_channel(grpc_target) as channel:
+            async with grpc.aio.insecure_channel(
+                grpc_target, options=channel_options
+            ) as channel:
                 stub = sm_grpc.SimulationMessagingStub(channel)
 
                 logger.info(f"Worker {worker_id}: Requesting a job...")

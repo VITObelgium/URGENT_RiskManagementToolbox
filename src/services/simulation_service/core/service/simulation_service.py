@@ -24,6 +24,11 @@ from services.simulation_service.core.utils.converters import json_to_str, str_t
 
 logger = get_logger(__name__)
 
+channel_options = [
+    ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
+    ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
+]
+
 
 @contextmanager
 def core_directory() -> Generator[None, None, None]:
@@ -59,6 +64,22 @@ class SimulationService:
     _WORKER_COUNT = 3
 
     @staticmethod
+    def build_simulation_cluster_images() -> None:
+        logger.info("Building simulation cluster images...")
+        with core_directory():
+            try:
+                result = subprocess.run(
+                    ["docker", "compose", "build", "--progress", "plain", "--force-rm"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                logger.debug("Docker build output:\n%s", result.stdout)
+            except subprocess.CalledProcessError as e:
+                logger.error("Error building simulation cluster images:\n%s", e.stderr)
+                raise
+
+    @staticmethod
     def start_simulation_cluster() -> None:
         """
         Start the Docker-based simulation cluster with the specified worker count.
@@ -68,6 +89,21 @@ class SimulationService:
             SimulationService._SERVER_HOST,
             SimulationService._SERVER_PORT,
         )
+
+        # Clean up dangling images before starting cluster.
+        # Note: dangling images are images with both <none> as their repository and tag
+        try:
+            logger.info("Pruning dangling Docker images...")
+            result = subprocess.run(
+                ["docker", "image", "prune", "-f"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception as e:
+            logger.warning("Failed to prune Docker images: %s", str(e))
+            raise
+
         with core_directory():
             try:
                 result = subprocess.run(
@@ -177,12 +213,13 @@ class SimulationService:
         Args:
             simulation_model_archive (bytes): The archive content as bytes.
         """
+
         grpc_target = (
             f"{SimulationService._SERVER_HOST}:{SimulationService._SERVER_PORT}"
         )
         logger.info("Establishing gRPC connection to %s...", grpc_target)
 
-        with grpc.insecure_channel(grpc_target) as channel:
+        with grpc.insecure_channel(grpc_target, options=channel_options) as channel:
             stub = sm_grpc.SimulationMessagingStub(channel)
 
             try:
@@ -229,12 +266,13 @@ class SimulationService:
         Returns:
             Sequence[SimulationCase]: The processed simulation cases.
         """
+
         grpc_target = (
             f"{SimulationService._SERVER_HOST}:{SimulationService._SERVER_PORT}"
         )
         logger.info("Connecting to simulation cluster at %s...", grpc_target)
 
-        with grpc.insecure_channel(grpc_target) as channel:
+        with grpc.insecure_channel(grpc_target, options=channel_options) as channel:
             stub = sm_grpc.SimulationMessagingStub(channel)
 
             logger.info("Sending simulation cases to the cluster...")
@@ -295,6 +333,7 @@ def simulation_cluster_context_manager():
     Context manager for managing the simulation cluster lifecycle.
     """
     logger.info("Entering simulation cluster context.")
+    SimulationService.build_simulation_cluster_images()
     SimulationService.start_simulation_cluster()
     try:
         yield

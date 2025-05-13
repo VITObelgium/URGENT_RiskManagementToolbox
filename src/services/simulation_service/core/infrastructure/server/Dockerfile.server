@@ -2,26 +2,23 @@ FROM python:3.12-alpine AS builder
 
 WORKDIR /app
 
-COPY src/services/simulation_service/core/infrastructure/server/server_requirements.txt .
-
-RUN  pip install --no-cache-dir -r server_requirements.txt --target /install
+COPY infrastructure/server/server_requirements.txt .
+RUN pip install --no-cache-dir uv && \
+    uv pip install --no-cache-dir -r server_requirements.txt --target /install
 
 FROM python:3.12-alpine
 
 WORKDIR /app
 
-COPY src/services/simulation_service/core/infrastructure/server/src/ /app/
-COPY src/services/simulation_service/core/infrastructure/generated/ /app/generated/
-COPY src/services/simulation_service/core/connectors/ /app/connectors/
-COPY src/services/simulation_service/core/utils/ /app/utils/
-
-COPY src/logger /app/logger
 
 COPY --from=builder /install /usr/local/lib/python3.12/site-packages
+COPY infrastructure/server/src/ /app/
+COPY infrastructure/generated/ /app/generated/
+COPY connectors/ /app/connectors/
+COPY utils/ /app/utils/
 
-ENV PYTHONPATH=/app:/app/generated
+ENV PYTHONPATH=/app/generated
 ENV URGENT_LOGGER_PROFILE=server
-
 
 ARG _SERVER_PORT
 

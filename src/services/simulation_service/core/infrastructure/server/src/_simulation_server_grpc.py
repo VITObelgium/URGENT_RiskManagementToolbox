@@ -6,12 +6,16 @@ import generated.simulation_messaging_pb2 as sm
 import generated.simulation_messaging_pb2_grpc as sm_grpc
 import grpc
 from grpc import aio
-
 from logger.u_logger import configure_logger, get_logger
 
 configure_logger()
 
 logger = get_logger(__name__)
+
+server_options = [
+    ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
+    ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
+]
 
 
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
@@ -128,7 +132,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
 
 async def serve() -> None:
-    server = aio.server()
+    server = aio.server(options=server_options)
     sm_grpc.add_SimulationMessagingServicer_to_server(
         SimulationMessagingHandler(), server
     )

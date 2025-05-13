@@ -17,6 +17,7 @@ from services.solution_updater_service import (
     OptimizationEngine,
     SolutionUpdaterService,
 )
+from services.solution_updater_service.core.models import OptimizationStrategy
 from services.solution_updater_service.core.utils import ensure_not_none
 from services.well_management_service import WellManagementService
 
@@ -62,6 +63,7 @@ def run_risk_management(
                 optimization_engine=OptimizationEngine.PSO,
                 max_generations=max_generations,
                 patience=patience,
+                optimization_strategy=OptimizationStrategy.MAXIMIZE,
             )
             dispatcher = ProblemDispatcherService(
                 problem_definition=problem_definition, n_size=n_size

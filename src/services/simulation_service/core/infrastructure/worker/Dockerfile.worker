@@ -1,22 +1,25 @@
-FROM python:3.12-slim AS builder
+FROM python:3.10.12-slim AS builder
 
 WORKDIR /app
-
+COPY infrastructure/worker/open_darts_whl/ /app/
 COPY infrastructure/worker/worker_requirements.txt .
-RUN pip install --no-cache-dir -r worker_requirements.txt --target /install
+RUN pip install --no-cache-dir uv &&\
+    uv pip install --no-cache-dir  -r worker_requirements.txt --target /install
 
-FROM python:3.12-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+COPY --from=builder /install /usr/local/lib/python3.10/site-packages
 COPY infrastructure/worker/src/ /app/
 COPY infrastructure/generated/ /app/generated/
 COPY connectors/ /app/connectors/
 COPY utils/ /app/utils/
 
 ENV PYTHONPATH=/app/generated
-
-COPY --from=builder /install /usr/local/lib/python3.12/site-packages
 
 ARG _SERVER_PORT
 ARG _SERVER_HOST

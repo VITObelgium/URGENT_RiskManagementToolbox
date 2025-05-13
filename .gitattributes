@@ -6,3 +6,4 @@
 # Treat png, zip files as binary to fix file corruption
 *.png binary
 *.zip binary
+*.whl binary

@@ -6,6 +6,7 @@ import generated.simulation_messaging_pb2 as sm
 import generated.simulation_messaging_pb2_grpc as sm_grpc
 import grpc
 from grpc import aio
+
 from logger.u_logger import configure_logger, get_logger
 
 configure_logger()

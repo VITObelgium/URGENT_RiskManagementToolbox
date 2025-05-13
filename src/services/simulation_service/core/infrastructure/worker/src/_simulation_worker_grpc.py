@@ -10,8 +10,8 @@ import grpc.aio
 from connectors.common import SimulationResults
 from connectors.factory import ConnectorFactory
 from utils.converters import json_to_str
-from logger.u_logger import configure_logger, get_logger
 
+from logger.u_logger import configure_logger, get_logger
 
 configure_logger()
 

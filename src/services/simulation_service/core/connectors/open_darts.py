@@ -41,11 +41,11 @@ class _StructDiscretizerProtocol(Protocol):
 class _GlobalData(TypedDict):
     """
     Global Data Protocol (dictionary)
-    required keys:
-    - dx
-    - dy
-    - dz
-    start_z
+    Attributes:
+        dx: NumPy array of grid cell dimensions in the x-direction.
+        dy: NumPy array of grid cell dimensions in the y-direction.
+        dz: NumPy array of grid cell dimensions in the z-direction.
+        start_z: The starting depth reference for the z-axis.
     """
 
     dx: npt.NDArray[np.float64]
@@ -55,14 +55,16 @@ class _GlobalData(TypedDict):
 
 
 class _StructReservoirProtocol(Protocol):
-    """
-    Struct Reservoir Protocol
-    required properties:
-    - nx
-    - ny
-    - nz,
-    - discretizer
-    - global_data
+    """Protocol for a structured reservoir model.
+
+    This protocol defines the expected attributes for a structured reservoir.
+
+    Attributes:
+        nx (int): Number of grid cells in the x-direction.
+        ny (int): Number of grid cells in the y-direction.
+        nz (int): Number of grid cells in the z-direction.
+        discretizer (_StructDiscretizerProtocol): Grid discretizer.
+        global_data (_GlobalData): Global data for the grid.
     """
 
     nx: int

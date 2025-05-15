@@ -16,11 +16,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.12 and uv
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.7.4"
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
-          uv: true
+          python-version-file: "pyproject.toml"
 
       - name: Install dependencies with uv
         run: |

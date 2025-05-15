@@ -565,18 +565,10 @@ name = "urgent-riskmanagementtoolbox"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "coverage" },
     { name = "grpcio" },
     { name = "grpcio-tools" },
-    { name = "mypy" },
-    { name = "mypy-protobuf" },
     { name = "numpy" },
-    { name = "pre-commit" },
-    { name = "protoletariat" },
     { name = "pydantic" },
-    { name = "pytest" },
-    { name = "pytest-mypy" },
-    { name = "pytest-retry" },
     { name = "scipy" },
     { name = "tomli" },
 ]
@@ -595,18 +587,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "coverage", specifier = "==7.6.10" },
     { name = "grpcio", specifier = "==1.69.0" },
     { name = "grpcio-tools", specifier = "==1.69.0" },
-    { name = "mypy", specifier = "==1.15.0" },
-    { name = "mypy-protobuf", specifier = "==3.6.0" },
     { name = "numpy", specifier = "==2.2.1" },
-    { name = "pre-commit", specifier = "==4.0.1" },
-    { name = "protoletariat", specifier = "==3.3.9" },
     { name = "pydantic", specifier = "==2.10.4" },
-    { name = "pytest", specifier = "==8.3.4" },
-    { name = "pytest-mypy", specifier = "==0.10.3" },
-    { name = "pytest-retry", specifier = "==1.7.0" },
     { name = "scipy", specifier = "==1.15.2" },
     { name = "tomli", specifier = "==2.2.1" },
 ]

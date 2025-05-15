@@ -5,18 +5,10 @@ description = ""
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "coverage==7.6.10",
     "grpcio==1.69.0",
     "grpcio-tools==1.69.0",
-    "mypy==1.15.0",
-    "mypy-protobuf==3.6.0",
     "numpy==2.2.1",
-    "pre-commit==4.0.1",
-    "protoletariat==3.3.9",
     "pydantic==2.10.4",
-    "pytest==8.3.4",
-    "pytest-mypy==0.10.3",
-    "pytest-retry==1.7.0",
     "scipy==1.15.2",
     "tomli==2.2.1",
 ]
@@ -74,8 +66,6 @@ log_level = "INFO"
 retries = 2
 retry_delay = 0.5
 cumulative_timing = false
-
-
 
 [build-system]
 requires = ["setuptools>=42"]

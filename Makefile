@@ -69,7 +69,7 @@ install-python-and-uv: prerequisites
 		echo "Python $(PYTHON_VERSION) is already installed. Skipping installation."; \
 	fi
 	curl -LsSf https://astral.sh/uv/install.sh | sh
-	. "$$HOME/.local/bin/env" && uv venv --python $(PYTHON_VERSION)
+	"$$HOME/.local/bin/uv" venv --python $(PYTHON_VERSION) $(VENV_DIR)
 
 install-xterm: # needed for external terminal for logging
 	$(log) "Installing xterm..."
@@ -80,25 +80,25 @@ install-xterm: # needed for external terminal for logging
 	$(log) "xfonts-base installed successfully."
 
 install-release: install-python-and-uv install-docker verify-docker install-xterm
-    $(log) "Installing release packages and pre-commit hooks..."
-    uv pip sync
-    uv run pre-commit install
-    $(log) "Release setup complete."
+	$(log) "Installing release packages and pre-commit hooks..."
+	uv sync --no-dev
+	uv run pre-commit install
+	$(log) "Release setup complete."
 
 install-dev: install-python-and-uv install-latex install-docker verify-docker install-xterm
-    $(log) "Installing development packages and pre-commit hooks..."
-    uv pip sync --group dev
-    uv run pre-commit install
-    $(log) "Development setup complete."
+	$(log) "Installing development packages and pre-commit hooks..."
+	uv sync --all-groups
+	uv run pre-commit install
+	$(log) "Development setup complete."
 
 lock-dev:
-    $(log) "Updating dependencies..."
-    uv pip compile --group dev
+	$(log) "Updating dependencies..."
+	uv sync --all-groups
 
 run-check: lock-dev
-    $(log) "Running repository health checks with pre-commit hooks..."
-    uv run pre-commit run -a
-    $(log) "Pre-commit checks complete."
+	$(log) "Running repository health checks with pre-commit hooks..."
+	uv run pre-commit run -a
+	$(log) "Pre-commit checks complete."
 
 edit-docs:
 	@if command -v texstudio >/dev/null 2>&1; then \

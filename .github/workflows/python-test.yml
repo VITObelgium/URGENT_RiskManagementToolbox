@@ -21,16 +21,21 @@ jobs:
         with:
           version: "0.7.4"
 
+      - name: Enable caching
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
 
       - name: Install dependencies with uv
-        run: |
-          uv sync --all-groups
-          pre-commit install
+        run: uv sync --all-groups
+
+      - name: Install pre-commit hooks
+        run: uv run pre-commit install
 
       - name: Run pre-commit hooks
-        run: |
-          uv run pre-commit run -a
+        run: uv run pre-commit run -a

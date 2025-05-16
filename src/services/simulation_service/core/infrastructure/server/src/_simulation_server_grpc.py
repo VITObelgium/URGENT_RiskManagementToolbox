@@ -15,6 +15,7 @@ server_options = [
 
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     def __init__(self) -> None:
+        raise NotImplementedError("MOCK ERROR")
         self._jobs = SimpleQueue()  # Queue of simulations
         self._running_jobs = {}  # Dictionary to track running jobs
         self._completed_jobs = {}  # Dictionary to store results

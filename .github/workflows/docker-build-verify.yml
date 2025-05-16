@@ -1,0 +1,13 @@
+name: Docker Build and Verify
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+runs:
+  using: 'docker'
+  image: 'src/services/simulation_service/core/infrastructure/server/Dockerfile.server'

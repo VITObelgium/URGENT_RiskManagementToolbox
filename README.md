@@ -124,11 +124,25 @@ make verify-docker
 
 ### Manual Virtual Environment Handling
 
-- If for some reason you did not initially run `make install-dev` or `make install-release`, activate the Python virtual environment manually and install git hooks by running:
+The `make install-dev` or `make install-release` targets will set up the Python virtual environment using `uv` and install git hooks.
+
+If you need to run commands within this environment manually (e.g., a Python script or `pytest`), you can use `uv run`:
 
 ```shell
-source .venv/bin/activate
-pre-commit install
+uv run python your_script.py
+uv run pytest
+```
+
+To activate a shell session within the virtual environment, you can use:
+
+```shell
+uv shell
+```
+
+Additionally, if you need to manually install git hooks (e.g., if you skipped the `make install-*` targets initially or cloned to a new location without running them):
+
+```shell
+uv run pre-commit install
 ```
 
 ---
@@ -137,18 +151,18 @@ pre-commit install
 
 ### Running Tests
 
-Use `pytest` to run the project's test suite:
-
-```shell
-pytest
-```
-
-### Pre-commit Checks Individually
-
-To perform project compliance checks manually, run:
+Use `pytest` to run the project's test suite. The `make install-dev` target installs `pytest`. You can run tests using:
 
 ```shell
 make run-check
+```
+This will also run tests as part of the pre-commit hooks. To run tests directly:
+```shell
+uv run pytest
+```
+Or, if you have activated the environment using `uv shell`:
+```shell
+pytest
 ```
 
 ---

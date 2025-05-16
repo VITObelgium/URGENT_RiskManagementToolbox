@@ -33,6 +33,11 @@ repos:
         pass_filenames: false
         args: ["--enable-incomplete-feature=NewGenericSyntax", '.']
 
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.7.4
+    hooks:
+      - id: uv-lock
+
 
   - repo: local
     hooks:

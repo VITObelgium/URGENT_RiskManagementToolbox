@@ -49,7 +49,7 @@ Ensure that all the following tasks are completed before submitting your PR:
 - [ ] Code is formatted and has been linted using 'makefile' run-check option
 - [ ] New and existing tests pass locally.
 - [ ] All relevant documentation has been updated (e.g., docstrings, README, etc.).
-- [ ] Dependencies have been updated, and `requirements.txt` or `pyproject.toml` has been updated accordingly.
+- [ ] Dependencies have been updated in `pyproject.toml`, and `uv.lock` has been regenerated accordingly.
 - [ ] This PR has been reviewed by at least one other developer.
 
 ## Deployment Notes

@@ -2,7 +2,9 @@ PYTHON_VERSION = 3.12
 
 .PHONY: help prerequisites install-latex install-docker install-python-and-uv install install-dev install-release run-check edit-docs verify-docker
 
-VENV_ACTIVATE = .venv/bin/activate
+VENV_DIR ?= .venv
+UV_IN_VENV := $(VENV_DIR)/bin/uv
+VENV_ACTIVATE = $(VENV_DIR)/bin/activate
 log = @printf "\n==== %s ====\n\n"
 
 help:
@@ -51,7 +53,7 @@ verify-docker:
 	$(log) "Docker verification complete."
 
 install-python-and-uv: prerequisites
-	$(log) "Checking and installing Python $(PYTHON_VERSION) and UV if needed..."
+	$(log) "Checking and installing Python $(PYTHON_VERSION) and uv if needed..."
 	sudo apt update
 	sudo apt upgrade -y
 	if ! command -v python$(PYTHON_VERSION) >/dev/null; then \
@@ -67,7 +69,7 @@ install-python-and-uv: prerequisites
 		echo "Python $(PYTHON_VERSION) is already installed. Skipping installation."; \
 	fi
 	curl -LsSf https://astral.sh/uv/install.sh | sh
-	. "$$HOME/.local/bin/env" && uv venv --python $(PYTHON_VERSION)
+	"$$HOME/.local/bin/uv" venv --python $(PYTHON_VERSION) $(VENV_DIR)
 
 install-xterm: # needed for external terminal for logging
 	$(log) "Installing xterm..."
@@ -77,22 +79,25 @@ install-xterm: # needed for external terminal for logging
 	sudo apt-get install -y xfonts-base
 	$(log) "xfonts-base installed successfully."
 
-install-dev: install-python-and-uv install-latex install-docker verify-docker install-xterm
-	$(log) "Installing development packages and pre-commit hooks..."
-	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-dev.txt
-	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-release.txt
-	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && pre-commit install
-	$(log) "Development setup complete."
-
 install-release: install-python-and-uv install-docker verify-docker install-xterm
 	$(log) "Installing release packages and pre-commit hooks..."
-	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && uv pip install -r requirements-release.txt
-	PATH="$$HOME/.local/bin:$$PATH" . $(VENV_ACTIVATE) && pre-commit install
+	uv sync --no-dev
+	uv run pre-commit install
 	$(log) "Release setup complete."
 
-run-check:
+install-dev: install-python-and-uv install-latex install-docker verify-docker install-xterm
+	$(log) "Installing development packages and pre-commit hooks..."
+	uv sync --all-groups
+	uv run pre-commit install
+	$(log) "Development setup complete."
+
+lock-dev:
+	$(log) "Updating dependencies..."
+	uv sync --all-groups
+
+run-check: lock-dev
 	$(log) "Running repository health checks with pre-commit hooks..."
-	pre-commit run -a
+	uv run pre-commit run -a
 	$(log) "Pre-commit checks complete."
 
 edit-docs:

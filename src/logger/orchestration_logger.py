@@ -112,7 +112,7 @@ def log_docker_logs(logger: Logger) -> None:
 
     if get_external_console_logging():
         _start_external_log_terminal(
-            "Docker Simulation Service Logs",
+            "Docker Simulation Server Logs",
             f"{sim_cmd} | stdbuf -oL -eL tee '{sim_log_path}'",
         )
         logger.info(

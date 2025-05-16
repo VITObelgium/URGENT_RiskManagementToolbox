@@ -20,10 +20,6 @@ server_options = [
 ]
 
 
-def _get_short_worker_id(full_worker_id):
-    return str(full_worker_id)[:8] if full_worker_id else "unknown"
-
-
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     def __init__(self) -> None:
         self._jobs = SimpleQueue()  # Queue of simulations
@@ -163,10 +159,10 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         return sm.Simulations(simulations=simulations)
 
     async def RequestSimulationJob(self, request, context):
-        short_worker_id = _get_short_worker_id(request.worker_id)
+        worker_id = request.worker_id
 
         if self._jobs.empty():
-            logger.info(f"Worker {short_worker_id}: No jobs available in queue")
+            logger.info(f"Worker {worker_id}: No jobs available in queue")
             if self._running_jobs:
                 logger.info(
                     f"Following jobs are still running: {[job for job in self._running_jobs]}"
@@ -178,7 +174,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                 simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
             )
         job_id, simulation = self._jobs.get()
-        logger.info(f"Worker {short_worker_id}: Assigned job {job_id}")
+        logger.info(f"Worker {worker_id}: Assigned job {job_id}")
 
         self._running_jobs[job_id] = simulation  # Mark job as running
 
@@ -193,11 +189,11 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     async def SubmitSimulationJob(self, request, context):
         simulation_job = request
         job_id = simulation_job.job_id
-        short_worker_id = _get_short_worker_id(request.worker_id)
+        worker_id = request.worker_id
 
         if job_id not in self._running_jobs:
             logger.warning(
-                f"Worker {short_worker_id}: Attempted to submit invalid job ID {job_id}"
+                f"Worker {worker_id}: Attempted to submit invalid job ID {job_id}"
             )
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             return sm.Ack(message=f"Invalid job {job_id} ID.")
@@ -211,10 +207,10 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                 f"Invalid job {job_id} status '{simulation_job.status}'"
             )
             logger.warning(
-                f"Worker {short_worker_id}: Invalid job {job_id} status '{simulation_job.status}'"
+                f"Worker {worker_id}: Invalid job {job_id} status '{simulation_job.status}'"
             )
             return sm.Ack(
-                message=f"Invalid job status from Worker {short_worker_id}, job {job_id} status {simulation_job.status}"
+                message=f"Invalid job status from Worker {worker_id}, job {job_id} status {simulation_job.status}"
             )
 
         status_name = (
@@ -223,7 +219,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             else simulation_job.status
         )
         logger.info(
-            f"Worker {short_worker_id}: Returned job {job_id} with status {status_name}"
+            f"Worker {worker_id}: Returned job {job_id} with status {status_name}"
         )
 
         self._completed_jobs[job_id] = request
@@ -233,13 +229,13 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             self._job_event.set()
 
         return sm.Ack(
-            message=f"Worker {short_worker_id}: Returned job {job_id} with status {status_name}"
+            message=f"Worker {worker_id}: Returned job {job_id} with status {status_name}"
         )
 
     async def RequestSimulationModel(self, request, context):
-        short_worker_id = _get_short_worker_id(request.worker_id)
+        worker_id = request.worker_id
 
-        logger.info(f"Worker {short_worker_id}: Requested a simulation model archive.")
+        logger.info(f"Worker {worker_id}: Requested a simulation model archive.")
         if not self._simulation_model_archive:
             return sm.SimulationModel(
                 package_archive=bytes(), status=sm.ModelStatus.NO_MODEL_AVAILABLE

@@ -2,7 +2,7 @@ import asyncio
 import io
 import os
 import uuid
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 import generated.simulation_messaging_pb2 as sm
 import generated.simulation_messaging_pb2_grpc as sm_grpc
@@ -24,7 +24,6 @@ channel_options = [
 
 
 def _run_simulator(simulation_job) -> SimulationResults:
-    logger.info(f"Simulator type: {simulation_job.simulator}")
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
     return connector.run(simulation_job.simulation.input.wells)
 
@@ -49,138 +48,226 @@ async def submit_simulation_job(stub, simulation_job, simulation_result, status)
     return await stub.SubmitSimulationJob(simulation_job)
 
 
-async def handle_simulation_job(stub, simulation_job):
-    """Handle a single simulation job."""
+async def handle_simulation_job(stub, simulation_job, worker_id):
+    """
+    Handle a single simulation job with proper error handling and logging.
+
+    Args:
+        stub: The gRPC stub used for communicating with the server
+        simulation_job: The simulation job to be processed
+        worker_id: Unique identifier for worker processing the job
+    Returns:
+        None
+    """
+
     try:
-        logger.info("Starting simulation....")
-        # Run the simulator in a thread-safe, non-blocking way
+        logger.info(
+            f"Worker {worker_id}: Starting simulation {simulation_job.job_id}..."
+        )
+        logger.debug(f"Worker {worker_id}: Simulation job: {simulation_job}")
+
         simulation_result = await asyncio.to_thread(_run_simulator, simulation_job)
         status = sm.JobStatus.SUCCESS
-        logger.info("Simulation completed successfully.")
+        logger.info(
+            f"Worker {worker_id}: Simulation {simulation_job.job_id} completed successfully"
+        )
+
     except Exception as e:
         logger.error(f"Simulation failed due to: {e}")
-        simulation_result = {"error": str(e)}  # Use a meaningful result for failure
-        status = sm.JobStatus.FAILED
+        raise e
 
-    response = await submit_simulation_job(
-        stub, simulation_job, simulation_result, status
-    )
-    logger.info(
-        f"Worker {simulation_job.worker_id}: Received server acknowledgment: {response.message}"
-    )
+    try:
+        response = await submit_simulation_job(
+            stub, simulation_job, simulation_result, status
+        )
+        logger.debug(
+            f"Worker {worker_id}: Job {simulation_job.job_id} result submitted. Server response: {response.message}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to submit results for job {simulation_job.job_id}: {e}",
+            exc_info=True,
+        )
 
 
 async def try_unpacking_model_archive(package_archive) -> bool:
+    """
+    Unpack the simulation model archive to the application directory.
+    Assumes the extract path already exists.
+
+    Args:
+        package_archive: Binary content of the simulation model archive
+
+    Returns:
+        bool: True if unpacking was successful, False otherwise
+    """
     extract_path = "/app"
+
+    # Validate inputs before attempting extraction
+    if not package_archive:
+        logger.error("Cannot unpack empty archive")
+        return False
+
     try:
-        with ZipFile(io.BytesIO(package_archive), "r") as simulation_model_archive:
-            simulation_model_archive.extractall(extract_path)
+        # Use a context manager for the BytesIO object for proper resource management
+        with io.BytesIO(package_archive) as archive_data:
+            with ZipFile(archive_data, "r") as simulation_model_archive:
+                # Validate the archive structure before extraction
+                if any(
+                    name.startswith("/") or ".." in name
+                    for name in simulation_model_archive.namelist()
+                ):
+                    logger.error("Archive contains potentially unsafe paths")
+                    return False
+
+                # Extract all files (assumes extract_path exists)
+                simulation_model_archive.extractall(extract_path)
+
         return True
+
+    except BadZipFile:
+        logger.error("Invalid zip archive format")
+        return False
+    except PermissionError:
+        logger.error(f"Permission denied when extracting to {extract_path}")
+        return False
+    except FileNotFoundError:
+        logger.error(f"Extraction path {extract_path} does not exist")
+        return False
     except Exception as e:
-        logger.error(f"Unpacking failed due to: {e}")
+        logger.error(f"Unpacking failed due to: {str(e)}")
         return False
 
 
-async def ask_for_simulation_model(worker_id: str) -> None:
-    has_simulation_model = False
-    while not has_simulation_model:
-        try:
-            server_host = os.environ.get("SERVER_HOST", "localhost")
-            server_port = os.environ.get("SERVER_PORT", "50051")
+async def ask_for_simulation_model(stub, worker_id: str) -> None:
+    """
+    Request and unpack simulation model from the server.
+    Will keep retrying until successful.
 
-            grpc_target = f"{server_host}:{server_port}"
-            async with grpc.aio.insecure_channel(
-                grpc_target, options=channel_options
-            ) as channel:
-                stub = sm_grpc.SimulationMessagingStub(channel)
-                logger.info(
-                    f"Worker {worker_id}: Requesting a simulation model archive..."
-                )
-                simulation_model = await request_simulation_model(stub, worker_id)
+    Args:
+        stub: The gRPC stub to use for communication
+        worker_id: Unique identifier for this worker
+    """
+    RETRY_DELAY = 5  # Seconds to wait between retries
 
-                if simulation_model.status == sm.ModelStatus.NO_MODEL_AVAILABLE:
-                    logger.info(
-                        f"Worker {worker_id}: No simulation model available. Retrying in 5 seconds..."
-                    )
-                    await asyncio.sleep(5)  # Non-blocking sleep before retrying
-                    continue
-
-                if simulation_model.status == sm.ModelStatus.ON_SERVER:
-                    logger.info(
-                        f"Worker {worker_id}: Received simulation model archive."
-                    )
-
-                    if not await try_unpacking_model_archive(
-                        simulation_model.package_archive
-                    ):
-                        logger.warning(
-                            f"Worker {worker_id}: Corrupted simulation model archive. Retrying in 5 seconds..."
-                        )
-                        await asyncio.sleep(5)  # Non-blocking sleep before retrying
-
-                    else:
-                        logger.info(
-                            f"Worker {worker_id}: Unpacking simulation model archive successful."
-                        )
-                        has_simulation_model = True
-
-        except grpc.RpcError as e:
-            # Handle gRPC connection errors
-            logger.error(
-                f"Worker {worker_id}: Unable to connect to server due to {e}. Retrying in 5 seconds..."
-            )
-            await asyncio.sleep(5)
-
-
-async def run_simulation_loop(worker_id: str) -> None:
     while True:
         try:
-            server_host = os.environ.get("SERVER_HOST", "localhost")
-            server_port = os.environ.get("SERVER_PORT", "50051")
+            logger.info(f"Worker {worker_id}: Requesting simulation model archive...")
+            simulation_model = await request_simulation_model(stub, worker_id)
 
-            grpc_target = f"{server_host}:{server_port}"
-            async with grpc.aio.insecure_channel(
-                grpc_target, options=channel_options
-            ) as channel:
-                stub = sm_grpc.SimulationMessagingStub(channel)
+            if simulation_model.status == sm.ModelStatus.NO_MODEL_AVAILABLE:
+                logger.info(
+                    f"Worker {worker_id}: No simulation model available. Retrying in {RETRY_DELAY} seconds..."
+                )
+                await asyncio.sleep(RETRY_DELAY)
+                continue
 
-                logger.info(f"Worker {worker_id}: Requesting a job...")
-                simulation_job = await request_simulation_job(stub, worker_id)
+            if simulation_model.status != sm.ModelStatus.ON_SERVER:
+                logger.warning(
+                    f"Worker {worker_id}: Received unexpected model status: {simulation_model.status}. Retrying..."
+                )
+                await asyncio.sleep(RETRY_DELAY)
+                continue
 
-                # Check the job's status and react accordingly
-                if simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
-                    logger.info(
-                        f"Worker {worker_id}: No simulation jobs available. Retrying in 5 seconds..."
-                    )
-                    await asyncio.sleep(5)  # Non-blocking sleep before retrying
-                    continue
-                elif simulation_job.status == sm.JobStatus.ERROR:
-                    logger.error(
-                        f"Worker {worker_id}: Server returned an error for the job request."
-                    )
-                    break
-                elif simulation_job.status == sm.JobStatus.JOBSTATUS_UNSPECIFIED:
-                    logger.info(
-                        f"Worker {worker_id}: Received unspecified status. Ignoring this job."
-                    )
-                    break
+            logger.info(f"Worker {worker_id}: Received simulation model archive.")
 
-                # Process the job if a valid one is received
-                logger.info(f"Worker {worker_id}: Received new job {simulation_job}")
-                await handle_simulation_job(stub, simulation_job)
+            if await try_unpacking_model_archive(simulation_model.package_archive):
+                logger.info(
+                    f"Worker {worker_id}: Unpacking simulation model archive successful."
+                )
+                return  # Successfully retrieved and unpacked model
+            else:
+                logger.warning(
+                    f"Worker {worker_id}: Corrupted simulation model archive. Retrying in {RETRY_DELAY} seconds..."
+                )
+                await asyncio.sleep(RETRY_DELAY)
 
         except grpc.RpcError as e:
-            # Handle gRPC connection errors
             logger.error(
-                f"Worker {worker_id}: Unable to connect to server due to {e}. Retrying in 5 seconds..."
+                f"Worker {worker_id}: Unable to connect to server due to {e}. Retrying in {RETRY_DELAY} seconds..."
             )
-            await asyncio.sleep(5)
+            await asyncio.sleep(RETRY_DELAY)
+        except Exception as e:
+            logger.error(
+                f"Worker {worker_id}: Unexpected error while requesting model: {str(e)}. Retrying in {RETRY_DELAY} seconds..."
+            )
+            await asyncio.sleep(RETRY_DELAY)
+
+
+async def run_simulation_loop(stub, worker_id) -> None:
+    """
+    Main simulation processing loop that continually requests and processes jobs.
+
+    Args:
+        stub: The gRPC stub for server communication
+        worker_id: Unique identifier for this worker
+    """
+    retry_delay = 5  # Fixed delay between retries in seconds
+
+    while True:
+        try:
+            logger.info(f"Worker {worker_id}: Requesting a job...")
+            simulation_job = await request_simulation_job(stub, worker_id)
+
+            # Handle different job statuses
+            if simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
+                logger.info(
+                    f"Worker {worker_id}: No simulation jobs available. Retrying in {retry_delay} seconds..."
+                )
+                await asyncio.sleep(retry_delay)
+                continue
+
+            elif simulation_job.status == sm.JobStatus.ERROR:
+                logger.error(
+                    f"Worker {worker_id}: Server returned an error for the job request. Retrying..."
+                )
+                await asyncio.sleep(retry_delay)
+                continue
+
+            elif simulation_job.status == sm.JobStatus.JOBSTATUS_UNSPECIFIED:
+                logger.warning(
+                    f"Worker {worker_id}: Received unspecified status. Retrying..."
+                )
+                await asyncio.sleep(retry_delay)
+                continue
+
+            # Process the job if a valid one is received
+            logger.info(
+                f"Worker {worker_id}: Processing job {simulation_job.job_id}..."
+            )
+            await handle_simulation_job(stub, simulation_job, worker_id)
+
+        except grpc.RpcError as e:
+            logger.error(
+                f"Worker {worker_id}: gRPC error: {str(e)}. Retrying in {retry_delay} seconds..."
+            )
+            await asyncio.sleep(retry_delay)
+
+        except Exception as e:
+            logger.exception(f"Worker {worker_id}: Unexpected error: {str(e)}")
+            await asyncio.sleep(retry_delay)
+
+
+async def create_channel():
+    """Create and return a gRPC channel to the server."""
+    server_host = os.environ.get("SERVER_HOST", "localhost")
+    server_port = os.environ.get("SERVER_PORT", "50051")
+    grpc_target = f"{server_host}:{server_port}"
+
+    return grpc.aio.insecure_channel(grpc_target, options=channel_options)
 
 
 async def main():
-    worker_id = uuid.uuid4().hex
-    await ask_for_simulation_model(worker_id)
-    await asyncio.gather(run_simulation_loop(worker_id))
+    worker_id = str(uuid.uuid4().hex)[:8]
+
+    # Create a single channel that will be reused for all gRPC requests
+    async with await create_channel() as channel:
+        # Create a stub using the shared channel
+        stub = sm_grpc.SimulationMessagingStub(channel)
+
+        # Use the same stub for both simulation model retrieval and job processing
+        await ask_for_simulation_model(stub, worker_id)
+        await run_simulation_loop(stub, worker_id)
 
 
 if __name__ == "__main__":

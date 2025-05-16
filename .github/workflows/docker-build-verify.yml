@@ -17,8 +17,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up & Build Docker Compose
+      - name: Set up Docker Compose
         uses: docker/setup-compose-action@v1
         with:
           version: latest
+
+      - name: Build Docker Compose
         run: docker-compose -f src/services/simulation_service/core/docker-compose.yml build

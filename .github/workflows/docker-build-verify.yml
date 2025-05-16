@@ -24,3 +24,6 @@ jobs:
 
       - name: Build Docker Compose
         run: docker compose -f src/services/simulation_service/core/docker-compose.yml build
+
+      - name: Run Docker Compose
+        run: docker compose -f src/services/simulation_service/core/docker-compose.yml up -d --scale worker=2

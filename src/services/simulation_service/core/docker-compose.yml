@@ -2,8 +2,8 @@ services:
   server:
     image: simulation_server:latest
     build:
-      context: .
-      dockerfile: infrastructure/server/Dockerfile.server
+      context: ../../../../
+      dockerfile: src/services/simulation_service/core/infrastructure/server/Dockerfile.server
       args:
         _SERVER_PORT: 50051
     container_name: simulation_server
@@ -23,8 +23,8 @@ services:
   worker:
     image: simulation_worker:latest
     build:
-      context: .
-      dockerfile: infrastructure/worker/Dockerfile.worker
+      context: ../../../../
+      dockerfile: src/services/simulation_service/core/infrastructure/worker/Dockerfile.worker
       args:
         _SERVER_PORT: 50051
         _SERVER_HOST: simulation_server

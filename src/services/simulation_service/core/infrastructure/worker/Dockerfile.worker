@@ -1,8 +1,9 @@
 FROM python:3.10.12-slim AS builder
 
 WORKDIR /app
-COPY infrastructure/worker/open_darts_whl/ /app/
-COPY infrastructure/worker/worker_requirements.txt .
+
+COPY src/services/simulation_service/core/infrastructure/worker/open_darts_whl/ /app/
+COPY src/services/simulation_service/core/infrastructure/worker/worker_requirements.txt .
 RUN pip install --no-cache-dir uv &&\
     uv pip install --no-cache-dir  -r worker_requirements.txt --target /install
 
@@ -16,12 +17,15 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY --from=builder /install /usr/local/lib/python3.10/site-packages
-COPY infrastructure/worker/src/ /app/
-COPY infrastructure/generated/ /app/generated/
-COPY connectors/ /app/connectors/
-COPY utils/ /app/utils/
+COPY src/services/simulation_service/core/infrastructure/worker/src/ /app/
+COPY src/services/simulation_service/core/infrastructure/generated/ /app/generated/
+COPY src/services/simulation_service/core/connectors/ /app/connectors/
+COPY src/services/simulation_service/core/utils/ /app/utils/
 
-ENV PYTHONPATH=/app/generated
+COPY src/logger /app/logger
+
+ENV PYTHONPATH=/app:/app/generated
+ENV URGENT_LOGGER_PROFILE=worker
 
 ARG _SERVER_PORT
 ARG _SERVER_HOST

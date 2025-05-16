@@ -4,11 +4,17 @@ on:
   push:
     branches:
       - main
-      - docker-workflow
   pull_request:
     branches:
       - main
 
-runs:
-  using: 'docker'
-  image: 'src/services/simulation_service/core/infrastructure/server/Dockerfile.server'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build Docker Compose
+        run: docker-compose -f src/services/simulation_service/core/docker-compose.yml build

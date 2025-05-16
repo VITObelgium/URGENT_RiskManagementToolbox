@@ -23,4 +23,4 @@ jobs:
           version: latest
 
       - name: Build Docker Compose
-        run: docker-compose -f src/services/simulation_service/core/docker-compose.yml build
+        run: docker compose -f src/services/simulation_service/core/docker-compose.yml build

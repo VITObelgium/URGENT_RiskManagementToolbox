@@ -51,6 +51,7 @@ class SimulationClusterManager:
                     text=True,
                 )
                 logger.debug("Docker build output:\n%s", result.stdout)
+                logger.info("Simulation cluster images successfully built.")
             except subprocess.CalledProcessError as e:
                 logger.error("Error building simulation cluster images:\n%s", e.stderr)
                 raise
@@ -60,7 +61,7 @@ class SimulationClusterManager:
         # Clean up dangling images before starting cluster.
         # Note: dangling images are images with both <none> as their repository and tag
         try:
-            logger.info("Pruning dangling Docker images...")
+            logger.info("On meantime: Pruning dangling Docker images...")
             process = subprocess.Popen(
                 ["docker", "image", "prune", "-f"],
                 stdout=subprocess.PIPE,
@@ -78,6 +79,7 @@ class SimulationClusterManager:
         """
         Start the Docker-based simulation cluster with the specified worker count.
         """
+        logger.info(f"Starting the simulation cluster with {worker_count} workers...")
 
         with core_directory():
             try:
@@ -139,7 +141,6 @@ def simulation_cluster_context_manager(worker_count: int = 3):
     logger.info("Entering simulation cluster context.")
     SimulationClusterManager.build_simulation_cluster_images()
     SimulationClusterManager.prune_dangling_images()
-    logger.info("Using %s workers for simulation cluster.", worker_count)
     SimulationClusterManager.start_simulation_cluster(worker_count)
     try:
         yield

@@ -40,6 +40,8 @@ class _JobStatusEnumTypeWrapper(
     "When no job is available for a worker."
     ERROR: _JobStatus.ValueType
     "Represents an internal server error or failure."
+    TIMEOUT: _JobStatus.ValueType
+    "Job has timeout"
 
 class JobStatus(_JobStatus, metaclass=_JobStatusEnumTypeWrapper): ...
 
@@ -55,6 +57,8 @@ NO_JOB_AVAILABLE: JobStatus.ValueType
 "When no job is available for a worker."
 ERROR: JobStatus.ValueType
 "Represents an internal server error or failure."
+TIMEOUT: JobStatus.ValueType
+"Job has timeout"
 global___JobStatus = JobStatus
 
 class _Simulator:

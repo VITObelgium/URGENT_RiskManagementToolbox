@@ -132,11 +132,13 @@ class SimulationService:
             SimulationService._SERVER_HOST,
             SimulationService._SERVER_PORT,
         ) as stub:
-            logger.info("Sending simulation cases to the cluster...")
             simulations_inputs = [SimulationService._to_grpc(case) for case in cases]
             simulations_request = sm.Simulations(simulations=simulations_inputs)
 
             try:
+                logger.info(
+                    "Performing simulations on the cluster (that may take a while, check server and workers logs for progress)..."
+                )
                 cluster_response = stub.PerformSimulations(simulations_request)
                 logger.info("Simulations completed on the cluster.")
             except grpc.RpcError as e:

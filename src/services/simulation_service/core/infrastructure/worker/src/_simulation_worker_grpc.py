@@ -7,7 +7,7 @@ from zipfile import BadZipFile, ZipFile
 import generated.simulation_messaging_pb2 as sm
 import generated.simulation_messaging_pb2_grpc as sm_grpc
 import grpc.aio
-from connectors.common import SimulationResults
+from connectors.common import SimulationResults, SimulationStatus
 from connectors.factory import ConnectorFactory
 from utils.converters import json_to_str
 
@@ -23,7 +23,7 @@ channel_options = [
 ]
 
 
-def _run_simulator(simulation_job) -> SimulationResults:
+def _run_simulator(simulation_job) -> [SimulationStatus, SimulationResults]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
     return connector.run(simulation_job.simulation.input.wells)
 
@@ -59,35 +59,34 @@ async def handle_simulation_job(stub, simulation_job, worker_id):
     Returns:
         None
     """
+    job_id = simulation_job.job_id
 
-    try:
-        logger.info(
-            f"Worker {worker_id}: Starting simulation {simulation_job.job_id}..."
-        )
-        logger.debug(f"Worker {worker_id}: Simulation job: {simulation_job}")
+    logger.info(f"Worker {worker_id}: Starting simulation {job_id}...")
+    logger.debug(f"Worker {worker_id}: Simulation job: {simulation_job}")
 
-        simulation_result = await asyncio.to_thread(_run_simulator, simulation_job)
+    simulation_status, simulation_result = await asyncio.to_thread(
+        _run_simulator, simulation_job
+    )
+
+    if simulation_status == SimulationStatus.SUCCESS:
         status = sm.JobStatus.SUCCESS
-        logger.info(
-            f"Worker {worker_id}: Simulation {simulation_job.job_id} completed successfully"
-        )
+        logger.info(f"Worker {worker_id}: Simulation {job_id} completed successfully")
+    elif simulation_status == SimulationStatus.TIMEOUT:
+        status = sm.JobStatus.TIMEOUT
+        logger.warning(f"Worker {worker_id}: Simulation {job_id} timed out")
+    elif simulation_status == SimulationStatus.FAILED:
+        status = sm.JobStatus.ERROR
+        logger.error(f"Worker {worker_id}: Simulation {job_id} failed")
+    else:
+        status = sm.JobStatus.ERROR
+        logger.error(f"Worker {worker_id}: Simulation {job_id} failed")
 
-    except Exception as e:
-        logger.error(f"Simulation failed due to: {e}")
-        raise e
-
-    try:
-        response = await submit_simulation_job(
-            stub, simulation_job, simulation_result, status
-        )
-        logger.debug(
-            f"Worker {worker_id}: Job {simulation_job.job_id} result submitted. Server response: {response.message}"
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to submit results for job {simulation_job.job_id}: {e}",
-            exc_info=True,
-        )
+    response = await submit_simulation_job(
+        stub, simulation_job, simulation_result, status
+    )
+    logger.debug(
+        f"Worker {worker_id}: Job {job_id} result submitted. Server response: {response.message}"
+    )
 
 
 async def try_unpacking_model_archive(package_archive) -> bool:

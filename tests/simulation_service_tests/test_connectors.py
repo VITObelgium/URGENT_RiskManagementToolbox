@@ -7,6 +7,7 @@ import pytest
 
 from services.simulation_service.core.connectors.common import (
     GridCell,
+    SimulationStatus,
     WellManagementServiceResultSchema,
     WellName,
 )
@@ -144,9 +145,10 @@ def test_run_success(mock_subprocess_run: Mock) -> None:
     )
     mock_subprocess_run.return_value = mock_process
 
-    results = OpenDartsConnector.run("test_config")
+    simulation_status, results = OpenDartsConnector.run("test_config")
 
     assert results == {"heat": [2312.12, [1.23, 4.56, 7.89]]}
+    assert simulation_status == SimulationStatus.SUCCESS
 
 
 def test_run_success_with_single_broadcasted_value(mock_subprocess_run: Mock) -> None:
@@ -162,9 +164,10 @@ def test_run_success_with_single_broadcasted_value(mock_subprocess_run: Mock) ->
     )
     mock_subprocess_run.return_value = mock_process
 
-    results = OpenDartsConnector.run("test_config")
+    simulation_status, results = OpenDartsConnector.run("test_config")
 
     assert results == {"heat": 2312.12}
+    assert simulation_status == SimulationStatus.SUCCESS
 
 
 def test_run_failure(mock_subprocess_run: Mock) -> None:
@@ -172,9 +175,8 @@ def test_run_failure(mock_subprocess_run: Mock) -> None:
     mock_process.returncode = 1
     mock_process.stdout = ""
     mock_subprocess_run.return_value = mock_process
-
-    with pytest.raises(RuntimeError):
-        _ = OpenDartsConnector.run("test_config")
+    simulation_status, results = OpenDartsConnector.run("test_config")
+    assert simulation_status == SimulationStatus.FAILED
 
 
 @open_darts_input_configuration_injector

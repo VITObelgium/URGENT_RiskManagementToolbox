@@ -10,6 +10,7 @@ from typing import Sequence, TypeAlias, TypedDict
 WellName: TypeAlias = str
 GridCell: TypeAlias = tuple[int, int, int]
 Point: TypeAlias = tuple[float, float, float]
+SerializedJson: TypeAlias = str
 
 
 class PerforationSchema(TypedDict):
@@ -60,10 +61,14 @@ SimulationResults: TypeAlias = dict[
     SimulationResultType, float | Sequence[float] | Sequence[Sequence[float] | float]
 ]
 
-SerializedJson: TypeAlias = str
+
+class SimulationStatus(Enum):
+    SUCCESS = 0
+    FAILED = 1
+    TIMEOUT = 2
 
 
 class ConnectorInterface(ABC):
     @staticmethod
     @abstractmethod
-    def run(config: SerializedJson) -> SimulationResults: ...
+    def run(config: SerializedJson) -> tuple[SimulationStatus, SimulationResults]: ...

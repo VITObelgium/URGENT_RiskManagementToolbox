@@ -22,6 +22,7 @@ from .common import (
     SerializedJson,
     SimulationResults,
     SimulationResultType,
+    SimulationStatus,
     WellManagementServiceResultSchema,
     WellName,
     extract_well_with_perforations_points,
@@ -115,7 +116,7 @@ class OpenDartsConnector(ConnectorInterface):
     @staticmethod
     def run(
         config: SerializedJson,
-    ) -> SimulationResults:
+    ) -> tuple[SimulationStatus, SimulationResults]:
         """
         Start reservoir simulator with given config and model in main.py
         Simulation is starting in separate process, output is capturing from the stdout
@@ -128,26 +129,33 @@ class OpenDartsConnector(ConnectorInterface):
 
         """
 
-        # TODO: do proper implementation of TIMEOUT for simulation
+        default_failed_value: float = float(
+            -1e3
+        )  # for maximization problem it should be big negative number
+        default_failed_results: SimulationResults = {
+            k: default_failed_value for k in SimulationResultType
+        }
+
         try:
             process = subprocess.run(
                 ["python3", "main.py", config],
                 capture_output=True,
-                text=True,  # main.py must be present on worker side
+                text=True,
                 timeout=15 * 60,
             )
             if process.returncode != 0:
-                raise RuntimeError(f"Error: {process.stderr}")
+                return SimulationStatus.FAILED, default_failed_results
 
             process_stdout = process.stdout
             broadcast_results = OpenDartsConnector._get_broadcast_results(
                 process_stdout
             )
+            return SimulationStatus.SUCCESS, broadcast_results
 
         except subprocess.TimeoutExpired:
-            broadcast_results = {k: float(-1e3) for k in SimulationResultType}
-
-        return broadcast_results
+            return SimulationStatus.TIMEOUT, default_failed_results
+        except Exception:
+            return SimulationStatus.FAILED, default_failed_results
 
     @staticmethod
     def _get_broadcast_results(

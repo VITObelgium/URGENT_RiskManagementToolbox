@@ -201,6 +201,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         if simulation_job.status not in [
             sm.JobStatus.SUCCESS,
             sm.JobStatus.FAILED,
+            sm.JobStatus.TIMEOUT,
         ]:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(

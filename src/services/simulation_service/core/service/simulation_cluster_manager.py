@@ -61,7 +61,7 @@ class SimulationClusterManager:
         # Clean up dangling images before starting cluster.
         # Note: dangling images are images with both <none> as their repository and tag
         try:
-            logger.info("On meantime: Pruning dangling Docker images...")
+            logger.info("In the meantime: Pruning dangling Docker images...")
             process = subprocess.Popen(
                 ["docker", "image", "prune", "-f"],
                 stdout=subprocess.PIPE,

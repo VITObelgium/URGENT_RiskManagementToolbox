@@ -27,16 +27,22 @@ def cli():
         help="Path to the simulation model archive file.",
     )
     parser.add_argument(
-        "--n-size",
+        "--population-size",
         type=int,
         default=10,
-        help="Number of samples for the dispatcher. Default is 10.",
+        help="Population size. Default is 10",
     )
     parser.add_argument(
         "--patience",
         type=int,
         default=10,
         help="Iterations limit without better result. Default is 10.",
+    )
+    parser.add_argument(
+        "--max-generations",
+        type=int,
+        default=10,
+        help="Maximum number of generations. Default is 10.",
     )
 
     # Parse the arguments
@@ -53,7 +59,7 @@ def cli():
             problem_definition = json.load(file)
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
-        raise
+        exit(1)
 
     # Invoke run_risk_management with the required arguments
     try:
@@ -62,8 +68,9 @@ def cli():
             simulation_model_archive=args.model_file,
             n_size=args.n_size,
             patience=args.patience,
+            max_generations=args.max_generations,
         )
         logger.info("Risk management process completed successfully.")
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        raise
+        exit(1)

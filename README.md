@@ -37,21 +37,13 @@ This Python-based toolbox is designed to optimize geothermal reservoir developme
 
 ---
 
-## Getting Started
+## Setup
 
-### 1. Setup Prerequisites
-
-To install basic dependencies (`git`, `curl`) essential for setup, run:
-
-```shell
-make prerequisites
-```
-
----
-
-### 2. Environment Installation
+### 1. Environment Installation
 
 You can install either a **development environment** (recommended for developers) or a streamlined **release environment**.
+
+> **Note:** Currently, Windows OS is not supported for this setup.
 
 #### Development Environment:
 
@@ -68,8 +60,6 @@ This command will specifically:
 - Install Docker, verifying its functionality.
 - Install all Python development dependencies and pre-commit hooks.
 
-> **Note:** Currently, Windows OS is not supported for this setup.
-
 #### Release Environment:
 
 Installs only the dependencies necessary to run the application in a production setting. Run:
@@ -78,9 +68,15 @@ Installs only the dependencies necessary to run the application in a production 
 make install-release
 ```
 
+This command will specifically:
+
+- Install Python 3.12 and set up a virtual environment using `uv`.
+- Install Docker, verifying its functionality.
+- Install all Python development dependencies and pre-commit hooks.
+
 ---
 
-### 3. Documentation Editing
+### 2. Documentation Editing
 
 To edit the project documentation using TeXstudio, execute:
 
@@ -96,80 +92,282 @@ make install-latex
 
 ---
 
-### 4. Repository Health Checks
+### 3. Repository Health Checks
 
-Maintain codebase quality by executing pre-commit hooks:
-
-```shell
-make run-check
-```
-
----
-
-### 5. Docker Installation and Verification
-
-Docker is necessary for building and containerizing deployments. Install it using:
-
-```shell
-make install-docker
-```
-
-After installation, verify Docker functionality with:
-
-```shell
-make verify-docker
-```
-
----
-
-### Manual Virtual Environment Handling
-
-The `make install-dev` or `make install-release` targets will set up the Python virtual environment using `uv` and install git hooks.
-
-If you need to run commands within this environment manually (e.g., a Python script or `pytest`), you can use `uv run`:
-
-```shell
-uv run python your_script.py
-uv run pytest
-```
-
-To activate a shell session within the virtual environment, you can use:
-
-```shell
-uv shell
-```
-
-Additionally, if you need to manually install git hooks (e.g., if you skipped the `make install-*` targets initially or cloned to a new location without running them):
-
-```shell
-uv run pre-commit install
-```
-
----
-
-## Build and Test
-
-### Running Tests
-
-Use `pytest` to run the project's test suite. The `make install-dev` target installs `pytest`. You can run tests using:
+Maintain codebase quality by executing pre-commit hooks, which will run set of the tools including pytest and coverage:
 
 ```shell
 make run-check
 ```
-This will also run tests as part of the pre-commit hooks. To run tests directly:
-```shell
-uv run pytest
-```
-Or, if you have activated the environment using `uv shell`:
-```shell
-pytest
-```
-
 ---
 
-## Notes
+## Getting started
 
-- Familiarity with Unix commands and the `make` utility is assumed.
-- If you encounter issues during installation or operational errors, verify system compatibility and reread the instructions carefully.
+### 1. Supported Reservoir Simulators:
+- OpenDarts (1.1.3) [open_darts-1.1.3-cp310-cp310-linux_x86_64] (default)
 
----
+### 2. Reservoir simulation interoperability
+Interoperability between reservoir simulator and toolbox is established by the proper `Connector` [src/services/simulation_service/core/connectors].
+Connector allows exchange information (simulation configuration and simulation results) between toolbox and simulator.
+
+
+#### OpenDarts Connector
+1. Reservoir simulation must be run from the **main.py** file (user must preserve the file name)
+2. User should add the following dependencies in entry point for a simulation model:
+
+   `from connectors.open_darts import OpenDartsConnector`
+
+   `from connectors.open_darts import open_darts_input_configuration_injector`
+
+   > **Note:** The `connectors` package will be automatically transfer from Toolbox to simulation model folder, no action
+   > needed from User
+
+3. Entry point for reservoir simulation must be decorated by `open_darts_input_configuration_injector`
+
+   ``` python
+   @open_darts_input_configuration_injector
+   def run_darts(injected_configuration) -> None:
+       ...
+   ```
+
+   The `injected_configuration` contain the control vector for optimization proces. It's strongly recommended to pass
+   `injected_configuration` to model initialization:
+
+   ```python
+   @open_darts_input_configuration_injector
+   def run_darts(injected_configuration, ...) -> None:
+       m = Model(configuration=injected_configuration)
+   ```
+   and then
+
+   ```python
+
+   class Model(DartsModel):
+       def __init__(self, configuration, ...):
+
+           self._configuration = configuration
+           super().__init__()
+           ...
+
+   ```
+
+   This allows having access to injected configuration in a whole DartsModel object.
+
+4. Well(s) connections will be taken from `configuration` using `OpenDartsConnector.get_well_connection_cells(...)`, thus user must import
+`from connectors.open_darts import OpenDartsConnector`. Wells should be introduced in a simulation model in `def set_wells(self)` section:
+
+   ```python
+       def set_wells(self):
+
+           wells = OpenDartsConnector.get_well_connection_cells(
+               self._configuration, self.reservoir
+           )
+
+           for well_name, cells in wells.items():
+               self.reservoir.add_well(well_name)
+               for cell in cells:
+                   i, j, k = cell
+                   self.reservoir.add_perforation(
+                       well_name, cell_index=(i, j, k), multi_segment=False
+                   )
+
+   ```
+
+5. Whenever user want to return objective function to toolbox, the `broadcast_result` method from `OpenDartsConnector` should be used:
+
+   ```python
+   from connectors.common import SimulationResultType
+   from connectors.open_darts import OpenDartsConnector
+   ...
+
+   OpenDartsConnector.broadcast_result(SimulationResultType.Heat, HeatValue)
+   ```
+
+   Then the heat value will be broadcasted back to toolbox with a proper flag from `SimulationResultType`.
+
+   > **Note:** Recently only "Heat" is supported in `SimulationResultType`
+
+6. Simulation model implementation is read to run an optimization process using RiskManagementToolbox.
+7. All simulation model files must be archived in `.zip` format. User should ensure that after unpacking all simulation model files are accessible in folder without any additional subfolders.
+
+### 3. Toolbox configuration file
+RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s),
+initial state, and variable constrains.
+
+Recently the following optimization problem(s) are supported:
+
+1. **Well placement** - toolbox will try to find the optimal configuration of well(s): trajectory and perforation.
+
+   Well placement problem definition if following by individual well(s) used in simulation.
+
+   ```json
+   {
+      "well_placement": [
+         {
+            "well_name": str,
+            "initial_state": {
+
+            },
+            "optimization_constrains": {
+
+            }
+         },
+      ]
+   }
+   ```
+
+   The initial state of the well defines the proper well type and all the mandatory well parameters neccessery to build well trajectory and define the completion intervals
+   > **Note:** Recently only vertical well type `"well_type": "IWell"` is supported
+
+   The example vertical well configuration:
+
+   ```json
+   {
+     "initial_state": {
+       "well_type": "IWell",
+       "md": 2500,
+       "md_step": 10,
+       "wellhead": {
+         "x": 400,
+         "y": 400,
+         "z": 0
+       }
+     }
+   }
+   ```
+   > **Note:** If a user does not define a perforation interval, then by default the whole well md will be treated as perforated
+
+   If the user wants to define the perforation interval:
+
+   ```json
+   {
+     "initial_state": {
+       "well_type": "IWell",
+       "md": 2500,
+       "md_step": 10,
+       "wellhead": {
+         "x": 400,
+         "y": 400,
+         "z": 0
+       },
+        "perforations": [
+           {
+            "start_md": 1000,
+              "end_md": 1200
+           }
+        ]
+     }
+   }
+   ```
+   > **Note:** Recently only one perforation range is supported
+
+   Each well initial state is followed by the optimization constrains part, where user can pick which parameters from
+   well template will be used in an optimization process:
+
+   As an example, if a user decides to optimize the x and y position of wellhead as well as well md, the optimization constrains will take the following form:
+   ```json
+   {
+         "optimization_constrains": {
+           "wellhead": {
+             "x": {
+               "lb": 10,
+               "ub": 3190
+             },
+             "y": {
+               "lb": 10,
+               "ub": 3190
+             }
+           },
+            "md": {
+               "lb": 2000,
+               "ub": 2700
+            }
+         }
+   }
+   ```
+
+   where each parameter is bounded in lower (lb) and upper (ub) limit.
+
+   > **Note:** Parameters which are not listed in optimization constraints will not take part of an optimization process and remains the same as defined in the initial state
+
+   The complete example of well placement problem for two wells:
+   ```json
+   {
+     "well_placement": [
+       {
+         "well_name": "INJ",
+         "initial_state": {
+           "well_type": "IWell",
+           "md": 2500,
+           "md_step": 10,
+           "wellhead": {
+             "x": 400,
+             "y": 400,
+             "z": 0
+           }
+         },
+         "optimization_constrains": {
+           "wellhead": {
+             "x": {
+               "lb": 10,
+               "ub": 3190
+             },
+             "y": {
+               "lb": 10,
+               "ub": 3190
+             }
+           }
+         }
+       },
+       {
+         "well_name": "PRO",
+         "initial_state": {
+           "well_type": "IWell",
+           "md": 2500,
+           "md_step": 10,
+           "wellhead": {
+             "x": 700,
+             "y": 700,
+             "z": 0
+           }
+         },
+         "optimization_constrains": {
+           "wellhead": {
+             "x": {
+               "lb": 10,
+               "ub": 3190
+             },
+             "y": {
+               "lb": 10,
+               "ub": 3190
+             }
+           }
+         }
+       }
+     ]
+   }
+   ```
+
+### 4. Toolbox running
+
+To run the RiskManagementToolbox the virtual environment corresponded with the repository must be
+activated
+
+```URGENT_RiskManagementToolbox$ source .venv/bin/activate```
+
+User must set:
+ 1. path to config file (--config-file)
+ 2. path to model archive(--model-file)
+
+optionally:
+1. population size (--population-size)
+2. iteration count without progress (--patience)
+3. max generations count (-max-generations)
+
+```
+uv run src/main.py
+usage: main.py [-h] --config-file CONFIG_FILE --model-file MODEL_FILE [--population-size POPULATION_SIZE] [--patience PATIENCE] [--max-generations MAX_GENERATIONS]
+```
+
+## Contact
+For issues or contributions, please open a GitHub issue or contact the maintainers.

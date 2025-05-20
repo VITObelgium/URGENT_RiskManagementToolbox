@@ -66,7 +66,7 @@ def cli():
         run_risk_management(
             problem_definition=problem_definition,
             simulation_model_archive=args.model_file,
-            n_size=args.n_size,
+            n_size=args.population_size,
             patience=args.patience,
             max_generations=args.max_generations,
         )

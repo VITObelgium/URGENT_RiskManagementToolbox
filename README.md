@@ -3,9 +3,14 @@
   <img src="https://github.com/user-attachments/assets/d25f9fd7-7610-4725-9a8e-bead501ce568" width="250">
 </p>
 
-![In Development](https://img.shields.io/badge/status-In%20Development-yellow?style=for-the-badge)
-
-![Python](https://img.shields.io/badge/Python-3.12-blue)  ![License](https://img.shields.io/badge/License-MIT-green)
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/Version-0.1.0-orange">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
+  <img alt="Code Quality" src="https://img.shields.io/badge/Code%20Quality-80%25%2B-yellow">
+  <img alt="OS" src="https://img.shields.io/badge/OS-Ubuntu%2022.04-blueviolet">
+  <img alt="Status" src="https://img.shields.io/badge/Status-Development-pink">
+</p>
 
 # URGENT Risk Management Toolbox
 

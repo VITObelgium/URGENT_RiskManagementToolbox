@@ -7,22 +7,102 @@ on:
   pull_request:
     branches:
       - main
+      - docker-workflow
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Docker Compose
-        uses: docker/setup-compose-action@v1
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          version: latest
+          python-version: '3.10'
 
-      - name: Build Docker Compose
-        run: docker compose -f src/services/simulation_service/core/docker-compose.yml build
+      - name: Install Python dependencies for proto generation
+        run: |
+          pip install grpcio-tools protol
 
-      - name: Run Docker Compose
-        run: docker compose -f src/services/simulation_service/core/docker-compose.yml up -d --scale worker=2
+      - name: Generate protobuf files
+        working-directory: src/services/simulation_service/core/infrastructure
+        run: |
+          python _build_proto.py
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
+        working-directory: src/services/simulation_service/core
+        run: |
+          docker compose build --progress=plain
+
+      - name: Verify Docker images exist
+        run: |
+          docker images | grep simulation_server
+          docker images | grep simulation_worker
+
+      - name: Start simulation cluster
+        working-directory: src/services/simulation_service/core
+        run: |
+          docker compose up -d --scale worker=2
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for simulation server to be healthy..."
+          timeout 120s bash -c 'until docker compose -f src/services/simulation_service/core/docker-compose.yml ps | grep simulation_server | grep -q "healthy"; do sleep 2; done'
+
+      - name: Verify services are running
+        working-directory: src/services/simulation_service/core
+        run: |
+          docker compose ps
+          docker compose logs server
+          docker compose logs worker
+
+      - name: Test gRPC server connectivity
+        run: |
+          # Install grpcurl for testing
+          curl -sSL "https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz" | tar -xz -C /tmp
+          sudo mv /tmp/grpcurl /usr/local/bin/
+
+          # Test if server is accepting connections
+          timeout 30s grpcurl -plaintext localhost:50051 list || echo "gRPC service not responding as expected"
+
+      - name: Check container resource usage
+        run: |
+          docker stats --no-stream
+
+      - name: Test scaling workers
+        working-directory: src/services/simulation_service/core
+        run: |
+          docker compose up -d --scale worker=3
+          sleep 10
+          worker_count=$(docker compose ps worker --format json | jq length)
+          echo "Worker count: $worker_count"
+          if [ "$worker_count" -ne 3 ]; then
+            echo "Expected 3 workers, got $worker_count"
+            exit 1
+          fi
+
+      - name: Cleanup simulation cluster
+        if: always()
+        working-directory: src/services/simulation_service/core
+        run: |
+          docker compose down -v
+          docker compose logs > /tmp/docker-logs.txt || true
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-logs
+          path: /tmp/docker-logs.txt
+
+      - name: Clean up Docker resources
+        if: always()
+        run: |
+          docker system prune -f

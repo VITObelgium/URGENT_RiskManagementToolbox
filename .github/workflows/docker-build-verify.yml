@@ -24,15 +24,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Python dependencies for proto generation
-        run: |
-          pip install grpcio-tools protol
-
-      - name: Generate protobuf files
-        working-directory: src/services/simulation_service/core/infrastructure
-        run: |
-          python _build_proto.py
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

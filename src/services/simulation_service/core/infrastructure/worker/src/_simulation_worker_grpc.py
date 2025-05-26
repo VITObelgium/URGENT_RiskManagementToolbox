@@ -75,11 +75,13 @@ async def handle_simulation_job(stub, simulation_job, worker_id):
         status = sm.JobStatus.TIMEOUT
         logger.warning(f"Worker {worker_id}: Simulation {job_id} timed out")
     elif simulation_status == SimulationStatus.FAILED:
-        status = sm.JobStatus.ERROR
+        status = sm.JobStatus.FAILED
         logger.error(f"Worker {worker_id}: Simulation {job_id} failed")
     else:
         status = sm.JobStatus.ERROR
-        logger.error(f"Worker {worker_id}: Simulation {job_id} failed")
+        logger.error(
+            f"Worker {worker_id}: Simulation {job_id} encountered an unknown status: {simulation_status}"
+        )
 
     response = await submit_simulation_job(
         stub, simulation_job, simulation_result, status

@@ -152,7 +152,7 @@ class OpenDartsConnector(ConnectorInterface):
 
         try:
             with manager as process:
-                timeout_duration = 30
+                timeout_duration = 15 * 60
                 try:
                     process.wait(timeout=timeout_duration)
                 except subprocess.TimeoutExpired:

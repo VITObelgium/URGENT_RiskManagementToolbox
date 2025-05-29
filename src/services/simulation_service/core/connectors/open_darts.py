@@ -15,6 +15,8 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial import KDTree
 
+from logger import get_logger, stream_reader
+
 from .common import (
     ConnectorInterface,
     GridCell,
@@ -27,6 +29,9 @@ from .common import (
     WellName,
     extract_well_with_perforations_points,
 )  # the relative import, because connectors will be copied to worker, this will prevent import error
+from .conn_utils.managed_subprocess import ManagedSubprocess
+
+logger = get_logger(__name__)
 
 
 class _StructDiscretizerProtocol(Protocol):
@@ -136,25 +141,61 @@ class OpenDartsConnector(ConnectorInterface):
             k: default_failed_value for k in SimulationResultType
         }
 
+        command = ["python3", "-u", "main.py", config]
+
+        manager = ManagedSubprocess(
+            command_args=command,
+            stream_reader_func=stream_reader,
+            logger_info_func=logger.info,
+            logger_error_func=logger.error,
+        )
+
         try:
-            process = subprocess.run(
-                ["python3", "main.py", config],
-                capture_output=True,
-                text=True,
-                timeout=15 * 60,
-            )
-            if process.returncode != 0:
-                return SimulationStatus.FAILED, default_failed_results
+            with manager as process:
+                timeout_duration = 15 * 60
+                try:
+                    process.wait(timeout=timeout_duration)
+                except subprocess.TimeoutExpired:
+                    logger.warning(
+                        f"Subprocess timed out after {timeout_duration} seconds. Terminating."
+                    )
+                    if process.poll() is None:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            logger.warning(
+                                "Subprocess did not terminate gracefully. Killing."
+                            )
+                            process.kill()
+                            process.wait()
+                    if manager.stdout_thread and manager.stdout_thread.is_alive():
+                        manager.stdout_thread.join(timeout=2)
+                    if manager.stderr_thread and manager.stderr_thread.is_alive():
+                        manager.stderr_thread.join(timeout=2)
+                    return SimulationStatus.TIMEOUT, default_failed_results
 
-            process_stdout = process.stdout
-            broadcast_results = OpenDartsConnector._get_broadcast_results(
-                process_stdout
-            )
-            return SimulationStatus.SUCCESS, broadcast_results
+                if process.returncode != 0:
+                    logger.error(
+                        f"Subprocess failed with return code {process.returncode}."
+                    )
+                    return SimulationStatus.FAILED, default_failed_results
 
-        except subprocess.TimeoutExpired:
-            return SimulationStatus.TIMEOUT, default_failed_results
-        except Exception:
+                full_stdout = "\n".join(manager.stdout_lines)
+                broadcast_results = OpenDartsConnector._get_broadcast_results(
+                    full_stdout
+                )
+                return SimulationStatus.SUCCESS, broadcast_results
+
+        except FileNotFoundError:
+            logger.exception(
+                f"Failed to start subprocess. Command '{' '.join(command)}' not found."
+            )
+            return SimulationStatus.FAILED, default_failed_results
+        except Exception as e:
+            logger.exception(
+                f"An error occurred while running the simulation subprocess: {e}"
+            )
             return SimulationStatus.FAILED, default_failed_results
 
     @staticmethod

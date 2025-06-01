@@ -1,5 +1,7 @@
 import os
-from typing import Any, Dict
+import subprocess
+from logging import Logger
+from typing import Any, Dict, List
 
 
 def get_logger_profile() -> str:
@@ -87,3 +89,43 @@ def get_external_console_logging() -> bool:
         The value of external_docker_log_console.
     """
     return bool(get_logging_output()["external_docker_log_console"])
+
+
+def get_services(logger: Logger) -> List[str]:
+    """Return a list of all docker compose service names, including numbered workers."""
+    try:
+        compose_services = subprocess.check_output(
+            ["docker", "ps", "--format", "'{{.Names}}'"], text=True
+        ).splitlines()
+        return [service.strip("'") for service in compose_services if service.strip()]
+    except Exception as e:
+        raise RuntimeError(
+            "Failed to get Docker services. Ensure Docker is running and you have access to it."
+        ) from e
+
+
+def get_services_id() -> List[str]:
+    try:
+        container_ids = subprocess.check_output(
+            ["docker", "ps", "-q"], text=True
+        ).splitlines()
+
+        services = set()
+        for cid in container_ids:
+            inspect_output = subprocess.check_output(
+                [
+                    "docker",
+                    "inspect",
+                    "--format",
+                    '{{ index .Config.Labels "com.docker.compose.service" }}',
+                    cid,
+                ],
+                text=True,
+            ).strip()
+            if inspect_output and inspect_output != "<no value>":
+                services.add(inspect_output)
+        return list(services)
+    except Exception as e:
+        raise RuntimeError(
+            "Failed to get Docker services. Ensure Docker is running and you have access to it."
+        ) from e

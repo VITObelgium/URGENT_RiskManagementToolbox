@@ -1,4 +1,7 @@
+import io
+import subprocess
 import sys
+from subprocess import Popen as OriginalPopen
 from typing import Any, Generator
 from unittest.mock import MagicMock, Mock, patch
 
@@ -131,52 +134,119 @@ def mock_subprocess_run() -> Generator[Mock, None, None]:
         yield mock_run
 
 
-def test_run_success(mock_subprocess_run: Mock) -> None:
-    mock_process = MagicMock()
-    mock_process.returncode = 0
-    mock_process.stdout = (
+@pytest.fixture
+def mock_popen() -> Generator[Mock, None, None]:
+    # Patch Popen in the module where ManagedSubprocess uses it
+    with patch(
+        "services.simulation_service.core.connectors.conn_utils.managed_subprocess.subprocess.Popen"
+    ) as mock_popen_constructor:
+        mock_popen_instance = MagicMock(
+            spec=OriginalPopen
+        )  # Use OriginalPopen for spec
+        mock_popen_instance.pid = 12345  # Dummy PID
+
+        # These will be configured per test
+        mock_popen_instance.stdout = io.StringIO("")
+        mock_popen_instance.stderr = io.StringIO("")
+
+        def _mock_wait(timeout: Any = None) -> int | None:
+            # Simulate process completion. The actual returncode should be set
+            # on mock_popen_instance by the test setup.
+            # Popen.wait() returns the exit status.
+            return getattr(mock_popen_instance, "returncode", None)
+
+        mock_popen_instance.wait = MagicMock(side_effect=_mock_wait)
+
+        def _mock_poll() -> int | None:
+            # Return the returncode if wait() has "completed" and set it
+            # or if the process has terminated and set its returncode.
+            return getattr(mock_popen_instance, "returncode", None)
+
+        mock_popen_instance.poll = MagicMock(side_effect=_mock_poll)
+        mock_popen_instance.terminate = MagicMock()
+        mock_popen_instance.kill = MagicMock()
+
+        mock_popen_constructor.return_value = mock_popen_instance
+        yield mock_popen_constructor
+
+
+@pytest.fixture(autouse=True)
+def patch_stream_reader(monkeypatch):
+    """
+    Patch the stream_reader function so it appends lines from the mock's stdout to manager.stdout_lines.
+    """
+    from services.simulation_service.core.connectors import open_darts
+
+    def fake_stream_reader(stream, lines_list, logger_func):
+        for line in stream:
+            lines_list.append(line.rstrip("\n"))
+
+    monkeypatch.setattr(open_darts, "stream_reader", fake_stream_reader)
+    yield
+
+
+def test_run_success(mock_popen: Mock) -> None:
+    mock_popen_instance = mock_popen.return_value
+
+    mock_popen_instance.stdout = io.StringIO(
         "Building connection list...\n"
         "OpenDartsConnector: Type:heat, Value:2312.12\n"
         "OpenDartsConnector: Type:heat, Value:[1.23, 4.56, 7.89]\n"
-        "# 1 	T = 0.0001	DT = 0.0001	NI = 2	LI=2\n"
-        "# 2 	T = 0.0003	DT = 0.0002	NI = 1	LI=1\n"
-        "# 3 	T = 0.0007	DT = 0.0004	NI = 1	LI=1\n"
-        "# 4 	T = 0.0015	DT = 0.0008	NI = 1	LI=1\n"
+        "# 1 \tT = 0.0001\tDT = 0.0001\tNI = 2\tLI=2\n"
+        "# 2 \tT = 0.0003\tDT = 0.0002\tNI = 1\tLI=1\n"
+        "# 3 \tT = 0.0007\tDT = 0.0004\tNI = 1\tLI=1\n"
+        "# 4 \tT = 0.0015\tDT = 0.0008\tNI = 1\tLI=1\n"
     )
-    mock_subprocess_run.return_value = mock_process
+    mock_popen_instance.stderr = io.StringIO("")
+    mock_popen_instance.returncode = 0
 
     simulation_status, results = OpenDartsConnector.run("test_config")
 
     assert results == {"heat": [2312.12, [1.23, 4.56, 7.89]]}
     assert simulation_status == SimulationStatus.SUCCESS
 
+    # Verify Popen was called as expected
+    mock_popen.assert_called_once_with(
+        ["python3", "-u", "main.py", "test_config"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    mock_popen_instance.wait.assert_called_once()
 
-def test_run_success_with_single_broadcasted_value(mock_subprocess_run: Mock) -> None:
-    mock_process = MagicMock()
-    mock_process.returncode = 0
-    mock_process.stdout = (
+
+def test_run_success_with_single_broadcasted_value(mock_popen: Mock) -> None:
+    mock_popen_instance = mock_popen.return_value
+
+    mock_popen_instance.stdout = io.StringIO(
         "Building connection list...\n"
         "OpenDartsConnector: Type:heat, Value:2312.12\n"
-        "# 1 	T = 0.0001	DT = 0.0001	NI = 2	LI=2\n"
-        "# 2 	T = 0.0003	DT = 0.0002	NI = 1	LI=1\n"
-        "# 3 	T = 0.0007	DT = 0.0004	NI = 1	LI=1\n"
-        "# 4 	T = 0.0015	DT = 0.0008	NI = 1	LI=1\n"
+        "# 1 \tT = 0.0001\tDT = 0.0001\tNI = 2\tLI=2\n"
     )
-    mock_subprocess_run.return_value = mock_process
+    mock_popen_instance.stderr = io.StringIO("")
+    mock_popen_instance.returncode = 0
 
     simulation_status, results = OpenDartsConnector.run("test_config")
 
-    assert results == {"heat": 2312.12}
     assert simulation_status == SimulationStatus.SUCCESS
+    assert results == {"heat": 2312.12}
+    mock_popen.assert_called_once()
+    mock_popen_instance.wait.assert_called_once()
 
 
-def test_run_failure(mock_subprocess_run: Mock) -> None:
-    mock_process = MagicMock()
-    mock_process.returncode = 1
-    mock_process.stdout = ""
-    mock_subprocess_run.return_value = mock_process
-    simulation_status, results = OpenDartsConnector.run("test_config")
+def test_run_failure(mock_popen: Mock) -> None:
+    mock_popen_instance = mock_popen.return_value
+
+    mock_popen_instance.stdout = io.StringIO("Some error output if any")
+    mock_popen_instance.stderr = io.StringIO("Error details from stderr")
+    mock_popen_instance.returncode = 1
+
+    simulation_status, _ = OpenDartsConnector.run("test_config")
+
     assert simulation_status == SimulationStatus.FAILED
+
+    mock_popen.assert_called_once()
+    mock_popen_instance.wait.assert_called_once()
 
 
 @open_darts_input_configuration_injector

@@ -5,8 +5,8 @@ from pathlib import Path
 from logger.utils import get_external_console_logging, get_services, get_services_id
 
 TAIL_LINES = 100
-WORKER_PREFIX = "core-worker"
-SIM_SERVICE_NAME = "simulation_server"
+WORKER_PREFIX = "simulation-worker"
+SIM_SERVICE_NAME = "simulation-server"
 
 
 def _start_external_xterm_log_terminal(title: str, command: str) -> None:

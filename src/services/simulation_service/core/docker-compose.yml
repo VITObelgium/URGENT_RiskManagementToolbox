@@ -1,12 +1,14 @@
+name: simulation
+
 services:
   server:
-    image: simulation_server:latest
+    image: simulation-server:latest
     build:
       context: ../../../../
       dockerfile: src/services/simulation_service/core/infrastructure/server/Dockerfile.server
       args:
         _SERVER_PORT: 50051
-    container_name: simulation_server
+    container_name: simulation-server
     networks:
       - grpc-network
     ports:
@@ -21,13 +23,13 @@ services:
 
 
   worker:
-    image: simulation_worker:latest
+    image: simulation-worker:latest
     build:
       context: ../../../../
       dockerfile: src/services/simulation_service/core/infrastructure/worker/Dockerfile.worker
       args:
         _SERVER_PORT: 50051
-        _SERVER_HOST: simulation_server
+        _SERVER_HOST: simulation-server
     depends_on:
       server:
         condition: service_healthy

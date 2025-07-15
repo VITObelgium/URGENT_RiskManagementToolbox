@@ -20,7 +20,6 @@ from services.solution_updater_service import (
     OptimizationEngine,
     SolutionUpdaterService,
 )
-from services.solution_updater_service.core.models import OptimizationStrategy
 from services.solution_updater_service.core.utils import ensure_not_none
 from services.well_management_service import WellManagementService
 
@@ -38,11 +37,11 @@ def run_risk_management(
     Main entry point for running risk management.
 
     Args:
-        patience: Patience limit for the optimization process.
-        max_generations: Maximum number of generations for the optimization process.
         problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
         n_size (int, optional): Number of samples for the dispatcher. Defaults to 10.
+        patience: Patience limit for the optimization process.
+        max_generations: Maximum number of generations for the optimization process.
     """
     logger.info("Starting risk management process...")
     logger.debug(
@@ -61,14 +60,15 @@ def run_risk_management(
                 simulation_model_archive=simulation_model_archive
             )
 
+            dispatcher = ProblemDispatcherService(
+                problem_definition=problem_definition, n_size=n_size
+            )
+
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,
                 max_generations=max_generations,
                 patience=patience,
-                optimization_strategy=OptimizationStrategy.MAXIMIZE,
-            )
-            dispatcher = ProblemDispatcherService(
-                problem_definition=problem_definition, n_size=n_size
+                optimization_strategy=dispatcher.get_optimization_direction(),
             )
 
             # Initialize metrics logger

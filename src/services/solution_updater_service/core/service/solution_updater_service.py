@@ -5,6 +5,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import numpy.typing as npt
 
+from common.models import OptimizationStrategy
 from logger import get_logger
 from services.solution_updater_service.core.engines import (
     OptimizationEngineFactory,
@@ -15,7 +16,6 @@ from services.solution_updater_service.core.models import (
     ControlVector,
     OptimizationConstrains,
     OptimizationEngine,
-    OptimizationStrategy,
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
     SolutionUpdaterServiceResponse,

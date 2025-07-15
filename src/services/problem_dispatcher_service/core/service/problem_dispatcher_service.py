@@ -2,6 +2,7 @@
 import random
 from typing import Any, Callable
 
+from common import OptimizationStrategy
 from logger import get_logger
 from services.problem_dispatcher_service.core.builder import TaskBuilder
 from services.problem_dispatcher_service.core.models import (
@@ -107,6 +108,24 @@ class ProblemDispatcherService:
             return self._constraints
         except Exception as e:
             self.logger.error("Error fetching boundaries: %s", str(e))
+            raise
+
+    def get_optimization_direction(self) -> OptimizationStrategy:
+        """
+        Get the optimization direction for the problem.
+
+        Returns:
+            OptimizationStrategy: The optimization direction, either 'maximize' or 'minimize'.
+        """
+        self.logger.info("Fetching the optimization direction.")
+        try:
+            direction = (
+                self._problem_definition.optimization_parameters.objective_direction
+            )
+            self.logger.debug("Optimization direction: %s", direction)
+            return direction
+        except Exception as e:
+            self.logger.error("Error fetching optimization direction: %s", str(e))
             raise
 
     def _process_problem_items(

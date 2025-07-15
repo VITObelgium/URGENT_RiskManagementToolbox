@@ -44,7 +44,8 @@ def dict_problem_definition():
                     "wellhead": {"x": {"lb": 0, "ub": 100}, "y": {"lb": 10, "ub": 200}}
                 },
             },
-        ]
+        ],
+        "optimization_parameters": {"objective_direction": "maximize"},
     }
 
 

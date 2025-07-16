@@ -2,6 +2,7 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+from common import OptimizationStrategy
 from services.solution_updater_service.core.engines import SolutionMetrics
 from services.solution_updater_service.core.models import (
     OptimizationEngine,
@@ -123,6 +124,72 @@ def mocked_engine_with_metrics():  # type: ignore
             return np.array([0.0])  # Mock value
 
     return MockedOptimizationEngine()
+
+
+@pytest.mark.parametrize(
+    "config_json, expected_result_parameters, optimization_strategy",
+    [
+        # Case 1: Single solution candidate, MINIMIZE strategy (default)
+        (
+            {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 1.0, "param2": 2.0}},
+                        "cost_function_results": {"values": {"metric1": 10.0}},
+                    }
+                ],
+            },
+            [{"param1": 2.0, "param2": 3.0}],
+            OptimizationStrategy.MINIMIZE,
+        ),
+        # Case 2: Multiple solution candidates, MAXIMIZE strategy
+        (
+            {
+                "solution_candidates": [
+                    {
+                        "control_vector": {"items": {"param1": 3.0, "param2": 4.0}},
+                        "cost_function_results": {"values": {"metric1": 15.0}},
+                    },
+                    {
+                        "control_vector": {"items": {"param1": 5.0, "param2": 6.0}},
+                        "cost_function_results": {"values": {"metric1": 20.0}},
+                    },
+                ],
+            },
+            [
+                {"param1": 4.0, "param2": 5.0},
+                {"param1": 6.0, "param2": 7.0},
+            ],
+            OptimizationStrategy.MAXIMIZE,
+        ),
+    ],
+)
+def test_update_solution_for_next_iteration_with_strategy(  # type: ignore
+    config_json,
+    expected_result_parameters,
+    optimization_strategy,
+    mocked_engine,
+    monkeypatch,
+):
+    # Arrange
+    service = SolutionUpdaterService(
+        optimization_engine=engine,
+        max_generations=100,
+        patience=101,
+        optimization_strategy=optimization_strategy,
+    )
+
+    # Monkeypatch engine
+    monkeypatch.setattr(service, "_engine", mocked_engine)
+
+    # Act
+    result = service.process_request(config_json)
+
+    # Assert
+    assert isinstance(result, SolutionUpdaterServiceResponse)
+    assert len(result.next_iter_solutions) == len(expected_result_parameters)
+    for actual, expected in zip(result.next_iter_solutions, expected_result_parameters):
+        assert actual.items == expected
 
 
 @pytest.mark.parametrize(
@@ -634,3 +701,84 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
         assert np.isclose(
             metrics.last_population_std, expected["last_population_std"]
         ), f"Population {i}: Wrong population standard deviation"
+
+
+def inverted_sphere_function(x: np.ndarray) -> float:
+    """Inverted Sphere function for maximization. Global maximum at [0, ..., 0] with value 10."""
+    return 10 - np.sum(x**2)
+
+
+maximization_test_cases = [
+    {
+        "function": inverted_sphere_function,
+        "dimensions": 3,
+        "bounds": (-10, 10),
+        "expected_maximum": [0.0, 0.0, 0.0],
+        "expected_max_value": 10.0,
+        "tolerance": 1e-2,
+    },
+]
+
+
+@pytest.mark.parametrize("test_case", maximization_test_cases)
+def test_maximization_service_full_round(test_case):
+    function = test_case["function"]
+    dim = test_case["dimensions"]
+    bounds = np.array(test_case["bounds"])
+    expected_max = test_case["expected_maximum"]
+    expected_max_val = test_case["expected_max_value"]
+    tol = test_case["tolerance"]
+
+    lb, ub = bounds[0], bounds[1]
+    param_names = [f"x{i}" for i in range(dim)]
+    num_particles = 50
+    iterations = 1000
+    patience = 1001  # infinite patience
+
+    np.random.seed(42)
+
+    # Initialize particle positions
+    positions = np.random.uniform(lb, ub, (num_particles, dim))
+    results = evaluate_function(positions, function)
+
+    candidates = create_candidates(positions, results, param_names)
+
+    config = {
+        "solution_candidates": candidates,
+        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+    }
+
+    service = SolutionUpdaterService(
+        optimization_engine=engine,
+        max_generations=iterations,
+        patience=patience,
+        optimization_strategy=OptimizationStrategy.MAXIMIZE,
+    )
+    loop_controller = service.loop_controller
+
+    while loop_controller.running():
+        result = service.process_request(config)
+        positions = np.array(
+            [get_numpy_values(vec.items) for vec in result.next_iter_solutions]
+        )
+        results = evaluate_function(positions, function)
+        config["solution_candidates"] = create_candidates(
+            positions, results, param_names
+        )
+
+    best_particle = positions[np.argmax(results)]
+    best_result = np.max(results)
+
+    assert np.allclose(best_particle, expected_max, atol=tol), (
+        f"PSO failed to converge to the expected maximum. "
+        f"Best found: {best_particle}, Expected: {expected_max}"
+    )
+
+    assert np.isclose(
+        best_result, expected_max_val, atol=tol
+    ), f"Best result {best_result} is not close enough to the global maximum value {expected_max_val}."
+
+    # Verify that the service's reported best result is the negated value of the true maximum
+    assert np.isclose(
+        service.global_best_result, -expected_max_val, atol=tol
+    ), "Service's global_best_result should be the negated value for maximization."

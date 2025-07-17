@@ -68,7 +68,7 @@ def run_risk_management(
                 optimization_engine=OptimizationEngine.PSO,
                 max_generations=max_generations,
                 patience=patience,
-                optimization_strategy=dispatcher.get_optimization_direction(),
+                optimization_strategy=dispatcher.get_optimization_strategy(),
             )
 
             # Initialize metrics logger

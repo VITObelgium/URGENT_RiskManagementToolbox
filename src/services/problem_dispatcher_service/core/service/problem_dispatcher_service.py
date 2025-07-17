@@ -110,22 +110,22 @@ class ProblemDispatcherService:
             self.logger.error("Error fetching boundaries: %s", str(e))
             raise
 
-    def get_optimization_direction(self) -> OptimizationStrategy:
+    def get_optimization_strategy(self) -> OptimizationStrategy:
         """
-        Get the optimization direction for the problem.
+        Get the optimization strategy for the problem.
 
         Returns:
-            OptimizationStrategy: The optimization direction, either 'maximize' or 'minimize'.
+            OptimizationStrategy: The optimization strategy, either 'maximize' or 'minimize'.
         """
-        self.logger.info("Fetching the optimization direction.")
+        self.logger.info("Fetching the optimization strategy.")
         try:
-            direction = (
-                self._problem_definition.optimization_parameters.objective_direction
+            strategy = (
+                self._problem_definition.optimization_parameters.optimization_strategy
             )
-            self.logger.debug("Optimization direction: %s", direction)
-            return direction
+            self.logger.debug("Optimization strategy: %s", strategy)
+            return strategy
         except Exception as e:
-            self.logger.error("Error fetching optimization direction: %s", str(e))
+            self.logger.error("Error fetching optimization strategy: %s", str(e))
             raise
 
     def _process_problem_items(

@@ -35,11 +35,11 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Represents the optimization parameters for the problem dispatcher service.
 
     Attributes:
-        objective_direction (str): The direction of the optimization objective,
+        optimization_strategy (str): The direction of the optimization objective,
             either 'maximize' or 'minimize'.
     """
 
-    objective_direction: OptimizationStrategy = Field(
+    optimization_strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.MAXIMIZE,
     )
 

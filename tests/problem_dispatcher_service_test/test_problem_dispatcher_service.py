@@ -45,7 +45,7 @@ def dict_problem_definition():
                 },
             },
         ],
-        "optimization_parameters": {"objective_direction": "maximize"},
+        "optimization_parameters": {"optimization_strategy": "maximize"},
     }
 
 

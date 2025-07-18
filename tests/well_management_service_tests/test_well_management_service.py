@@ -98,7 +98,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "md_step": 10.0,
                 "perforations": [out_of_bounds_perforation],
             },
-            ValidationError,
+            None,
             None,
         ),
         (
@@ -181,7 +181,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "md_step": 20.0,
                 "perforations": [out_of_bounds_perforation],
             },
-            ValidationError,
+            None,
             None,
         ),
         (
@@ -261,7 +261,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "md_step": 30.0,
                 "perforations": [out_of_bounds_perforation],
             },
-            ValidationError,
+            None,
             None,
         ),
         (

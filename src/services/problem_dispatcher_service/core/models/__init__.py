@@ -6,6 +6,7 @@ from services.problem_dispatcher_service.core.models.shared_from_well_management
 )
 from services.problem_dispatcher_service.core.models.user import (
     OptimizationConstrains,
+    OptimizationParameters,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     RequestPayload,
@@ -26,4 +27,5 @@ __all__ = [
     "ControlVector",
     "RequestPayload",
     "WellModel",
+    "OptimizationParameters",
 ]

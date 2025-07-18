@@ -10,6 +10,7 @@ from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
+    WellPlacementItem,
 )
 from services.problem_dispatcher_service.core.service.handlers import (
     ProblemTypeHandler,
@@ -44,6 +45,7 @@ class ProblemDispatcherService:
             self._handlers = PROBLEM_TYPE_HANDLERS
             self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()
+            self._validate_total_md_len()
             self._constraints = self._build_constraints()
             self._task_builder = TaskBuilder(
                 self._initial_state, self._handlers, self._service_type_map
@@ -130,21 +132,19 @@ class ProblemDispatcherService:
 
     def _process_problem_items(
         self,
-        process_func: Callable[[Any, Any], dict[str, Any] | Any],
+        process_func: Callable[..., dict[str, Any] | Any],
         log_message: str,
         merge_results: bool = False,
+        pass_optimization_parameters: bool = False,
     ) -> dict[str, Any]:
         """
         Shared logic to process problem items for state building or constraints.
 
         Args:
-            process_func (Callable[[Any, Any], Union[Dict[str, Any], Any]]):
-                Function to process the problem items.
+            process_func (Callable): Function to process the problem items.
             log_message (str): Log message indicating the operation.
             merge_results (bool): If True, merge the processed results into one dictionary.
-
-        Returns:
-            Dict[str, Any]: A dictionary with the processed result.
+            pass_optimization_parameters (bool): If True, pass optimization_parameters to process_func.
         """
         self.logger.info(log_message)
         try:
@@ -153,7 +153,15 @@ class ProblemDispatcherService:
             for problem_type, handler in self._handlers.items():
                 items = getattr(self._problem_definition, problem_type, None)
                 if items:
-                    processed_result = process_func(handler, items)
+                    if pass_optimization_parameters:
+                        processed_result = process_func(
+                            handler,
+                            items,
+                            optimization_parameters=self._problem_definition.optimization_parameters,
+                        )
+                    else:
+                        processed_result = process_func(handler, items)
+
                     if merge_results:
                         # Ensure result is always a dictionary when merge_results is True
                         if result is None:
@@ -173,6 +181,76 @@ class ProblemDispatcherService:
             self.logger.error("Error during %s: %s", log_message, str(e))
             raise
 
+    def _validate_total_md_len(self) -> None:
+        """
+        Validates if the total_md_len upper bound is physically plausible. It is capped
+        if it exceeds the cumulative sum of the maximum possible MD of each individual well.
+        """
+        params = self._problem_definition.optimization_parameters
+        if not params or not params.total_md_len:
+            return  # Skip if user did not provide total_md_len
+
+        well_placement_items: list[WellPlacementItem] | None = getattr(
+            self._problem_definition, "well_placement", None
+        )
+        if not well_placement_items:
+            return
+
+        cumulative_max_possible_md = 0.0
+
+        for i, well_item in enumerate(well_placement_items):
+            try:
+                constraints = well_item.optimization_constrains
+
+                wellhead = constraints.get("wellhead")
+                if not isinstance(wellhead, dict):
+                    raise TypeError("'wellhead' constraints must be a dictionary.")
+
+                x_bounds = wellhead.get("x")
+                y_bounds = wellhead.get("y")
+
+                if not hasattr(x_bounds, "ub") or not hasattr(x_bounds, "lb"):
+                    raise AttributeError(
+                        "'x' bounds must have 'ub' and 'lb' attributes."
+                    )
+                if not hasattr(y_bounds, "ub") or not hasattr(y_bounds, "lb"):
+                    raise AttributeError(
+                        "'y' bounds must have 'ub' and 'lb' attributes."
+                    )
+
+                if x_bounds is None or y_bounds is None:
+                    raise AttributeError("'x' and 'y' bounds must not be None.")
+
+                x_range = x_bounds.ub - x_bounds.lb
+                y_range = y_bounds.ub - y_bounds.lb
+
+                # Heuristic for max depth: assume it's similar to the max horizontal range.
+                z_range = max(x_range, y_range)
+
+                # Max possible MD for this specific well is the space diagonal of its domain box.
+                max_possible_md = (x_range**2 + y_range**2 + z_range**2) ** 0.5
+                cumulative_max_possible_md += max_possible_md
+
+            except (KeyError, TypeError, AttributeError) as e:
+                self.logger.warning(
+                    "Could not perform 'total_md_len' validation for well '%s' (item %d) due to "
+                    "missing or malformed 'wellhead' constraints. Skipping validation.",
+                    well_item.well_name,
+                    i,
+                    exc_info=e,
+                )
+                return
+
+        if params.total_md_len.ub > cumulative_max_possible_md:
+            self.logger.info(
+                "The upper bound for 'total_md_len' (%s) is greater than the cumulative "
+                "maximum physically possible MD (%s) calculated from all well placement constraints. "
+                "Falling back to the cumulative maximum.",
+                params.total_md_len.ub,
+                round(cumulative_max_possible_md, 2),
+            )
+            params.total_md_len.ub = round(cumulative_max_possible_md, 2)
+
     def _build_initial_state(self) -> dict[str, Any]:
         """
         Build the initial state for the problem handler.
@@ -183,7 +261,8 @@ class ProblemDispatcherService:
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_initial_state(items),
             log_message="Building initial state",
-            merge_results=False,  # Keep result per problem_type
+            merge_results=False,
+            pass_optimization_parameters=False,  # Do not pass optimization parameters
         )
 
     def _build_constraints(self) -> dict[str, tuple[float, float]]:
@@ -194,7 +273,12 @@ class ProblemDispatcherService:
             dict[str, tuple[float, float]]: Constraints of the problem.
         """
         return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_constraints(items),
+            process_func=lambda handler,
+            items,
+            optimization_parameters: handler.build_constraints(
+                items, optimization_parameters
+            ),
             log_message="Building constraints",
-            merge_results=True,  # Merge results into a single dict
+            merge_results=True,
+            pass_optimization_parameters=True,  # Pass the optimization parameters
         )

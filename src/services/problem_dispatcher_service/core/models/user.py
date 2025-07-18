@@ -14,6 +14,11 @@ class VariableBnd(BaseModel, extra="forbid"):
     ub: float = Field(default=float("inf"))
 
 
+class MDBnd(BaseModel, extra="forbid"):
+    lb: float = Field(default=0.0)
+    ub: float = Field(default=float("inf"))
+
+
 type VariableName = str
 type OptimizationConstrains = dict[VariableName, VariableBnd | OptimizationConstrains]
 
@@ -37,11 +42,14 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Attributes:
         optimization_strategy (str): The direction of the optimization objective,
             either 'maximize' or 'minimize'.
+        total_md_len (MDBnd | None): The total measured depth length bounds.
+            If None, no bounds are applied.
     """
 
     optimization_strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.MAXIMIZE,
     )
+    total_md_len: MDBnd | None = Field(default=None)
 
 
 class ServiceType(StrEnum):

@@ -50,14 +50,29 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
         return self
 
     @model_validator(mode="after")
-    def validate_perforation_within_well_md(self) -> IWellModel:
-        if not _is_perforation_within_total_well_md(
-            (self.md,),
-            self.perforations,
-        ):
-            raise ValueError(
-                "One or more perforation intervals extend beyond the total measured depth of the well."
-            )
+    def adjust_perforations_to_well_md(self) -> IWellModel:
+        """
+        Adjusts perforations to ensure they are within the well's total MD.
+        If a perforation's start is beyond the MD, it's removed.
+        If a perforation's end is beyond the MD, it's truncated to the MD.
+        """
+        if not self.perforations:
+            return self
+
+        adjusted_perforations = []
+        for perf in self.perforations:
+            # If the perforation starts after the well ends, discard it.
+            if perf.start_md >= self.md:
+                continue
+
+            new_end_md = min(perf.end_md, self.md)
+
+            if perf.start_md < new_end_md:
+                adjusted_perforations.append(
+                    PerforationRangeModel(start_md=perf.start_md, end_md=new_end_md)
+                )
+
+        self.perforations = adjusted_perforations if adjusted_perforations else None
         return self
 
 
@@ -86,14 +101,9 @@ class JWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
         return self
 
     @model_validator(mode="after")
-    def validate_perforation_within_well_md(self) -> JWellModel:
-        if not _is_perforation_within_total_well_md(
-            (self.md_linear1, self.md_curved, self.md_linear2),
-            self.perforations,
-        ):
-            raise ValueError(
-                "One or more perforation intervals extend beyond the total measured depth of the well."
-            )
+    def adjust_perforations_to_well_md(self) -> JWellModel:
+        total_md = self.md_linear1 + self.md_curved + self.md_linear2
+        self.perforations = _adjust_perforations(total_md, self.perforations)
         return self
 
 
@@ -125,20 +135,15 @@ class SWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
         return self
 
     @model_validator(mode="after")
-    def validate_perforation_within_well_md(self) -> SWellModel:
-        if not _is_perforation_within_total_well_md(
-            (
-                self.md_linear1,
-                self.md_curved1,
-                self.md_linear2,
-                self.md_curved2,
-                self.md_linear3,
-            ),
-            self.perforations,
-        ):
-            raise ValueError(
-                "One or more perforation intervals extend beyond the total measured depth of the well."
-            )
+    def adjust_perforations_to_well_md(self) -> SWellModel:
+        total_md = (
+            self.md_linear1
+            + self.md_curved1
+            + self.md_linear2
+            + self.md_curved2
+            + self.md_linear3
+        )
+        self.perforations = _adjust_perforations(total_md, self.perforations)
         return self
 
 
@@ -165,23 +170,14 @@ class HWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
         return self
 
     @model_validator(mode="after")
-    def validate_perforation_within_well_md(self) -> HWellModel:
+    def adjust_perforations_to_well_md(self) -> HWellModel:
         from services.well_management_service.core.well_templates import HWellTemplate
 
         md_linear1, md_curved, md_linear2 = HWellTemplate.get_sections_mds(
             depth=self.TVD, width=self.md_lateral
         )
-        if not _is_perforation_within_total_well_md(
-            (
-                md_linear1,
-                md_curved,
-                md_linear2,
-            ),
-            self.perforations,
-        ):
-            raise ValueError(
-                "One or more perforation intervals extend beyond the total measured depth of the well."
-            )
+        total_md = md_linear1 + md_curved + md_linear2
+        self.perforations = _adjust_perforations(total_md, self.perforations)
         return self
 
 
@@ -243,6 +239,32 @@ class SimulationWellModel(BaseModel, extra="forbid"):
                 else None
             ),
         )
+
+
+def _adjust_perforations(
+    total_md: float, perforations: Sequence[PerforationRangeModel] | None
+) -> Sequence[PerforationRangeModel] | None:
+    """
+    Adjusts perforations to ensure they are within the well's total MD.
+    If a perforation's start is beyond the MD, it's removed.
+    If a perforation's end is beyond the MD, it's truncated to the MD.
+    """
+    if not perforations:
+        return None
+
+    adjusted_perforations = []
+    for perf in perforations:
+        if perf.start_md >= total_md:
+            continue
+
+        new_end_md = min(perf.end_md, total_md)
+
+        if perf.start_md < new_end_md:
+            adjusted_perforations.append(
+                PerforationRangeModel(start_md=perf.start_md, end_md=new_end_md)
+            )
+
+    return adjusted_perforations if adjusted_perforations else None
 
 
 def _is_perforation_within_total_well_md(

@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from common import OptimizationStrategy
 from services.problem_dispatcher_service.core.models import ControlVector, WellModel
 
 
@@ -29,6 +30,20 @@ class WellPlacementItem(BaseModel, extra="forbid"):
         return values
 
 
+class OptimizationParameters(BaseModel, extra="forbid"):
+    """
+    Represents the optimization parameters for the problem dispatcher service.
+
+    Attributes:
+        optimization_strategy (str): The direction of the optimization objective,
+            either 'maximize' or 'minimize'.
+    """
+
+    optimization_strategy: OptimizationStrategy = Field(
+        default=OptimizationStrategy.MAXIMIZE,
+    )
+
+
 class ServiceType(StrEnum):
     # mapping between service and optimization problem
     WellManagementService = "well_placement"
@@ -36,6 +51,7 @@ class ServiceType(StrEnum):
 
 class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     well_placement: list[WellPlacementItem]
+    optimization_parameters: OptimizationParameters
 
 
 type ServiceRequest = list[

@@ -295,7 +295,17 @@ Recently the following optimization problem(s) are supported:
 
    > **Note:** Parameters which are not listed in optimization constraints will not take part of an optimization process and remains the same as defined in the initial state
 
-   The complete example of well placement problem for two wells:
+2. **Optimization Strategy** - Depending on the problem, user can define whether to `maximize` or `minimize` the objective function. The optimization strategy is defined in the configuration file as follows:
+
+```json
+  "optimization_parameters": {
+    "optimization_strategy": "maximize"
+  }
+```
+
+If the user does not define the optimization strategy, the default value is `maximize`.
+
+The complete example of well placement problem for two wells:
    ```json
    {
      "well_placement": [
@@ -349,7 +359,10 @@ Recently the following optimization problem(s) are supported:
            }
          }
        }
-     ]
+     ],
+      "optimization_parameters": {
+        "optimization_strategy": "maximize"
+      }
    }
    ```
 

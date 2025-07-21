@@ -305,7 +305,9 @@ Recently the following optimization problem(s) are supported:
 
 If the user does not define the optimization strategy, the default value is `maximize`.
 
-The complete example of well placement problem for two wells:
+#### 3.1. Example of the configuration file
+
+Well placement problem for two wells with maximization optimization strategy:
    ```json
    {
      "well_placement": [

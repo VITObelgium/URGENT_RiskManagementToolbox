@@ -98,15 +98,27 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> None:
         if len(sys.argv) < 2:
-            print("Usage: python main.py 'configuration.json (TBD)'")
+            logger.info("Usage: python main.py 'configuration.json (TBD)'")
             sys.exit(1)
+            return
         json_config_str = sys.argv[1]
         try:
-            config_data = json.loads(json_config_str)
-            func(config_data, *args, **kwargs)
+            config = json.loads(json_config_str)
         except json.JSONDecodeError:
-            print("Invalid JSON input.")
+            logger.error("Invalid JSON input.")
             sys.exit(1)
+            return
+
+        if not isinstance(config, dict):
+            logger.error("Invalid JSON input.")
+            sys.exit(1)
+            return
+        if not all(isinstance(k, str) for k in config.keys()):
+            logger.error("Invalid JSON input.")
+            sys.exit(1)
+            return
+
+        func(config, *args, **kwargs)
 
     return wrapper
 

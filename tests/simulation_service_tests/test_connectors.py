@@ -128,6 +128,24 @@ def test_get_well_connection_cells(
     assert actual_result == expected_output
 
 
+def test_get_well_connection_cells_empty_wells(mock_struct_reservoir):
+    wells_result = {"wells": []}
+    result = OpenDartsConnector.get_well_connection_cells(
+        wells_result, mock_struct_reservoir
+    )
+    assert result == {}
+
+
+def test_get_well_connection_cells_missing_completion(mock_struct_reservoir):
+    wells_result = {"wells": [{"name": "NoComp", "trajectory": [[0, 0, 0]]}]}
+    import pytest
+
+    with pytest.raises(KeyError, match="Well does not have a field: 'completion'"):
+        OpenDartsConnector.get_well_connection_cells(
+            wells_result, mock_struct_reservoir
+        )
+
+
 @pytest.fixture
 def mock_subprocess_run() -> Generator[Mock, None, None]:
     with patch("subprocess.run") as mock_run:
@@ -215,6 +233,16 @@ def test_run_success(mock_popen: Mock) -> None:
     mock_popen_instance.wait.assert_called_once()
 
 
+def test_run_handles_no_output_lines(mock_popen: Mock) -> None:
+    mock_popen_instance = mock_popen.return_value
+    mock_popen_instance.stdout = io.StringIO("")
+    mock_popen_instance.stderr = io.StringIO("")
+    mock_popen_instance.returncode = 0
+    simulation_status, results = OpenDartsConnector.run("test_config")
+    assert simulation_status == SimulationStatus.SUCCESS
+    assert results == {}
+
+
 def test_run_success_with_single_broadcasted_value(mock_popen: Mock) -> None:
     mock_popen_instance = mock_popen.return_value
 
@@ -249,6 +277,22 @@ def test_run_failure(mock_popen: Mock) -> None:
     mock_popen_instance.wait.assert_called_once()
 
 
+def test_run_handles_exception(mock_popen: Mock) -> None:
+    # Simulate exception in Popen
+    with patch(
+        "services.simulation_service.core.connectors.open_darts.ManagedSubprocess.__enter__",
+        side_effect=Exception("fail"),
+    ):
+        status, results = OpenDartsConnector.run("test_config")
+        assert status == SimulationStatus.FAILED
+        # The default_failed_results dict is returned, not an empty dict
+        from services.simulation_service.core.connectors.common import (
+            SimulationResultType,
+        )
+
+        assert results == {k: -1e3 for k in SimulationResultType}
+
+
 @open_darts_input_configuration_injector
 def main(configuration_content: dict[str, Any]) -> None:
     print(f"Received configuration: {configuration_content}")
@@ -268,31 +312,104 @@ def test_decorator_with_valid_json(monkeypatch, capsys):  # type: ignore
     assert "Received configuration: {'key': 'value', 'number': 42}" in captured.out
 
 
-def test_decorator_with_invalid_json(monkeypatch, capsys):  # type: ignore
+def test_decorator_with_extra_args(monkeypatch, capsys):
+    # Should still parse first arg as JSON
+    valid_json = '{"foo": 1}'
+    monkeypatch.setattr(sys, "argv", ["main.py", valid_json, "extra"])
+    main()
+    captured = capsys.readouterr()
+    assert "Received configuration: {'foo': 1}" in captured.out
+
+
+def test_decorator_with_invalid_json(monkeypatch):
     # Mock sys.argv to simulate command-line arguments with invalid JSON
     invalid_json = '{"key": "value", "number": 42'
     monkeypatch.setattr(sys, "argv", ["main.py", invalid_json])
 
     # Mock sys.exit to prevent the test from stopping
     with patch("sys.exit") as mock_exit:
-        main()
+        mock_func = Mock()
+        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func()
         mock_exit.assert_called_once_with(1)
-
-    # Capture printed output and verify the error message
-    captured = capsys.readouterr()
-    assert "Invalid JSON input." in captured.out
+        mock_func.assert_not_called()
 
 
-def test_decorator_with_missing_argument(monkeypatch, capsys):  # type: ignore
+def test_decorator_with_non_dict_json(monkeypatch):
+    # Should exit if JSON is not a dict
+    monkeypatch.setattr(sys, "argv", ["main.py", "123"])
+
+    with patch("sys.exit") as mock_exit:
+        mock_func = Mock()
+        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func()
+        mock_exit.assert_called_once_with(1)
+        mock_func.assert_not_called()
+
+
+def test_decorator_with_missing_argument(monkeypatch):
     # Mock sys.argv to simulate no arguments provided
     monkeypatch.setattr(sys, "argv", ["main.py"])
 
-    # Mock sys.exit to raise an exception
-    with patch("sys.exit", side_effect=SystemExit) as mock_exit:
-        with pytest.raises(SystemExit):
-            main()
+    with patch("sys.exit") as mock_exit:
+        mock_func = Mock()
+        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func()
         mock_exit.assert_called_once_with(1)
+        mock_func.assert_not_called()
 
-    # Capture printed output and verify the usage message
-    captured = capsys.readouterr()
-    assert "Usage: python main.py 'configuration.json (TBD)'" in captured.out
+
+def test_decorator_with_dict_but_not_str_keys(monkeypatch):
+    # Should exit if JSON dict has non-str keys
+
+    class Dummy(dict):
+        pass
+
+    def fake_loads(s):
+        return Dummy({1: "a"})
+
+    monkeypatch.setattr(sys, "argv", ["main.py", '{"1": "a"}'])
+
+    with patch("json.loads", fake_loads):
+        with patch("sys.exit") as mock_exit:
+            mock_func = Mock()
+            decorated_func = open_darts_input_configuration_injector(mock_func)
+            decorated_func()
+            mock_exit.assert_called_once_with(1)
+            mock_func.assert_not_called()
+
+
+def test_managed_subprocess_exit_terminates_process(mock_popen):
+    # Mock the subprocess to simulate a running process
+    mock_popen_instance = mock_popen.return_value
+    mock_popen_instance.poll.return_value = None  # Simulate process still running
+
+    # Simulate timeout scenario
+    mock_popen_instance.wait.side_effect = subprocess.TimeoutExpired(
+        cmd="test", timeout=5
+    )
+
+    # Create a ManagedSubprocess instance
+    from services.simulation_service.core.connectors.conn_utils.managed_subprocess import (
+        ManagedSubprocess,
+    )
+
+    manager = ManagedSubprocess(
+        command_args=["python3", "-u", "main.py"],
+        stream_reader_func=lambda *args: None,
+        logger_info_func=lambda msg: None,
+        logger_error_func=lambda msg: None,
+    )
+
+    # Use the context manager and trigger __exit__
+    with patch.object(manager, "logger_warning_func", lambda msg: None):
+        try:
+            with manager:
+                pass
+        except subprocess.TimeoutExpired:
+            # Expected exception, do nothing and then check if process was terminated properly
+            pass
+
+    # Verify terminate and kill were called
+    mock_popen_instance.terminate.assert_called_once()
+    mock_popen_instance.kill.assert_called_once()

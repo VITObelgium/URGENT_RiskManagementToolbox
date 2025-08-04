@@ -38,8 +38,11 @@ def extract_well_with_perforations_points(
     results: dict[WellName, tuple[Point, ...]] = {}
     for well in well_management_service_result["wells"]:
         perforation_points: list[Point] = []
-        well_name = well["name"]
-        completion = well["completion"]
+        try:
+            well_name = well["name"]
+            completion = well["completion"]
+        except KeyError as e:
+            raise KeyError(f"Well does not have a field: {e}")
         if completion:
             for p in completion["perforations"]:
                 perforation_points.extend(p["points"])

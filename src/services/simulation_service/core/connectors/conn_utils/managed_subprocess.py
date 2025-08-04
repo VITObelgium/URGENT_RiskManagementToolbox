@@ -17,6 +17,7 @@ class ManagedSubprocess:
         self.stream_reader_func = stream_reader_func
         self.logger_info_func = logger_info_func
         self.logger_error_func = logger_error_func
+        self.logger_warning_func = logger_error_func
 
         self.process: subprocess.Popen | None = None
         self.stdout_thread: threading.Thread | None = None

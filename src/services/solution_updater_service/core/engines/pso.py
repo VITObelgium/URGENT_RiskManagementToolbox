@@ -78,8 +78,8 @@ class PSOEngine(OptimizationEngineInterface):
             particles_best_results=np.copy(results),
             global_best_position=parameters[best_index],
             global_best_result=float(results[best_index].item()),
-            velocities=self._rng.uniform(
-                -1, 1, parameters.shape
+            velocities=np.atleast_1d(
+                self._rng.uniform(-1, 1, parameters.shape)
             ),  # Random initial velocities
         )
 

@@ -1,4 +1,3 @@
-# Modern justfile leveraging latest capabilities
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
 

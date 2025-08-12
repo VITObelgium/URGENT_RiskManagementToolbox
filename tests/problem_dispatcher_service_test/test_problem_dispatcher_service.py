@@ -169,3 +169,44 @@ def test_handle_iteration_loop_with_invalid_float_value(dict_problem_definition)
     response = service.process_iteration(control_vectors)
     assert isinstance(response, ProblemDispatcherServiceResponse)
     assert len(response.solution_candidates) == 1
+
+
+def test_get_linear_inequalities(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.md": 1, "W2.md": 1}],
+        "b": [100],
+        "sense": ["<="],
+    }
+    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    inequalities = service.get_linear_inequalities()
+    assert inequalities is not None
+    assert "A" in inequalities
+    assert "b" in inequalities
+
+
+def test_validate_total_md_len(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["total_md_len"] = {
+        "lb": 100,
+        "ub": 5000,
+    }
+    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    params = service._problem_definition.optimization_parameters
+    assert params.total_md_len.ub < 5000
+
+
+def test_process_iteration_exception_handling(dict_problem_definition, monkeypatch):
+    def mock_build(*args, **kwargs):
+        raise ValueError("Test Exception")
+
+    monkeypatch.setattr(
+        "services.problem_dispatcher_service.core.builder.TaskBuilder.build", mock_build
+    )
+    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    with pytest.raises(ValueError, match="Test Exception"):
+        service.process_iteration()
+
+
+def test_initialization_failure(dict_problem_definition):
+    dict_problem_definition["well_placement"][0]["optimization_constrains"] = "invalid"
+    with pytest.raises(ValidationError):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)

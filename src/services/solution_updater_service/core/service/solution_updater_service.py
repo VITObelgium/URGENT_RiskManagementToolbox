@@ -517,10 +517,63 @@ class SolutionUpdaterService:
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints
         )
+        self._logger.info("Optimization boundaries set")
+        A_np = None
+        b_np = None
 
-        updated_params = ensure_not_none(self._engine).update_solution_to_next_iter(
-            control_vector, cost_function_values, lb, ub
-        )
+        try:
+            if config.optimization_constraints and config.optimization_constraints.A:
+                self._logger.info("Linear inequalities provided, processing...")
+                simple_to_idx: dict[str, int] = {}
+                if not self._mapper._state:
+                    raise ValueError("Control vector mapping state is not initialized.")
+                for full_key, idx in self._mapper._state.control_vector_mapping.items():
+                    parts = full_key.split("#")
+                    if len(parts) >= 3:
+                        simple = f"{parts[1]}.{parts[-1]}"
+                        simple_to_idx[simple] = idx
+                A_rows = []
+                for row in config.optimization_constraints.A:
+                    dense = np.zeros(control_vector.shape[1], dtype=np.float64)
+                    for var, coef in zip(row.keys(), row.values()):
+                        if var not in simple_to_idx:
+                            raise ValueError(
+                                f"Linear inequality variable '{var}' not found in control vector mapping"
+                            )
+                        dense[simple_to_idx[var]] = float(coef)
+                    A_rows.append(dense)
+                A_np = np.vstack(A_rows) if A_rows else None
+                b_np = (
+                    np.array(config.optimization_constraints.b, dtype=np.float64)
+                    if config.optimization_constraints.b
+                    else None
+                )
+                # Apply sense transformation: convert any >, >= into <= by multiplying both sides by -1
+                senses = config.optimization_constraints.sense
+                if A_np is not None and b_np is not None and senses is not None:
+                    for i, s in enumerate(senses):
+                        if s in (">", ">="):
+                            A_np[i, :] *= -1.0
+                            b_np[i] *= -1.0
+        except ValueError as e:
+            self._logger.error(f"Error processing linear constraints: {e}")
+            raise RuntimeError(f"Failed to process linear constraints: {e}")
+
+        engine = ensure_not_none(self._engine)
+        if A_np is not None and b_np is not None:
+            try:
+                updated_params = engine.update_solution_to_next_iter(
+                    control_vector, cost_function_values, lb, ub, A=A_np, b=b_np
+                )
+            except TypeError:
+                # Fallback if engine does not support A,b
+                updated_params = engine.update_solution_to_next_iter(
+                    control_vector, cost_function_values, lb, ub
+                )
+        else:
+            updated_params = engine.update_solution_to_next_iter(
+                control_vector, cost_function_values, lb, ub
+            )
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
 

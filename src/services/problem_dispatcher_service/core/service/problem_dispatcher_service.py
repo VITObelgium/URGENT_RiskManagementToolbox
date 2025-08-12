@@ -47,6 +47,10 @@ class ProblemDispatcherService:
             self._initial_state = self._build_initial_state()
             self._validate_total_md_len()
             self._constraints = self._build_constraints()
+            opt_params = self._problem_definition.optimization_parameters
+            self._linear_inequalities: dict[str, list] | None = getattr(
+                opt_params, "linear_inequalities", None
+            )
             self._task_builder = TaskBuilder(
                 self._initial_state, self._handlers, self._service_type_map
             )
@@ -111,6 +115,10 @@ class ProblemDispatcherService:
         except Exception as e:
             self.logger.error("Error fetching boundaries: %s", str(e))
             raise
+
+    def get_linear_inequalities(self) -> dict[str, list] | None:
+        """Return sparse linear inequalities definition if provided."""
+        return self._linear_inequalities
 
     def get_optimization_strategy(self) -> OptimizationStrategy:
         """

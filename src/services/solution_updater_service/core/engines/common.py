@@ -30,6 +30,8 @@ class OptimizationEngineInterface(ABC):
         results: npt.NDArray[np.float64],
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
     ) -> npt.NDArray[np.float64]: ...
 
     @property

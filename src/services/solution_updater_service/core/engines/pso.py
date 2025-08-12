@@ -57,16 +57,44 @@ class PSOEngine(OptimizationEngineInterface):
         results: npt.NDArray[np.float64],
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
     ) -> npt.NDArray[np.float64]:
-        """Updates particles positions based on their velocities and applies reflection boundary."""
+        """Updates particle positions with optional linear inequality constraints A x <= b.
+
+        Notes:
+            Original user-provided directions (<=, >=, <, >) are normalized upstream into
+            the unified form A x <= b before invoking the engine. Strict inequalities are
+            currently treated as non-strict (<=).
+
+        Constraint Handling:
+            If A,b provided, feasibility handled by adding a static penalty to objective for ranking
+            personal/global bests (Deb's rule simplified: penalized value = result + penalty*sum(violations)).
+        """
+        if A is not None and b is not None:
+            penalized_results = self._compute_penalized_results(
+                parameters, results, A, b
+            )
+        else:
+            penalized_results = results.copy()
+
         if self._state is None:
-            self._initialize_state_on_first_call(parameters, results)
-        self._update_state_positions(parameters, results)
+            self._initialize_state_on_first_call(parameters, penalized_results)
+
+        self._update_state_positions(parameters, penalized_results)
         new_velocities = self._calculate_new_velocity(parameters)
         self._update_state_velocities(new_velocities)
         new_positions = self._calculate_new_position(parameters, new_velocities)
         self._update_metrics(results)
-        return self._reflect_and_clip_positions(new_positions, lb, ub)
+
+        new_positions = self._reflect_and_clip_positions(new_positions, lb, ub)
+
+        if A is not None and b is not None:
+            new_positions = self._repair_infeasible_positions(
+                new_positions, A, b, lb, ub
+            )
+
+        return new_positions
 
     def _initialize_state_on_first_call(
         self, parameters: npt.NDArray[np.float64], results: npt.NDArray[np.float64]
@@ -135,10 +163,53 @@ class PSOEngine(OptimizationEngineInterface):
 
     @staticmethod
     def _calculate_new_position(
-        old_position: npt.NDArray[np.float64], new_velocity: npt.NDArray[np.float64]
+        old_positions: npt.NDArray[np.float64], velocities: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
-        """Computes the new position of particles by adding velocity."""
-        return (old_position + new_velocity).astype(np.float64)
+        """Computes new positions by adding velocities to old positions."""
+        return np.array(old_positions + velocities, dtype=np.float64)
+
+    def _compute_penalized_results(
+        self,
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64],
+        b: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Computes penalized results for constraint violations."""
+        violations = (A @ parameters.T - b[:, None]).T
+        violations = np.maximum(violations, 0.0)
+        total_violation = violations.sum(axis=1, keepdims=True)
+        penalty_factor = 1e6 * (np.median(np.abs(results)) + 1.0)
+        return results + penalty_factor * total_violation
+
+    def _repair_infeasible_positions(
+        self,
+        positions: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64],
+        b: npt.NDArray[np.float64],
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Repairs positions that violate linear constraints. Positions that violate constraints are those that exceed the bounds defined by `b`."""
+        Ax = (A @ positions.T).T
+        violations = Ax - b
+        violation_mask = violations > 1e-6
+
+        if not np.any(violation_mask):
+            return positions
+
+        for i in range(positions.shape[0]):
+            if not np.any(violation_mask[i]):
+                continue
+
+            for a_row, excess in zip(
+                A[violation_mask[i]], violations[i][violation_mask[i]]
+            ):
+                denominator = np.dot(a_row, a_row)
+                if denominator > 1e-9:
+                    positions[i] -= (excess / denominator) * a_row
+
+        return self._reflect_and_clip_positions(positions, lb, ub)
 
     def _reflect_and_clip_positions(
         self,

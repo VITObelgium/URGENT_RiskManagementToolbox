@@ -57,7 +57,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     optimization_strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.MAXIMIZE,
     )
-    total_md_len: MDBnd | None = Field(default=None)
     linear_inequalities: dict[str, list] | None = Field(default=None)
 
     @model_validator(mode="after")

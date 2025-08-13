@@ -10,7 +10,6 @@ from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
-    WellPlacementItem,
 )
 from services.problem_dispatcher_service.core.service.handlers import (
     ProblemTypeHandler,
@@ -45,7 +44,6 @@ class ProblemDispatcherService:
             self._handlers = PROBLEM_TYPE_HANDLERS
             self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()
-            self._validate_total_md_len()
             self._constraints = self._build_constraints()
             opt_params = self._problem_definition.optimization_parameters
             self._linear_inequalities: dict[str, list] | None = getattr(
@@ -178,7 +176,7 @@ class ProblemDispatcherService:
                     else:
                         # Initialize result as a dictionary if it is None
                         if result is None:
-                            result = {}  # Create an empty dictionary
+                            result = {}
                         result[problem_type] = processed_result
                     self.logger.debug(
                         "%s for %s: %s", log_message, problem_type, processed_result
@@ -188,76 +186,6 @@ class ProblemDispatcherService:
         except Exception as e:
             self.logger.error("Error during %s: %s", log_message, str(e))
             raise
-
-    def _validate_total_md_len(self) -> None:
-        """
-        Validates if the total_md_len upper bound is physically plausible. It is capped
-        if it exceeds the cumulative sum of the maximum possible MD of each individual well.
-        """
-        params = self._problem_definition.optimization_parameters
-        if not params or not params.total_md_len:
-            return  # Skip if user did not provide total_md_len
-
-        well_placement_items: list[WellPlacementItem] | None = getattr(
-            self._problem_definition, "well_placement", None
-        )
-        if not well_placement_items:
-            return
-
-        cumulative_max_possible_md = 0.0
-
-        for i, well_item in enumerate(well_placement_items):
-            try:
-                constraints = well_item.optimization_constrains
-
-                wellhead = constraints.get("wellhead")
-                if not isinstance(wellhead, dict):
-                    raise TypeError("'wellhead' constraints must be a dictionary.")
-
-                x_bounds = wellhead.get("x")
-                y_bounds = wellhead.get("y")
-
-                if not hasattr(x_bounds, "ub") or not hasattr(x_bounds, "lb"):
-                    raise AttributeError(
-                        "'x' bounds must have 'ub' and 'lb' attributes."
-                    )
-                if not hasattr(y_bounds, "ub") or not hasattr(y_bounds, "lb"):
-                    raise AttributeError(
-                        "'y' bounds must have 'ub' and 'lb' attributes."
-                    )
-
-                if x_bounds is None or y_bounds is None:
-                    raise AttributeError("'x' and 'y' bounds must not be None.")
-
-                x_range = x_bounds.ub - x_bounds.lb
-                y_range = y_bounds.ub - y_bounds.lb
-
-                # Heuristic for max depth: assume it's similar to the max horizontal range.
-                z_range = max(x_range, y_range)
-
-                # Max possible MD for this specific well is the space diagonal of its domain box.
-                max_possible_md = (x_range**2 + y_range**2 + z_range**2) ** 0.5
-                cumulative_max_possible_md += max_possible_md
-
-            except (KeyError, TypeError, AttributeError) as e:
-                self.logger.warning(
-                    "Could not perform 'total_md_len' validation for well '%s' (item %d) due to "
-                    "missing or malformed 'wellhead' constraints. Skipping validation.",
-                    well_item.well_name,
-                    i,
-                    exc_info=e,
-                )
-                return
-
-        if params.total_md_len.ub > cumulative_max_possible_md:
-            self.logger.info(
-                "The upper bound for 'total_md_len' (%s) is greater than the cumulative "
-                "maximum physically possible MD (%s) calculated from all well placement constraints. "
-                "Falling back to the cumulative maximum.",
-                params.total_md_len.ub,
-                round(cumulative_max_possible_md, 2),
-            )
-            params.total_md_len.ub = round(cumulative_max_possible_md, 2)
 
     def _build_initial_state(self) -> dict[str, Any]:
         """

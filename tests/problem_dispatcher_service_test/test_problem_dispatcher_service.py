@@ -184,16 +184,6 @@ def test_get_linear_inequalities(dict_problem_definition):
     assert "b" in inequalities
 
 
-def test_validate_total_md_len(dict_problem_definition):
-    dict_problem_definition["optimization_parameters"]["total_md_len"] = {
-        "lb": 100,
-        "ub": 5000,
-    }
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
-    params = service._problem_definition.optimization_parameters
-    assert params.total_md_len.ub < 5000
-
-
 def test_process_iteration_exception_handling(dict_problem_definition, monkeypatch):
     def mock_build(*args, **kwargs):
         raise ValueError("Test Exception")

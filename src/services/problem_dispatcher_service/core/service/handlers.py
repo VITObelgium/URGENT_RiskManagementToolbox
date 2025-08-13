@@ -84,14 +84,6 @@ class WellPlacementHandler:
             flattened = _flatten_optimization_parameters(item.optimization_constrains)
             for key, value in flattened.items():
                 result[f"well_placement#{item.well_name}{separator}{key}"] = value
-
-            if optimization_parameters.total_md_len:
-                md_key = f"well_placement#{item.well_name}{separator}md"
-                result[md_key] = (
-                    optimization_parameters.total_md_len.lb,
-                    optimization_parameters.total_md_len.ub,
-                )
-
         return result
 
     def build_service_tasks(

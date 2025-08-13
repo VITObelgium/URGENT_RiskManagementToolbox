@@ -305,7 +305,100 @@ Recently the following optimization problem(s) are supported:
 
 If the user does not define the optimization strategy, the default value is `maximize`.
 
-#### 3.1. Example of the configuration file
+#### 3.1. Optimization parameters: linear inequalities
+
+You can optionally express additional relationships between variables using sparse linear (in)equalities.
+
+These have the following norm form:
+
+```json
+"optimization_parameters": {
+  "optimization_strategy": "maximize",
+  "linear_inequalities": {
+    "A": [ {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0} ],
+    "b": [30.0, 3000.0],
+    "sense": [">=", "<="]
+  }
+}
+```
+
+Each row (same index across `A`, `b`, `sense`) defines a single inequality over selected well attributes:
+
+```
+sum_j  (coeff_j * VAR_j)   (sense)   b_i
+```
+
+In the example above this yields the following constraints:
+
+```
+INJ.md + PRO.md >= 30.0   (lower bound)
+INJ.md + PRO.md <= 3000.0  (upper bound)
+```
+
+##### Variable naming
+
+Keys inside every `A` row use the pattern `<WELL_NAME>.<attribute>` (e.g. `INJ.md`, `PRO.md`).
+
+All variables across all rows must reference the *same* attribute suffix (validator rule). For instance you may combine many wells on `md`, or many wells on `wellhead.x`, but you cannot mix `md` and `wellhead.x` in the same linear inequalities block.
+
+Allowed senses per row:
+
+* `"<="`  (less‑or‑equal)
+* `">="`  (greater‑or‑equal)
+* `"<"`   (treated as `<=` – strictness ignored for continuous search)
+* `">"`   (treated as `>=`)
+
+If `sense` is omitted, all rows default to `"<="`.
+
+##### Multiple independent constraints
+
+You may supply any number of rows. Some common patterns:
+
+Lower & upper bounds on sum of MDs:
+
+```json
+"linear_inequalities": {
+  "A": [ {"INJ.md": 1, "PRO.md": 1}, {"INJ.md": 1, "PRO.md": 1} ],
+  "b": [1000, 3000],
+  "sense": [">=", "<="]
+}
+```
+
+Individual per‑well minimums expressed sparsely (can be redundant with simple bounds if you already set them in `boundaries`):
+
+```json
+"linear_inequalities": {
+  "A": [ {"INJ.md": 1}, {"PRO.md": 1} ],
+  "b": [800, 800],
+  "sense": [">=", ">="]
+}
+```
+
+During validation the upper bound is automatically reduced if it exceeds a physically plausible maximum derived from each well's positional search box.
+
+
+##### Full example combining all optimization parameters
+
+```jsonc
+{
+  "well_placement": [ /* ... wells definition ... */ ],
+  "optimization_parameters": {
+    "optimization_strategy": "minimize",
+    "linear_inequalities": {
+      "A": [
+        {"INJ.md": 1, "PRO.md": 1},   // corridor lower
+        {"INJ.md": 1, "PRO.md": 1},   // corridor upper
+        {"INJ.md": 1},                  // individual min
+        {"PRO.md": 1}                   // individual min
+      ],
+      "b": [1200, 5000, 800, 800],
+      "sense": [">=", "<=", ">=", ">="]
+    }
+  }
+}
+```
+
+#### 3.2. Example of the configuration file
 
 Well placement problem for two wells with maximization optimization strategy:
    ```json
@@ -363,10 +456,17 @@ Well placement problem for two wells with maximization optimization strategy:
        }
      ],
       "optimization_parameters": {
-        "optimization_strategy": "maximize"
+        "optimization_strategy": "maximize",
+        "linear_inequalities": {
+          "A": [ {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0} ],
+          "b": [30.0, 3000.0],
+          "sense": [">=", "<="]
+        }
       }
    }
    ```
+
+---
 
 ### 4. Toolbox running
 

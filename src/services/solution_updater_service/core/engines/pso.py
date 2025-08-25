@@ -79,15 +79,13 @@ class PSOEngine(OptimizationEngineInterface):
             penalized_results = results.copy()
 
         if self._state is None:
-            if A is not None and b is not None:
-                parameters = self._repair_infeasible_positions(parameters, A, b, lb, ub)
             self._initialize_state_on_first_call(parameters, penalized_results)
 
         self._update_state_positions(parameters, penalized_results)
         new_velocities = self._calculate_new_velocity(parameters)
         self._update_state_velocities(new_velocities)
         new_positions = self._calculate_new_position(parameters, new_velocities)
-        self._update_metrics(results)
+        self._update_metrics(penalized_results)
 
         new_positions = self._reflect_and_clip_positions(new_positions, lb, ub)
 

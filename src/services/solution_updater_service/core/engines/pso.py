@@ -79,6 +79,8 @@ class PSOEngine(OptimizationEngineInterface):
             penalized_results = results.copy()
 
         if self._state is None:
+            if A is not None and b is not None:
+                parameters = self._repair_infeasible_positions(parameters, A, b, lb, ub)
             self._initialize_state_on_first_call(parameters, penalized_results)
 
         self._update_state_positions(parameters, penalized_results)
@@ -189,22 +191,41 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64],
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
+        max_iter: int = 10,
+        tol: float = 1e-3,
     ) -> npt.NDArray[np.float64]:
-        """Repairs positions that violate linear constraints. Positions that violate constraints are those that exceed the bounds defined by `b`."""
-        Ax = (A @ positions.T).T
-        violations = Ax - b
-        violation_mask = violations > 1e-6
+        """
+        Iteratively repairs positions that violate linear constraints using iterative projection.
 
-        if not np.any(violation_mask):
-            return positions
+        Args:
+            positions (npt.NDArray[np.float64]): The particle positions to repair.
+            A (npt.NDArray[np.float64]): The constraint matrix.
+            b (npt.NDArray[np.float64]): The constraint vector.
+            lb (npt.NDArray[np.float64]): The lower bounds for each variable.
+            ub (npt.NDArray[np.float64]): The upper bounds for each variable.
+            max_iter (int): The maximum number of projections.
+            tol (float): The tolerance for constraint violation.
 
-        for i in range(positions.shape[0]):
-            if not np.any(violation_mask[i]):
-                continue
+        Returns:
+            npt.NDArray[np.float64]: The repaired particle positions.
+        """
+        for _ in range(max_iter):
+            Ax = (A @ positions.T).T
+            violations = Ax - b
+            violation_mask = violations > tol
 
-            for a_row, excess in zip(
-                A[violation_mask[i]], violations[i][violation_mask[i]]
-            ):
+            if not np.any(violation_mask):
+                break
+
+            for i in range(positions.shape[0]):
+                if not np.any(violation_mask[i]):
+                    continue
+
+                # greedily fix the most violated constraint
+                most_violated_idx = np.argmax(violations[i])
+                a_row = A[most_violated_idx]
+                excess = violations[i, most_violated_idx]
+
                 denominator = np.dot(a_row, a_row)
                 if denominator > 1e-9:
                     positions[i] -= (excess / denominator) * a_row
@@ -218,7 +239,6 @@ class PSOEngine(OptimizationEngineInterface):
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         """Applies reflection at boundaries and ensures particles remain within bounds."""
-        state: _PSOState = ensure_not_none(self._state)
 
         # Find out-of-bounds positions
         out_of_bounds = (new_positions < lb) | (new_positions > ub)
@@ -229,8 +249,9 @@ class PSOEngine(OptimizationEngineInterface):
         )
         new_positions[out_of_bounds] = reflected_positions[out_of_bounds]
 
-        # Reverse velocities where reflection occurred
-        state.velocities[out_of_bounds] *= -1
+        # Reverse velocities where reflection occurred when state is initialized
+        if self._state:
+            self._state.velocities[out_of_bounds] *= -1
 
         # Ensure positions are strictly within bounds (edge-case handling)
         return np.clip(new_positions, lb, ub)

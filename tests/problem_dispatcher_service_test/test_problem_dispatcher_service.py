@@ -274,3 +274,29 @@ def test_initialization_failure(dict_problem_definition):
     dict_problem_definition["well_placement"][0]["optimization_constraints"] = "invalid"
     with pytest.raises(ValidationError):
         ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_problem_dispatcher_service_initializes_correct_population(
+    dict_problem_definition,
+):
+    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    assert service._constraints
+    response = service.process_iteration()
+    assert len(response.solution_candidates) > 0
+
+    # Extract md bounds from the fixture for W1
+    w1_md_bounds = dict_problem_definition["well_placement"][0][
+        "optimization_constraints"
+    ]["md"]
+    lb = w1_md_bounds["lb"]
+    ub = w1_md_bounds["ub"]
+
+    for candidate in response.solution_candidates:
+        # Each candidate should include a WellManagementService task with the ControlVector
+        assert ServiceType.WellManagementService in candidate.tasks
+        payload = candidate.tasks[ServiceType.WellManagementService]
+        control_items = payload.control_vector.items
+
+        assert "well_placement#W1#md" in control_items
+        md_val = control_items["well_placement#W1#md"]
+        assert lb <= md_val <= ub

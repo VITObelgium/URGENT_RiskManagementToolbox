@@ -252,7 +252,7 @@ class _Mapper:
         ]
 
     def get_variables_lb_and_ub_boundary(
-        self, constrains: OptimizationConstrains | None
+        self, constraints: OptimizationConstrains | None
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Retrieves the lower and upper boundary values for control vector parameters
@@ -264,7 +264,7 @@ class _Mapper:
         for the lower bound and `np.inf` (positive infinity) for the upper bound.
 
         Args:
-            constrains (OptimizationConstrains | None):
+            constraints (OptimizationConstrains | None):
                 An `OptimizationBoundaries` object containing boundary constraints for the
                 control vector parameters. The boundaries include per-parameter lower
                 and upper bounds structured as key-value pairs, where the key is the
@@ -295,7 +295,7 @@ class _Mapper:
             raise RuntimeError(
                 "Mapper state is not initialized, call 'to_numpy' first."
             )
-        if not constrains or not constrains.boundaries:
+        if not constraints or not constraints.boundaries:
             return np.full(self._state.control_vector_length, -np.inf), np.full(
                 self._state.control_vector_length, np.inf
             )
@@ -303,7 +303,7 @@ class _Mapper:
         lb = np.full(self._state.control_vector_length, -np.inf)
         ub = np.full(self._state.control_vector_length, np.inf)
 
-        for k, (vlb, vub) in constrains.boundaries.items():
+        for k, (vlb, vub) in constraints.boundaries.items():
             lb[self._state.control_vector_mapping[k]] = vlb
             ub[self._state.control_vector_mapping[k]] = vub
 

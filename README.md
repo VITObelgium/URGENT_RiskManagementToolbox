@@ -197,7 +197,7 @@ Connector allows exchange information (simulation configuration and simulation r
 
 ### 3. Toolbox configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s),
-initial state, and variable constrains.
+initial state, and variable constraints.
 
 Recently the following optimization problem(s) are supported:
 
@@ -213,7 +213,7 @@ Recently the following optimization problem(s) are supported:
             "initial_state": {
 
             },
-            "optimization_constrains": {
+            "optimization_constraints": {
 
             }
          },
@@ -266,13 +266,13 @@ Recently the following optimization problem(s) are supported:
    ```
    > **Note:** Recently only one perforation range is supported
 
-   Each well initial state is followed by the optimization constrains part, where user can pick which parameters from
+   Each well initial state is followed by the optimization constraints part, where user can pick which parameters from
    well template will be used in an optimization process:
 
-   As an example, if a user decides to optimize the x and y position of wellhead as well as well md, the optimization constrains will take the following form:
+   As an example, if a user decides to optimize the x and y position of wellhead as well as well md, the optimization constraints will take the following form:
    ```json
    {
-         "optimization_constrains": {
+         "optimization_constraints": {
            "wellhead": {
              "x": {
                "lb": 10,
@@ -416,7 +416,7 @@ Well placement problem for two wells with maximization optimization strategy:
              "z": 0
            }
          },
-         "optimization_constrains": {
+         "optimization_constraints": {
            "wellhead": {
              "x": {
                "lb": 10,
@@ -441,7 +441,7 @@ Well placement problem for two wells with maximization optimization strategy:
              "z": 0
            }
          },
-         "optimization_constrains": {
+         "optimization_constraints": {
            "wellhead": {
              "x": {
                "lb": 10,

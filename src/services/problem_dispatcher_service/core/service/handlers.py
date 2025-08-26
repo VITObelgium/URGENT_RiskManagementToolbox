@@ -81,7 +81,7 @@ class WellPlacementHandler:
         result = {}
         for item in items:
             # Add existing constraints (e.g., wellhead x, y)
-            flattened = _flatten_optimization_parameters(item.optimization_constrains)
+            flattened = _flatten_optimization_parameters(item.optimization_constraints)
             for key, value in flattened.items():
                 result[f"well_placement#{item.well_name}{separator}{key}"] = value
         return result

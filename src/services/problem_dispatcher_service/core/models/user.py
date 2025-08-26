@@ -26,7 +26,7 @@ type OptimizationConstrains = dict[VariableName, VariableBnd | OptimizationConst
 class WellPlacementItem(BaseModel, extra="forbid"):
     well_name: str
     initial_state: WellModel
-    optimization_constrains: OptimizationConstrains
+    optimization_constraints: OptimizationConstrains
 
     @model_validator(mode="before")
     @classmethod
@@ -128,6 +128,39 @@ class ServiceType(StrEnum):
 class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     well_placement: list[WellPlacementItem]
     optimization_parameters: OptimizationParameters
+
+    @model_validator(mode="after")
+    def check_linear_inequalities_variables_bounds(self):
+        linear_variables = set()
+        # Get well names with variables used in linear inequalities
+        try:
+            for A_row in self.optimization_parameters.linear_inequalities["A"]:
+                for key in A_row.keys():
+                    linear_variables.add(key)
+        except (TypeError, KeyError):
+            return self  # No linear inequalities defined, nothing to check
+
+        # Check if all wells with defined variables in linear inequalities
+        # have bounds defined in optimization_constraints
+        wells_with_linear = {var.split(".")[0] for var in linear_variables}
+        for well in self.well_placement:
+            if well.well_name in wells_with_linear:
+                if well.optimization_constraints is None:
+                    raise ValueError(
+                        f"Well '{well.well_name}' is used in linear inequalities but has no optimization constraints defined"
+                    )
+                # Extract top-level variable name from potentially nested attribute
+                variable_names = [
+                    var.split(".", 1)[1].split(".", 1)[0]
+                    for var in linear_variables
+                    if var.split(".", 1)[0] == well.well_name
+                ]
+                for var_name in variable_names:
+                    if var_name not in well.optimization_constraints.keys():
+                        raise ValueError(
+                            f"Well '{well.well_name}' is used in linear inequalities but has no optimization constraint defined for '{var_name}'"
+                        )
+        return self
 
 
 type ServiceRequest = list[

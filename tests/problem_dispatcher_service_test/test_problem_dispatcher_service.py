@@ -24,7 +24,7 @@ def dict_problem_definition():
                     "md": 200,
                     "perforations": [{"start_md": 100.0, "end_md": 200.0}],
                 },
-                "optimization_constrains": {
+                "optimization_constraints": {
                     "wellhead": {
                         "x": {"lb": 0, "ub": 100},
                         "y": {"lb": 10, "ub": 200},
@@ -40,8 +40,9 @@ def dict_problem_definition():
                     "md": 200,
                     "perforations": [{"start_md": 100.0, "end_md": 200.0}],
                 },
-                "optimization_constrains": {
-                    "wellhead": {"x": {"lb": 0, "ub": 100}, "y": {"lb": 10, "ub": 200}}
+                "optimization_constraints": {
+                    "wellhead": {"x": {"lb": 0, "ub": 100}, "y": {"lb": 10, "ub": 200}},
+                    "md": {"lb": 0, "ub": 300},
                 },
             },
         ],
@@ -184,6 +185,79 @@ def test_get_linear_inequalities(dict_problem_definition):
     assert "b" in inequalities
 
 
+def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.wellhead.x": 1, "W2.wellhead.x": 1}],
+        "b": [200],
+        "sense": ["<="],
+    }
+    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    inequalities = service.get_linear_inequalities()
+    assert inequalities is not None
+
+
+def test_linear_inequalities_missing_well_constraint_raises():
+    pd = {
+        "well_placement": [
+            {
+                "well_name": "W1",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "md": 200,
+                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                },
+                "optimization_constraints": {"md": {"lb": 0, "ub": 300}},
+            },
+            {
+                "well_name": "W2",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 10, "y": 10, "z": 0},
+                    "md": 200,
+                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                },
+                "optimization_constraints": None,
+            },
+        ],
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "linear_inequalities": {
+                "A": [{"W1.md": 1, "W2.md": 1}],
+                "b": [100],
+            },
+        },
+    }
+
+    with pytest.raises(ValidationError):
+        ProblemDispatcherService(problem_definition=pd)
+
+
+def test_linear_inequalities_missing_variable_in_constraints_raises():
+    # W1 has optimization_constraints but missing 'md' entry required by inequalities
+    pd = {
+        "well_placement": [
+            {
+                "well_name": "W1",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "md": 200,
+                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                },
+                "optimization_constraints": {"wellhead": {"x": {"lb": 0, "ub": 100}}},
+            }
+        ],
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "linear_inequalities": {"A": [{"W1.md": 1}], "b": [100]},
+        },
+    }
+
+    with pytest.raises(ValidationError):
+        ProblemDispatcherService(problem_definition=pd)
+
+
 def test_process_iteration_exception_handling(dict_problem_definition, monkeypatch):
     def mock_build(*args, **kwargs):
         raise ValueError("Test Exception")
@@ -197,6 +271,6 @@ def test_process_iteration_exception_handling(dict_problem_definition, monkeypat
 
 
 def test_initialization_failure(dict_problem_definition):
-    dict_problem_definition["well_placement"][0]["optimization_constrains"] = "invalid"
+    dict_problem_definition["well_placement"][0]["optimization_constraints"] = "invalid"
     with pytest.raises(ValidationError):
         ProblemDispatcherService(problem_definition=dict_problem_definition)

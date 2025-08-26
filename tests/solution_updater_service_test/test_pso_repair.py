@@ -164,3 +164,35 @@ def test_pso_repair_deterministic_with_seed():
     assert np.allclose(
         positions1, positions2
     ), f"Repair not deterministic with fixed seed:\n{positions1}\n{positions2}"
+
+
+def test_pso_keeps_md_within_bounds_when_optimal_out_of_reach():
+    """If the unconstrained optimum lies beyond the md upper bound, PSO must keep values within [lb, ub]."""
+    rng_seed = 123
+    engine = PSOEngine(seed=rng_seed)
+
+    parameters = np.array([[95.0], [96.0], [97.0]], dtype=float)
+    results = np.array([[10.0], [9.0], [8.0]], dtype=float)
+
+    lb = np.array([0.0], dtype=float)
+    ub = np.array([100.0], dtype=float)
+
+    _ = engine.update_solution_to_next_iter(parameters, results, lb, ub)
+
+    # Force large positive velocities to attempt to move beyond upper bound
+    engine._state.velocities = np.array([[20.0], [30.0], [50.0]], dtype=float)
+
+    # The unconstrained step would be parameters + velocities and should exceed ub
+    attempted = parameters + engine._state.velocities
+    assert np.any(
+        attempted > ub
+    ), "Test setup failed to push unconstrained positions beyond ub"
+
+    # The second call should clip/reflection the positions to remain within bounds
+    new_positions = engine.update_solution_to_next_iter(parameters, results, lb, ub)
+
+    assert np.all(new_positions <= ub + 1e-8), f"Positions above ub: {new_positions}"
+    assert np.all(new_positions >= lb - 1e-8), f"Positions below lb: {new_positions}"
+    assert not np.allclose(
+        new_positions, parameters
+    ), "Positions did not change as expected"

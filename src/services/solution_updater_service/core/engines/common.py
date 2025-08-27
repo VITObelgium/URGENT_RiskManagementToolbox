@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.solution_updater_service.core.utils import ensure_not_none
 
 
 @dataclass(frozen=True)

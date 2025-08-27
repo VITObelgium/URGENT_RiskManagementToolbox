@@ -11,8 +11,10 @@ from services.solution_updater_service.core.models import (
 from services.solution_updater_service.core.service import (
     SolutionUpdaterService,
 )
-from services.solution_updater_service.core.utils import get_numpy_values
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.solution_updater_service.core.utils import (
+    ensure_not_none,
+    get_numpy_values,
+)
 
 engine = OptimizationEngine.PSO
 

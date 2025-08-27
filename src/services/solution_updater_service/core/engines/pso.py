@@ -1,10 +1,10 @@
 import numpy as np
 from numpy import typing as npt
 
-from services.solution_updater_service.core.engines.common import (
+from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.solution_updater_service.core.utils import ensure_not_none
 
 
 class _PSOState:

@@ -79,6 +79,7 @@ package = false
 [dependency-groups]
 dev = [
     "coverage==7.6.10",
+    "dash>=3.2.0",
     "mypy==1.15.0",
     "mypy-protobuf==3.6.0",
     "pre-commit==4.0.1",

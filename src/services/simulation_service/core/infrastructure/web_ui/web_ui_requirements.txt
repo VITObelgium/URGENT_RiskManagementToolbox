@@ -1,0 +1,4 @@
+dash==3.2.0
+flask==3.1.2
+grpcio==1.69.0
+grpcio-tools==1.69.0

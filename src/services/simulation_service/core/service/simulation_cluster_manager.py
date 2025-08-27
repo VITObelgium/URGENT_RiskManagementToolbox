@@ -75,23 +75,39 @@ class SimulationClusterManager:
             raise
 
     @staticmethod
-    def start_simulation_cluster(worker_count: int = 3) -> None:
+    def start_simulation_cluster(
+        worker_count: int = 3, run_with_web_app: bool = False
+    ) -> None:
         """
         Start the Docker-based simulation cluster with the specified worker count.
         """
         logger.info(f"Starting the simulation cluster with {worker_count} workers...")
 
         with core_directory():
+            build_command = [
+                "docker",
+                "compose",
+                "up",
+                "-d",
+                "--scale",
+                f"worker={worker_count}",
+            ]
+            if run_with_web_app:
+                build_command = [
+                    "docker",
+                    "compose",
+                    "--profile",
+                    "webui",
+                    "up",
+                    "-d",
+                    "--scale",
+                    f"worker={worker_count}",
+                ]
+                logger.info("Web application will be started for visualization.")
+
             try:
                 result = subprocess.run(
-                    [
-                        "docker",
-                        "compose",
-                        "up",
-                        "-d",
-                        "--scale",
-                        f"worker={worker_count}",
-                    ],
+                    build_command,
                     check=True,
                     capture_output=True,
                     text=True,
@@ -134,14 +150,16 @@ class SimulationClusterManager:
 
 
 @contextmanager
-def simulation_cluster_context_manager(worker_count: int = 3):
+def simulation_cluster_context_manager(
+    worker_count: int = 3, run_with_web_app: bool = False
+):
     """
     Context manager for managing the simulation cluster lifecycle.
     """
     logger.info("Entering simulation cluster context.")
     SimulationClusterManager.build_simulation_cluster_images()
     SimulationClusterManager.prune_dangling_images()
-    SimulationClusterManager.start_simulation_cluster(worker_count)
+    SimulationClusterManager.start_simulation_cluster(worker_count, run_with_web_app)
     try:
         yield
     finally:

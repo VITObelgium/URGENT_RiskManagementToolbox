@@ -38,6 +38,21 @@ services:
     deploy:
       replicas: 1
 
+  webui:
+    image: web-ui:latest
+    build:
+      context: ../../../../
+      dockerfile: src/services/simulation_service/core/infrastructure/web_ui/Dockerfile.webui
+      args:
+        WEB_APP_PORT: 50001
+    container_name: web-ui
+    ports:
+      - "50001:50001"
+    networks:
+      - grpc-network
+    profiles:
+      - webui
+
 networks:
   grpc-network:
     driver: bridge

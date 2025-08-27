@@ -1,0 +1,23 @@
+FROM python:3.12-alpine AS builder
+
+WORKDIR /app
+
+COPY src/services/simulation_service/core/infrastructure/web_ui/web_ui_requirements.txt .
+RUN pip install --no-cache-dir uv && \
+    uv pip install --no-cache-dir -r web_ui_requirements.txt --target /install
+
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local/lib/python3.12/site-packages
+
+COPY src/services/simulation_service/core/infrastructure/web_ui/src/ /app/
+
+ARG WEB_APP_PORT
+
+ENV WEB_APP_PORT=${WEB_APP_PORT}
+
+EXPOSE ${WEB_APP_PORT}
+
+CMD [ "python", "/app/main.py" ]

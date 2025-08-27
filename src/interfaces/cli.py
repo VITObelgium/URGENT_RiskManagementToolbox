@@ -44,6 +44,12 @@ def cli():
         default=10,
         help="Maximum number of generations. Default is 10.",
     )
+    parser.add_argument(
+        "--run-with-web-app",
+        type=bool,
+        default=False,
+        help="Run the web application for visualization and GUI. Default is False.",
+    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -69,6 +75,7 @@ def cli():
             n_size=args.population_size,
             patience=args.patience,
             max_generations=args.max_generations,
+            run_with_web_app=args.run_with_web_app,
         )
         logger.info("Risk management process completed successfully.")
     except Exception as e:

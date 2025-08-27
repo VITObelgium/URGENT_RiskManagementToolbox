@@ -32,6 +32,7 @@ def run_risk_management(
     n_size: int = 10,
     patience: int = 10,
     max_generations: int = 10,
+    run_with_web_app: bool = False,
 ):
     """
     Main entry point for running risk management.
@@ -42,6 +43,7 @@ def run_risk_management(
         n_size (int, optional): Number of samples for the dispatcher. Defaults to 10.
         patience: Patience limit for the optimization process.
         max_generations: Maximum number of generations for the optimization process.
+        run_with_web_app: Whether to run the web application for visualization and UI. Defaults to False.
     """
     logger.info("Starting risk management process...")
     logger.debug(
@@ -54,7 +56,9 @@ def run_risk_management(
     physical_cores = psutil.cpu_count(logical=False)
     worker_count = max(1, math.floor(physical_cores / 2))
 
-    with simulation_cluster_context_manager(worker_count=worker_count):
+    with simulation_cluster_context_manager(
+        worker_count=worker_count, run_with_web_app=run_with_web_app
+    ):
         try:
             SimulationService.transfer_simulation_model(
                 simulation_model_archive=simulation_model_archive

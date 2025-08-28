@@ -4,7 +4,11 @@ from numpy import typing as npt
 from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
-from services.solution_updater_service.core.utils import ensure_not_none
+from services.solution_updater_service.core.utils import (
+    ensure_not_none,
+    reflect_and_clip,
+    repair_against_linear_inequalities,
+)
 
 
 class _PSOState:
@@ -86,11 +90,10 @@ class PSOEngine(OptimizationEngineInterface):
         self._update_state_velocities(new_velocities)
         new_positions = self._calculate_new_position(parameters, new_velocities)
         self._update_metrics(penalized_results)
-
         new_positions = self._reflect_and_clip_positions(new_positions, lb, ub)
 
         if A is not None and b is not None:
-            new_positions = self._repair_infeasible_positions(
+            new_positions = repair_against_linear_inequalities(
                 new_positions, A, b, lb, ub
             )
 
@@ -182,53 +185,11 @@ class PSOEngine(OptimizationEngineInterface):
         penalty_factor = 1e6 * (np.median(np.abs(results)) + 1.0)
         return results + penalty_factor * total_violation
 
-    def _repair_infeasible_positions(
-        self,
-        positions: npt.NDArray[np.float64],
-        A: npt.NDArray[np.float64],
-        b: npt.NDArray[np.float64],
-        lb: npt.NDArray[np.float64],
-        ub: npt.NDArray[np.float64],
-        max_iter: int = 10,
-        tol: float = 1e-3,
-    ) -> npt.NDArray[np.float64]:
-        """
-        Iteratively repairs positions that violate linear constraints using iterative projection.
-
-        Args:
-            positions (npt.NDArray[np.float64]): The particle positions to repair.
-            A (npt.NDArray[np.float64]): The constraint matrix.
-            b (npt.NDArray[np.float64]): The constraint vector.
-            lb (npt.NDArray[np.float64]): The lower bounds for each variable.
-            ub (npt.NDArray[np.float64]): The upper bounds for each variable.
-            max_iter (int): The maximum number of projections.
-            tol (float): The tolerance for constraint violation.
-
-        Returns:
-            npt.NDArray[np.float64]: The repaired particle positions.
-        """
-        for _ in range(max_iter):
-            Ax = (A @ positions.T).T
-            violations = Ax - b
-            violation_mask = violations > tol
-
-            if not np.any(violation_mask):
-                break
-
-            for i in range(positions.shape[0]):
-                if not np.any(violation_mask[i]):
-                    continue
-
-                # greedily fix the most violated constraint
-                most_violated_idx = np.argmax(violations[i])
-                a_row = A[most_violated_idx]
-                excess = violations[i, most_violated_idx]
-
-                denominator = np.dot(a_row, a_row)
-                if denominator > 1e-9:
-                    positions[i] -= (excess / denominator) * a_row
-
-        return self._reflect_and_clip_positions(positions, lb, ub)
+    def _repair_infeasible_positions(self, *args, **kwargs):
+        # Deprecated in favor of shared helper. Keep signature for backward compatibility if referenced elsewhere.
+        positions, A, b, lb, ub = args[:5]
+        repaired = repair_against_linear_inequalities(positions, A, b, lb, ub)
+        return repaired
 
     def _reflect_and_clip_positions(
         self,
@@ -237,19 +198,11 @@ class PSOEngine(OptimizationEngineInterface):
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         """Applies reflection at boundaries and ensures particles remain within bounds."""
-
-        # Find out-of-bounds positions
-        out_of_bounds = (new_positions < lb) | (new_positions > ub)
-
-        # Reflect positions
-        reflected_positions = np.where(
-            new_positions < lb, 2 * lb - new_positions, 2 * ub - new_positions
-        )
-        new_positions[out_of_bounds] = reflected_positions[out_of_bounds]
+        clipped, out_of_bounds = reflect_and_clip(new_positions, lb, ub)
+        new_positions = clipped
 
         # Reverse velocities where reflection occurred when state is initialized
         if self._state:
             self._state.velocities[out_of_bounds] *= -1
 
-        # Ensure positions are strictly within bounds (edge-case handling)
-        return np.clip(new_positions, lb, ub)
+        return new_positions

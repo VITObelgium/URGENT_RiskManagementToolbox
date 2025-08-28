@@ -2,7 +2,6 @@ from typing import Any, Protocol
 
 from services.problem_dispatcher_service.core.models import (
     OptimizationConstrains,
-    OptimizationParameters,
     VariableBnd,
     WellPlacementItem,
 )
@@ -27,14 +26,15 @@ class ProblemTypeHandler(Protocol):
         ...
 
     def build_constraints(
-        self, items: list[Any], optimization_parameters: OptimizationParameters
+        self, items: list[Any], *args: Any, **kwargs: Any
     ) -> dict[str, tuple[float, float]]:
         """
         Build the constraints for the optimization problem.
 
         Args:
             items (list[Any]): A list of items to build constraints from.
-            optimization_parameters (OptimizationParameters): Global optimization parameters.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
 
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
@@ -58,21 +58,19 @@ class ProblemTypeHandler(Protocol):
         ...
 
 
-class WellPlacementHandler:
+class WellPlacementHandler(ProblemTypeHandler):
     def build_initial_state(self, items: list[WellPlacementItem]) -> dict[str, Any]:
         return {item.well_name: item.initial_state.model_dump() for item in items}
 
     def build_constraints(
         self,
         items: list[WellPlacementItem],
-        optimization_parameters: OptimizationParameters,
         separator: str = "#",
     ) -> dict[str, tuple[float, float]]:
         """
         Build the constraints for the well placement optimization problem.
         Args:
             items (list[WellPlacementItem]): A list of well placement items.
-            optimization_parameters (OptimizationParameters): Global optimization parameters.
             separator (str): Separator used to construct constraint keys.
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers

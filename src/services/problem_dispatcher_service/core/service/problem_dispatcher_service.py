@@ -80,7 +80,10 @@ class ProblemDispatcherService:
         try:
             if next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
-                    self._constraints, self._n_size, random.uniform
+                    self._constraints,
+                    self._n_size,
+                    random.uniform,
+                    self._linear_inequalities,
                 )
                 self.logger.debug("Generated control vectors: %s", control_vectors)
             else:
@@ -141,7 +144,6 @@ class ProblemDispatcherService:
         process_func: Callable[..., dict[str, Any] | Any],
         log_message: str,
         merge_results: bool = False,
-        pass_optimization_parameters: bool = False,
     ) -> dict[str, Any]:
         """
         Shared logic to process problem items for state building or constraints.
@@ -150,23 +152,15 @@ class ProblemDispatcherService:
             process_func (Callable): Function to process the problem items.
             log_message (str): Log message indicating the operation.
             merge_results (bool): If True, merge the processed results into one dictionary.
-            pass_optimization_parameters (bool): If True, pass optimization_parameters to process_func.
         """
-        self.logger.info(log_message)
+        self.logger.info(f"processing problem items: {log_message}")
         try:
             # Add type annotation for the result variable
             result: dict[str, Any] | None = {} if merge_results else None
             for problem_type, handler in self._handlers.items():
                 items = getattr(self._problem_definition, problem_type, None)
                 if items:
-                    if pass_optimization_parameters:
-                        processed_result = process_func(
-                            handler,
-                            items,
-                            optimization_parameters=self._problem_definition.optimization_parameters,
-                        )
-                    else:
-                        processed_result = process_func(handler, items)
+                    processed_result = process_func(handler, items)
 
                     if merge_results:
                         # Ensure result is always a dictionary when merge_results is True
@@ -198,7 +192,6 @@ class ProblemDispatcherService:
             process_func=lambda handler, items: handler.build_initial_state(items),
             log_message="Building initial state",
             merge_results=False,
-            pass_optimization_parameters=False,  # Do not pass optimization parameters
         )
 
     def _build_constraints(self) -> dict[str, tuple[float, float]]:
@@ -209,12 +202,7 @@ class ProblemDispatcherService:
             dict[str, tuple[float, float]]: Constraints of the problem.
         """
         return self._process_problem_items(
-            process_func=lambda handler,
-            items,
-            optimization_parameters: handler.build_constraints(
-                items, optimization_parameters
-            ),
+            process_func=lambda handler, items: handler.build_constraints(items),
             log_message="Building constraints",
             merge_results=True,
-            pass_optimization_parameters=True,  # Pass the optimization parameters
         )

@@ -46,7 +46,7 @@ def md_problem_definition():
             "optimization_strategy": "maximize",
             "linear_inequalities": {
                 "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-                "b": [3000.0],
+                "b": [5000.0],
                 "sense": ["<="],
             },
         },
@@ -108,3 +108,21 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
 
     # Since the target is above current positions, mean should increase (move toward ub)
     assert float(new_positions.mean()) >= float(parameters.mean())
+
+
+def test_initial_generation_respects_linear_inequalities(md_problem_definition):
+    """First population should satisfy INJ.md + PRO.md <= 5000 given md bounds [2000, 2700]."""
+    svc = ProblemDispatcherService(problem_definition=md_problem_definition, n_size=50)
+    resp = svc.process_iteration()
+    assert len(resp.solution_candidates) == 50
+
+    for sc in resp.solution_candidates:
+        payload = next(iter(sc.tasks.values()))
+        cv = payload.control_vector.items
+        inj = cv["well_placement#INJ#md"]
+        pro = cv["well_placement#PRO#md"]
+
+        assert 2000.0 <= inj <= 2700.0
+        assert 2000.0 <= pro <= 2700.0
+
+        assert inj + pro <= 5000.0 + 1e-6

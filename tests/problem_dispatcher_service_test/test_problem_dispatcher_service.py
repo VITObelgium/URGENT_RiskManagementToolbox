@@ -300,3 +300,159 @@ def test_problem_dispatcher_service_initializes_correct_population(
         assert "well_placement#W1#md" in control_items
         md_val = control_items["well_placement#W1#md"]
         assert lb <= md_val <= ub
+
+
+def test_linear_inequalities_unknown_well_raises():
+    pd = {
+        "well_placement": [
+            {
+                "well_name": "INJ",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "md": 200,
+                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                },
+                "optimization_constraints": {
+                    "wellhead": {
+                        "x": {"lb": 0, "ub": 100},
+                        "y": {"lb": 0, "ub": 100},
+                    },
+                    "md": {"lb": 0, "ub": 300},
+                },
+            },
+            {
+                "well_name": "PRO",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "md": 200,
+                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                },
+                "optimization_constraints": {
+                    "wellhead": {
+                        "x": {"lb": 0, "ub": 100},
+                        "y": {"lb": 0, "ub": 100},
+                    },
+                    "md": {"lb": 0, "ub": 300},
+                },
+            },
+        ],
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "linear_inequalities": {
+                "A": [{"Brent.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0}],
+                "b": [2100.0, 5000.0],
+                "sense": [">=", "<="],
+            },
+        },
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=pd)
+
+
+def test_linear_inequalities_A_b_length_mismatch_raises(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.md": 1, "W2.md": 1}, {"W1.md": -1, "W2.md": 1}],
+        "b": [100],
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_linear_inequalities_invalid_sense_length_raises(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.md": 1, "W2.md": 1}],
+        "b": [100],
+        "sense": ["<=", ">="],
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1md": 1}],
+        "b": [100],
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_linear_inequalities_inconsistent_attribute_suffix_raises(
+    dict_problem_definition,
+):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.md": 1, "W2.wellhead.x": 1}],
+        "b": [100],
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definition):
+    # Constraints only define wellhead.x/y, but A references wellhead.z
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.wellhead.z": 1}],
+        "b": [10],
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_duplicate_well_names_raises():
+    pd = {
+        "well_placement": [
+            {
+                "well_name": "W1",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "md": 100,
+                    "perforations": [{"start_md": 20.0, "end_md": 80.0}],
+                },
+                "optimization_constraints": {"md": {"lb": 0, "ub": 200}},
+            },
+            {
+                "well_name": "W1",
+                "initial_state": {
+                    "well_type": "IWell",
+                    "wellhead": {"x": 10, "y": 10, "z": 0},
+                    "md": 150,
+                    "perforations": [{"start_md": 50.0, "end_md": 140.0}],
+                },
+                "optimization_constraints": {"md": {"lb": 0, "ub": 300}},
+            },
+        ],
+        "optimization_parameters": {"optimization_strategy": "maximize"},
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=pd)
+
+
+def test_variable_bounds_lb_gt_ub_raises(dict_problem_definition):
+    dict_problem_definition["well_placement"][0]["optimization_constraints"]["md"] = {
+        "lb": 100,
+        "ub": 50,
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_linear_inequalities_non_numeric_values_raises(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.md": "one"}],
+        "b": ["hundred"],
+    }
+    with pytest.raises((ValidationError, TypeError)):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)
+
+
+def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"W1.md": 1}],
+        "b": [100],
+        "sense": ["!="],
+    }
+    with pytest.raises(ValidationError):
+        ProblemDispatcherService(problem_definition=dict_problem_definition)

@@ -4,6 +4,8 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
+from pydantic.functional_validators import AfterValidator
+from typing_extensions import Annotated
 
 from common import OptimizationStrategy
 from services.problem_dispatcher_service.core.models import ControlVector, WellModel
@@ -13,10 +15,22 @@ class VariableBnd(BaseModel, extra="forbid"):
     lb: float = Field(default=float("-inf"))
     ub: float = Field(default=float("inf"))
 
+    @model_validator(mode="after")
+    def check_bounds(self) -> "VariableBnd":
+        if self.lb > self.ub:
+            raise ValueError("Variable bounds invalid: lb must be <= ub")
+        return self
+
 
 class MDBnd(BaseModel, extra="forbid"):
     lb: float = Field(default=0.0)
     ub: float = Field(default=float("inf"))
+
+    @model_validator(mode="after")
+    def check_bounds(self) -> "MDBnd":
+        if self.lb > self.ub:
+            raise ValueError("MD bounds invalid: lb must be <= ub")
+        return self
 
 
 type VariableName = str
@@ -71,13 +85,13 @@ class OptimizationParameters(BaseModel, extra="forbid"):
             raise KeyError("linear_inequalities must contain both 'A' and 'b'")
 
         if not isinstance(A, list) or not isinstance(b, list):
-            raise TypeError("'A' and 'b' in linear_inequalities must be lists")
+            raise ValueError("'A' and 'b' in linear_inequalities must be lists")
         if len(A) != len(b):
             raise ValueError("Number of rows in A must match length of b")
 
         if senses is not None:
             if not isinstance(senses, list):
-                raise TypeError("'sense' must be a list when provided")
+                raise ValueError("'sense' must be a list when provided")
             if len(senses) != len(A):
                 raise ValueError("Length of 'sense' must match number of rows in A")
             allowed = {"<=", ">=", "<", ">"}
@@ -125,41 +139,63 @@ class ServiceType(StrEnum):
     WellManagementService = "well_placement"
 
 
+def _unique_items(seq: list[WellPlacementItem]) -> list[WellPlacementItem]:
+    """Ensures that all well names in the sequence are unique."""
+    names = [w.well_name for w in seq]
+    if len(names) != len(set(names)):
+        dup = next(n for n in names if names.count(n) > 1)
+        raise ValueError(f"Duplicate well_name detected: {dup}")
+    return seq
+
+
+UniqueWellList = Annotated[list[WellPlacementItem], AfterValidator(_unique_items)]
+
+
 class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
-    well_placement: list[WellPlacementItem]
+    well_placement: UniqueWellList
     optimization_parameters: OptimizationParameters
 
     @model_validator(mode="after")
-    def check_linear_inequalities_variables_bounds(self):
-        linear_variables = set()
-        # Get well names with variables used in linear inequalities
-        try:
-            for A_row in self.optimization_parameters.linear_inequalities["A"]:
-                for key in A_row.keys():
-                    linear_variables.add(key)
-        except (TypeError, KeyError):
-            return self  # No linear inequalities defined, nothing to check
+    def check_linear_inequalities_constraints_compliance(self):
+        inequalities = getattr(
+            self.optimization_parameters, "linear_inequalities", None
+        )
+        if not inequalities or "A" not in inequalities:
+            return self
 
-        # Check if all wells with defined variables in linear inequalities
-        # have bounds defined in optimization_constraints
-        wells_with_linear = {var.split(".")[0] for var in linear_variables}
-        for well in self.well_placement:
-            if well.well_name in wells_with_linear:
-                if well.optimization_constraints is None:
+        def _has_nested_path(d: dict, path: list[str]) -> bool:
+            node = d
+            for p in path:
+                if not isinstance(node, dict) or p not in node:
+                    return False
+                node = node[p]
+            return True
+
+        constraints_by_well = {
+            w.well_name: (w.optimization_constraints or {}) for w in self.well_placement
+        }
+
+        for A_row in self.optimization_parameters.linear_inequalities["A"]:
+            for key in A_row.keys():
+                var = key
+                well_name, attr_path = var.split(".", 1)
+                top_attr = attr_path.split(".", 1)[0]
+                if well_name not in constraints_by_well:
                     raise ValueError(
-                        f"Well '{well.well_name}' is used in linear inequalities but has no optimization constraints defined"
+                        f"linear_inequalities reference unknown well: {well_name}"
                     )
-                # Extract top-level variable name from potentially nested attribute
-                variable_names = [
-                    var.split(".", 1)[1].split(".", 1)[0]
-                    for var in linear_variables
-                    if var.split(".", 1)[0] == well.well_name
-                ]
-                for var_name in variable_names:
-                    if var_name not in well.optimization_constraints.keys():
+                well_constraints = constraints_by_well[well_name]
+                if top_attr not in well_constraints:
+                    raise ValueError(
+                        f"Well '{well_name}' missing optimization constraint for '{top_attr}'"
+                    )
+                if "." in attr_path:
+                    parts = attr_path.split(".")
+                    if not _has_nested_path(well_constraints, parts):
                         raise ValueError(
-                            f"Well '{well.well_name}' is used in linear inequalities but has no optimization constraint defined for '{var_name}'"
+                            f"Constraint path missing for variable '{var}' in well '{well_name}'"
                         )
+
         return self
 
 

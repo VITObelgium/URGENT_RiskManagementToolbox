@@ -142,5 +142,5 @@ def test_simulation_cluster_context_manager(
 
     mock_build.assert_called_once()
     mock_prune.assert_called_once()
-    mock_start.assert_called_once_with(worker_count, False)
+    mock_start.assert_called_once_with(worker_count)
     mock_shutdown.assert_called_once()

@@ -25,18 +25,21 @@ class ProblemTypeHandler(Protocol):
 
         ...
 
-    def build_constraints(self, items: list[Any]) -> dict[str, tuple[float, float]]:
+    def build_constraints(
+        self, items: list[Any], *args: Any, **kwargs: Any
+    ) -> dict[str, tuple[float, float]]:
         """
         Build the constraints for the optimization problem.
 
         Args:
             items (list[Any]): A list of items to build constraints from.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
 
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
             and values as the bounds (lower, upper).
         """
-
         ...
 
     def build_service_tasks(
@@ -55,16 +58,28 @@ class ProblemTypeHandler(Protocol):
         ...
 
 
-class WellPlacementHandler:
+class WellPlacementHandler(ProblemTypeHandler):
     def build_initial_state(self, items: list[WellPlacementItem]) -> dict[str, Any]:
         return {item.well_name: item.initial_state.model_dump() for item in items}
 
     def build_constraints(
-        self, items: list[WellPlacementItem], separator: str = "#"
+        self,
+        items: list[WellPlacementItem],
+        separator: str = "#",
     ) -> dict[str, tuple[float, float]]:
+        """
+        Build the constraints for the well placement optimization problem.
+        Args:
+            items (list[WellPlacementItem]): A list of well placement items.
+            separator (str): Separator used to construct constraint keys.
+        Returns:
+            dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
+            and values as the bounds (lower, upper).
+        """
         result = {}
         for item in items:
-            flattened = _flatten_optimization_parameters(item.optimization_constrains)
+            # Add existing constraints (e.g., wellhead x, y)
+            flattened = _flatten_optimization_parameters(item.optimization_constraints)
             for key, value in flattened.items():
                 result[f"well_placement#{item.well_name}{separator}{key}"] = value
         return result

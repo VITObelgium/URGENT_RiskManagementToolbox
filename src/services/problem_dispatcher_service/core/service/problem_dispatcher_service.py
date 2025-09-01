@@ -45,6 +45,10 @@ class ProblemDispatcherService:
             self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()
             self._constraints = self._build_constraints()
+            opt_params = self._problem_definition.optimization_parameters
+            self._linear_inequalities: dict[str, list] | None = getattr(
+                opt_params, "linear_inequalities", None
+            )
             self._task_builder = TaskBuilder(
                 self._initial_state, self._handlers, self._service_type_map
             )
@@ -76,7 +80,10 @@ class ProblemDispatcherService:
         try:
             if next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
-                    self._constraints, self._n_size, random.uniform
+                    self._constraints,
+                    self._n_size,
+                    random.uniform,
+                    self._linear_inequalities,
                 )
                 self.logger.debug("Generated control vectors: %s", control_vectors)
             else:
@@ -110,6 +117,10 @@ class ProblemDispatcherService:
             self.logger.error("Error fetching boundaries: %s", str(e))
             raise
 
+    def get_linear_inequalities(self) -> dict[str, list] | None:
+        """Return sparse linear inequalities definition if provided."""
+        return self._linear_inequalities
+
     def get_optimization_strategy(self) -> OptimizationStrategy:
         """
         Get the optimization strategy for the problem.
@@ -130,7 +141,7 @@ class ProblemDispatcherService:
 
     def _process_problem_items(
         self,
-        process_func: Callable[[Any, Any], dict[str, Any] | Any],
+        process_func: Callable[..., dict[str, Any] | Any],
         log_message: str,
         merge_results: bool = False,
     ) -> dict[str, Any]:
@@ -138,15 +149,11 @@ class ProblemDispatcherService:
         Shared logic to process problem items for state building or constraints.
 
         Args:
-            process_func (Callable[[Any, Any], Union[Dict[str, Any], Any]]):
-                Function to process the problem items.
+            process_func (Callable): Function to process the problem items.
             log_message (str): Log message indicating the operation.
             merge_results (bool): If True, merge the processed results into one dictionary.
-
-        Returns:
-            Dict[str, Any]: A dictionary with the processed result.
         """
-        self.logger.info(log_message)
+        self.logger.info(f"processing problem items: {log_message}")
         try:
             # Add type annotation for the result variable
             result: dict[str, Any] | None = {} if merge_results else None
@@ -154,6 +161,7 @@ class ProblemDispatcherService:
                 items = getattr(self._problem_definition, problem_type, None)
                 if items:
                     processed_result = process_func(handler, items)
+
                     if merge_results:
                         # Ensure result is always a dictionary when merge_results is True
                         if result is None:
@@ -162,7 +170,7 @@ class ProblemDispatcherService:
                     else:
                         # Initialize result as a dictionary if it is None
                         if result is None:
-                            result = {}  # Create an empty dictionary
+                            result = {}
                         result[problem_type] = processed_result
                     self.logger.debug(
                         "%s for %s: %s", log_message, problem_type, processed_result
@@ -183,7 +191,7 @@ class ProblemDispatcherService:
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_initial_state(items),
             log_message="Building initial state",
-            merge_results=False,  # Keep result per problem_type
+            merge_results=False,
         )
 
     def _build_constraints(self) -> dict[str, tuple[float, float]]:
@@ -196,5 +204,5 @@ class ProblemDispatcherService:
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_constraints(items),
             log_message="Building constraints",
-            merge_results=True,  # Merge results into a single dict
+            merge_results=True,
         )

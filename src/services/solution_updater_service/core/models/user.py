@@ -18,6 +18,9 @@ class OptimizationEngine(StrEnum):
 
 class OptimizationConstrains(BaseModel, extra="forbid"):
     boundaries: dict[OptimizationVariable, tuple[LowerBound, UpperBound]]
+    A: list[dict[str, float]] | None = Field(default=None)
+    b: list[float] | None = Field(default=None)
+    sense: list[str] | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_lower_bound_is_less_than_upper_bound(self) -> OptimizationConstrains:
@@ -26,6 +29,42 @@ class OptimizationConstrains(BaseModel, extra="forbid"):
                 raise ValueError(
                     f"Lower bound for {variable} must be less than upper bound."
                 )
+        if (self.A is None) ^ (self.b is None):
+            raise ValueError("Both A and b must be provided together or both None")
+        if self.A is not None:
+            if len(self.A) != len(self.b):  # type: ignore[arg-type]
+                raise ValueError("A row count must equal length of b")
+            if self.sense is not None and len(self.sense) != len(self.A):
+                raise ValueError("sense length must match number of A rows")
+            if self.sense is None and self.A is not None:
+                self.sense = ["<="] * len(self.A)
+            allowed = {"<=", ">=", "<", ">"}
+            for s in self.sense or []:
+                if s not in allowed:
+                    raise ValueError(
+                        f"Invalid inequality direction '{s}'. Allowed: {sorted(allowed)}"
+                    )
+            suffix_ref: str | None = None
+            for idx, row in enumerate(self.A):
+                if not isinstance(row, dict) or not row:
+                    raise ValueError(f"Row {idx} in A must be a non-empty dict")
+                for var, coef in row.items():
+                    if not isinstance(coef, (int, float)):
+                        raise TypeError(
+                            f"Coefficient for variable '{var}' in row {idx} must be numeric"
+                        )
+                    if "." not in var:
+                        raise ValueError(
+                            f"Variable '{var}' must contain '.' separating well and attribute (e.g., 'INJ.md')"
+                        )
+                    suffix = var.split(".", 1)[1]
+                    if suffix_ref is None:
+                        suffix_ref = suffix
+                    elif suffix != suffix_ref:
+                        raise ValueError(
+                            "All variables in linear inequalities must refer to the same attribute; "
+                            f"found '{suffix_ref}' and '{suffix}'."
+                        )
         return self
 
 

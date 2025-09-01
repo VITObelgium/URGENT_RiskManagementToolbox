@@ -23,6 +23,6 @@ def test_get_connector(simulator, expected_result) -> None:  # type: ignore
     else:
         # Handle valid cases where a connector is expected
         connector = ConnectorFactory.get_connector(simulator)
-        assert isinstance(
-            connector, expected_result
-        ), f"Expected {expected_result}, but got {type(connector)}"
+        assert isinstance(connector, expected_result), (
+            f"Expected {expected_result}, but got {type(connector)}"
+        )

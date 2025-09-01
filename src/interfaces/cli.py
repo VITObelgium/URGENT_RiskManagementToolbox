@@ -3,6 +3,7 @@ import json
 
 from logger import configure_logger, get_logger
 from orchestration.risk_management_service import run_risk_management
+from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 
 
 def cli():
@@ -57,6 +58,7 @@ def cli():
     try:
         with open(args.config_file, "r") as file:
             problem_definition = json.load(file)
+            ProblemDispatcherDefinition.model_validate(problem_definition)
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
         exit(1)

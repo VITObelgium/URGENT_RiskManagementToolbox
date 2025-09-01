@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.solution_updater_service.core.utils import ensure_not_none
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,8 @@ class OptimizationEngineInterface(ABC):
         results: npt.NDArray[np.float64],
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
     ) -> npt.NDArray[np.float64]: ...
 
     @property

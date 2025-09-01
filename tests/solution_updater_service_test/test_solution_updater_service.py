@@ -11,8 +11,10 @@ from services.solution_updater_service.core.models import (
 from services.solution_updater_service.core.service import (
     SolutionUpdaterService,
 )
-from services.solution_updater_service.core.utils import get_numpy_values
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.solution_updater_service.core.utils import (
+    ensure_not_none,
+    get_numpy_values,
+)
 
 engine = OptimizationEngine.PSO
 
@@ -492,9 +494,9 @@ def test_optimization_service_full_round(test_case):
         f"Best found: {best_particle}, Expected: {expected_min}"
     )
 
-    assert (
-        best_result <= tol
-    ), f"Best result {best_result} is not close enough to the global minimum value."
+    assert best_result <= tol, (
+        f"Best result {best_result} is not close enough to the global minimum value."
+    )
 
 
 @pytest.mark.parametrize(
@@ -555,9 +557,9 @@ def test_patience_handling(
     loop_controller = service.loop_controller
 
     # Initial check
-    assert (
-        loop_controller.running() is True
-    ), "Loop controller should be running after initialization"
+    assert loop_controller.running() is True, (
+        "Loop controller should be running after initialization"
+    )
 
     # Run through the patience checks
     for i, check in enumerate(patience_checks, 1):
@@ -567,15 +569,15 @@ def test_patience_handling(
         expected_running = check["running"]
         expected_patience = check["patience_left"]
 
-        assert (
-            loop_controller.current_generation == expected_generation
-        ), f"Iteration {i}: wrong generation count"
-        assert (
-            loop_controller.running() is expected_running
-        ), f"Iteration {i}: wrong running state - expected {expected_running}"
-        assert (
-            loop_controller._patience_left == expected_patience
-        ), f"Iteration {i}: wrong patience value - expected {expected_patience}, got {loop_controller._patience_left}"
+        assert loop_controller.current_generation == expected_generation, (
+            f"Iteration {i}: wrong generation count"
+        )
+        assert loop_controller.running() is expected_running, (
+            f"Iteration {i}: wrong running state - expected {expected_running}"
+        )
+        assert loop_controller._patience_left == expected_patience, (
+            f"Iteration {i}: wrong patience value - expected {expected_patience}, got {loop_controller._patience_left}"
+        )
 
 
 def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
@@ -686,15 +688,15 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
         expected = test_case["expected_metrics"]
 
         # Verify all metric values
-        assert (
-            metrics.global_min == expected["global_min"]
-        ), f"Population {i}: Wrong global minimum"
-        assert (
-            metrics.last_population_min == expected["last_population_min"]
-        ), f"Population {i}: Wrong population minimum"
-        assert (
-            metrics.last_population_max == expected["last_population_max"]
-        ), f"Population {i}: Wrong population maximum"
+        assert metrics.global_min == expected["global_min"], (
+            f"Population {i}: Wrong global minimum"
+        )
+        assert metrics.last_population_min == expected["last_population_min"], (
+            f"Population {i}: Wrong population minimum"
+        )
+        assert metrics.last_population_max == expected["last_population_max"], (
+            f"Population {i}: Wrong population maximum"
+        )
         assert np.isclose(
             metrics.last_population_avg, expected["last_population_avg"]
         ), f"Population {i}: Wrong population average"
@@ -774,11 +776,11 @@ def test_maximization_service_full_round(test_case):
         f"Best found: {best_particle}, Expected: {expected_max}"
     )
 
-    assert np.isclose(
-        best_result, expected_max_val, atol=tol
-    ), f"Best result {best_result} is not close enough to the global maximum value {expected_max_val}."
+    assert np.isclose(best_result, expected_max_val, atol=tol), (
+        f"Best result {best_result} is not close enough to the global maximum value {expected_max_val}."
+    )
 
     # Verify that the service's reported best result is the negated value of the true maximum
-    assert np.isclose(
-        service.global_best_result, -expected_max_val, atol=tol
-    ), "Service's global_best_result should be the negated value for maximization."
+    assert np.isclose(service.global_best_result, -expected_max_val, atol=tol), (
+        "Service's global_best_result should be the negated value for maximization."
+    )

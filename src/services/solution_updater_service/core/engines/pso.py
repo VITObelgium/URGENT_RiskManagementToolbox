@@ -1,10 +1,14 @@
 import numpy as np
 from numpy import typing as npt
 
-from services.solution_updater_service.core.engines.common import (
+from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.solution_updater_service.core.utils import (
+    ensure_not_none,
+    reflect_and_clip,
+    repair_against_linear_inequalities,
+)
 
 
 class _PSOState:
@@ -57,16 +61,43 @@ class PSOEngine(OptimizationEngineInterface):
         results: npt.NDArray[np.float64],
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
     ) -> npt.NDArray[np.float64]:
-        """Updates particles positions based on their velocities and applies reflection boundary."""
+        """Updates particle positions with optional linear inequality constraints A x <= b.
+
+        Notes:
+            Original user-provided directions (<=, >=, <, >) are normalized upstream into
+            the unified form A x <= b before invoking the engine. Strict inequalities are
+            currently treated as non-strict (<=).
+
+        Constraint Handling:
+            If A,b provided, feasibility handled by adding a static penalty to objective for ranking
+            personal/global bests (Deb's rule simplified: penalized value = result + penalty*sum(violations)).
+        """
+        if A is not None and b is not None:
+            penalized_results = self._compute_penalized_results(
+                parameters, results, A, b
+            )
+        else:
+            penalized_results = results.copy()
+
         if self._state is None:
-            self._initialize_state_on_first_call(parameters, results)
-        self._update_state_positions(parameters, results)
+            self._initialize_state_on_first_call(parameters, penalized_results)
+
+        self._update_state_positions(parameters, penalized_results)
         new_velocities = self._calculate_new_velocity(parameters)
         self._update_state_velocities(new_velocities)
         new_positions = self._calculate_new_position(parameters, new_velocities)
-        self._update_metrics(results)
-        return self._reflect_and_clip_positions(new_positions, lb, ub)
+        self._update_metrics(penalized_results)
+        new_positions = self._reflect_and_clip_positions(new_positions, lb, ub)
+
+        if A is not None and b is not None:
+            new_positions = repair_against_linear_inequalities(
+                new_positions, A, b, lb, ub
+            )
+
+        return new_positions
 
     def _initialize_state_on_first_call(
         self, parameters: npt.NDArray[np.float64], results: npt.NDArray[np.float64]
@@ -135,10 +166,30 @@ class PSOEngine(OptimizationEngineInterface):
 
     @staticmethod
     def _calculate_new_position(
-        old_position: npt.NDArray[np.float64], new_velocity: npt.NDArray[np.float64]
+        old_positions: npt.NDArray[np.float64], velocities: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
-        """Computes the new position of particles by adding velocity."""
-        return (old_position + new_velocity).astype(np.float64)
+        """Computes new positions by adding velocities to old positions."""
+        return np.array(old_positions + velocities, dtype=np.float64)
+
+    def _compute_penalized_results(
+        self,
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64],
+        b: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Computes penalized results for constraint violations."""
+        violations = (A @ parameters.T - b[:, None]).T
+        violations = np.maximum(violations, 0.0)
+        total_violation = violations.sum(axis=1, keepdims=True)
+        penalty_factor = 1e6 * (np.median(np.abs(results)) + 1.0)
+        return results + penalty_factor * total_violation
+
+    def _repair_infeasible_positions(self, *args, **kwargs):
+        # Deprecated in favor of shared helper. Keep signature for backward compatibility if referenced elsewhere.
+        positions, A, b, lb, ub = args[:5]
+        repaired = repair_against_linear_inequalities(positions, A, b, lb, ub)
+        return repaired
 
     def _reflect_and_clip_positions(
         self,
@@ -147,19 +198,11 @@ class PSOEngine(OptimizationEngineInterface):
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         """Applies reflection at boundaries and ensures particles remain within bounds."""
-        state: _PSOState = ensure_not_none(self._state)
+        clipped, out_of_bounds = reflect_and_clip(new_positions, lb, ub)
+        new_positions = clipped
 
-        # Find out-of-bounds positions
-        out_of_bounds = (new_positions < lb) | (new_positions > ub)
+        # Reverse velocities where reflection occurred when state is initialized
+        if self._state:
+            self._state.velocities[out_of_bounds] *= -1
 
-        # Reflect positions
-        reflected_positions = np.where(
-            new_positions < lb, 2 * lb - new_positions, 2 * ub - new_positions
-        )
-        new_positions[out_of_bounds] = reflected_positions[out_of_bounds]
-
-        # Reverse velocities where reflection occurred
-        state.velocities[out_of_bounds] *= -1
-
-        # Ensure positions are strictly within bounds (edge-case handling)
-        return np.clip(new_positions, lb, ub)
+        return new_positions

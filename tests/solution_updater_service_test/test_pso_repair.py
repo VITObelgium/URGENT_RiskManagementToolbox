@@ -42,13 +42,13 @@ def test_pso_repairs_infeasible_population():
 
     # And they should satisfy the linear inequality A x <= b (with small tolerance)
     Ax = (A @ new_positions.T).T
-    assert np.all(
-        Ax <= b + 1e-6
-    ), f"Linear constraints violated after repair: {Ax.flatten()}"
+    assert np.all(Ax <= b + 1e-6), (
+        f"Linear constraints violated after repair: {Ax.flatten()}"
+    )
 
-    assert not np.allclose(
-        new_positions, parameters
-    ), "Positions were not altered from infeasible start"
+    assert not np.allclose(new_positions, parameters), (
+        "Positions were not altered from infeasible start"
+    )
 
 
 def test_pso_repairs_infeasible_population_no_linear_constraints():
@@ -73,9 +73,9 @@ def test_pso_repairs_infeasible_population_no_linear_constraints():
     assert np.all(new_positions >= lb - 1e-8), f"Positions below lb: {new_positions}"
     assert np.all(new_positions <= ub + 1e-8), f"Positions above ub: {new_positions}"
 
-    assert not np.allclose(
-        new_positions, parameters
-    ), "Positions were not altered from infeasible start"
+    assert not np.allclose(new_positions, parameters), (
+        "Positions were not altered from infeasible start"
+    )
 
 
 def test_pso_repairs_particles_with_tiny_violations():
@@ -141,9 +141,9 @@ def test_pso_repairs_large_population():
     assert np.all(new_positions >= lb - 1e-8), f"Positions below lb: {new_positions}"
     assert np.all(new_positions <= ub + 1e-8), f"Positions above ub: {new_positions}"
     Ax = (A @ new_positions.T).T
-    assert np.all(
-        Ax <= b + 1e-6
-    ), f"Linear constraints violated in large population: {Ax.flatten()}"
+    assert np.all(Ax <= b + 1e-6), (
+        f"Linear constraints violated in large population: {Ax.flatten()}"
+    )
 
 
 def test_pso_repair_deterministic_with_seed():
@@ -161,9 +161,9 @@ def test_pso_repair_deterministic_with_seed():
     positions1 = engine1.update_solution_to_next_iter(parameters, results, lb, ub)
     positions2 = engine2.update_solution_to_next_iter(parameters, results, lb, ub)
 
-    assert np.allclose(
-        positions1, positions2
-    ), f"Repair not deterministic with fixed seed:\n{positions1}\n{positions2}"
+    assert np.allclose(positions1, positions2), (
+        f"Repair not deterministic with fixed seed:\n{positions1}\n{positions2}"
+    )
 
 
 def test_pso_keeps_md_within_bounds_when_optimal_out_of_reach():
@@ -184,15 +184,15 @@ def test_pso_keeps_md_within_bounds_when_optimal_out_of_reach():
 
     # The unconstrained step would be parameters + velocities and should exceed ub
     attempted = parameters + engine._state.velocities
-    assert np.any(
-        attempted > ub
-    ), "Test setup failed to push unconstrained positions beyond ub"
+    assert np.any(attempted > ub), (
+        "Test setup failed to push unconstrained positions beyond ub"
+    )
 
     # The second call should clip/reflection the positions to remain within bounds
     new_positions = engine.update_solution_to_next_iter(parameters, results, lb, ub)
 
     assert np.all(new_positions <= ub + 1e-8), f"Positions above ub: {new_positions}"
     assert np.all(new_positions >= lb - 1e-8), f"Positions below lb: {new_positions}"
-    assert not np.allclose(
-        new_positions, parameters
-    ), "Positions did not change as expected"
+    assert not np.allclose(new_positions, parameters), (
+        "Positions did not change as expected"
+    )

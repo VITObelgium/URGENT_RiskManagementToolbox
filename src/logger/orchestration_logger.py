@@ -70,7 +70,7 @@ def log_docker_logs(logger: Logger, disperse_worker_logs: bool = True) -> None:
         if disperse_worker_logs:
             for worker_service in worker_services:
                 worker_log_path = (
-                    log_dir / f'docker_{worker_service.replace("-", "_")}.log'
+                    log_dir / f"docker_{worker_service.replace('-', '_')}.log"
                 ).resolve()
                 worker_cmd = (
                     f"docker logs --tail {TAIL_LINES} --follow {worker_service}"

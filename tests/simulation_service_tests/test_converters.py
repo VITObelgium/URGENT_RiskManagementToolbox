@@ -34,6 +34,6 @@ def test_converters(input_data, function, expected_output, expected_exception): 
     else:
         # Valid behavior, ensure the result matches the expected output
         output = function(input_data)
-        assert (
-            output == expected_output
-        ), f"Expected {expected_output}, but got {output}"
+        assert output == expected_output, (
+            f"Expected {expected_output}, but got {output}"
+        )

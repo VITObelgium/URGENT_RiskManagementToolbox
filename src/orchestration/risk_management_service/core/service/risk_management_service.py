@@ -1,7 +1,4 @@
-import math
 from typing import Any
-
-import psutil
 
 from logger import get_csv_logger, get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
@@ -15,6 +12,7 @@ from services.problem_dispatcher_service.core.utils.utils import (
 from services.simulation_service import (
     SimulationService,
     simulation_cluster_context_manager,
+    simulation_process_context_manager,
 )
 from services.solution_updater_service import (
     OptimizationEngine,
@@ -32,6 +30,7 @@ def run_risk_management(
     n_size: int = 10,
     patience: int = 10,
     max_generations: int = 10,
+    use_cluster: bool = False,
 ):
     """
     Main entry point for running risk management.
@@ -51,10 +50,16 @@ def run_risk_management(
         n_size,
     )
 
-    physical_cores = psutil.cpu_count(logical=False)
-    worker_count = max(1, math.floor(physical_cores / 2))
+    # physical_cores = psutil.cpu_count(logical=False)
+    # worker_count = max(1, math.floor(physical_cores / 2))
 
-    with simulation_cluster_context_manager(worker_count=worker_count):
+    cm = (
+        simulation_cluster_context_manager(worker_count=3)
+        if use_cluster
+        else simulation_process_context_manager(worker_count=2)
+    )
+
+    with cm:
         try:
             SimulationService.transfer_simulation_model(
                 simulation_model_archive=simulation_model_archive

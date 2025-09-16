@@ -27,7 +27,10 @@ def get_log_to_console_value() -> bool:
         The value of log_to_console.
 
     """
-    return bool(get_logging_output()["log_to_console"])
+    try:
+        return bool(get_logging_output().get("log_to_console", False))
+    except FileNotFoundError:
+        return False
 
 
 def log_to_datetime_log_file() -> bool:
@@ -68,9 +71,12 @@ def get_logging_output() -> Dict[str, Any]:
         )
 
     if not os.path.exists(pyproject_toml_path):
-        raise FileNotFoundError(
-            "pyproject.toml not found in either the default location or current directory"
-        )
+        # Returning safe defaults if pyproject.toml is not found.
+        return {
+            "log_to_console": False,
+            "datetime_log_file": False,
+            "external_docker_log_console": False,
+        }
 
     import tomli
 
@@ -86,9 +92,12 @@ def get_external_console_logging() -> bool:
     Returns
     -------
     bool
-        The value of external_docker_log_console.
+        The value of external_docker_log_console. Returns False if pyproject.toml is not found.
     """
-    return bool(get_logging_output()["external_docker_log_console"])
+    try:
+        return bool(get_logging_output().get("external_docker_log_console", False))
+    except FileNotFoundError:
+        return False
 
 
 def get_services(logger: Logger) -> List[str]:

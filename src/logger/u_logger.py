@@ -102,9 +102,9 @@ def get_logger(name: Optional[str] = "") -> Logger:
     if not _logger_configured:
         configure_logger()
     profile = get_logger_profile()
-    if profile == "server":
+    if profile == "server" or (name and name.startswith("server")):
         return logging.getLogger("server")
-    elif profile == "worker":
+    elif profile == "worker" or (name and name.startswith("worker")):
         return logging.getLogger("worker")
     else:
         log_to_console = get_log_to_console_value()

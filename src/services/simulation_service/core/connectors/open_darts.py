@@ -7,8 +7,10 @@ import json
 import re
 import subprocess
 import sys
+import threading
 from collections import defaultdict
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable, Protocol, Sequence, TypedDict
 
 import numpy as np
@@ -133,6 +135,7 @@ class OpenDartsConnector(ConnectorInterface):
     @staticmethod
     def run(
         config: SerializedJson,
+        stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         """
         Start reservoir simulator with given config and model in main.py
@@ -153,7 +156,35 @@ class OpenDartsConnector(ConnectorInterface):
             k: default_failed_value for k in SimulationResultType
         }
 
-        command = ["python3", "-u", "main.py", config]
+        # Best-effort cleanup of potentially corrupted DARTS point-data caches.
+        try:
+            for p in Path.cwd().glob("obl_point_data_*.pkl"):
+                try:
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass
+        except Exception:
+            # If cleanup fails we still try to proceed.
+            logger.warning(
+                "Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway."
+            )
+
+        # Determine Python interpreter to use for OpenDarts subprocess.
+        # Priority: .venv_darts in parent dir > "python3" from PATH
+        venv_candidate = Path.cwd().parent / ".venv_darts" / "bin" / "python"
+        if venv_candidate.exists():
+            selected = str(venv_candidate)
+            reason = f"auto-detected {venv_candidate}"
+        else:
+            selected = "python3"
+            reason = "default fallback"
+
+        command = [selected, "-u", "main.py", config]
+        logger.info(
+            "Launching OpenDarts subprocess using interpreter (%s): %s",
+            reason,
+            selected,
+        )
 
         manager = ManagedSubprocess(
             command_args=command,
@@ -166,7 +197,30 @@ class OpenDartsConnector(ConnectorInterface):
             with manager as process:
                 timeout_duration = 15 * 60
                 try:
-                    process.wait(timeout=timeout_duration)
+                    waited = 0.0
+                    poll_step = 0.25
+                    while True:
+                        if stop is not None and stop.is_set():
+                            logger.warning(
+                                "Stop requested; terminating OpenDarts subprocess."
+                            )
+                            if process.poll() is None:
+                                process.terminate()
+                                try:
+                                    process.wait(timeout=3)
+                                except subprocess.TimeoutExpired:
+                                    process.kill()
+                                    process.wait()
+                            return SimulationStatus.FAILED, default_failed_results
+                        try:
+                            process.wait(timeout=poll_step)
+                            break
+                        except subprocess.TimeoutExpired:
+                            waited += poll_step
+                            if waited >= timeout_duration:
+                                raise subprocess.TimeoutExpired(
+                                    process.args, timeout_duration
+                                )
                 except subprocess.TimeoutExpired:
                     logger.warning(
                         f"Subprocess timed out after {timeout_duration} seconds. Terminating."
@@ -188,9 +242,33 @@ class OpenDartsConnector(ConnectorInterface):
                     return SimulationStatus.TIMEOUT, default_failed_results
 
                 if process.returncode != 0:
-                    logger.error(
-                        f"Subprocess failed with return code {process.returncode}."
-                    )
+                    stderr_tail = "\n".join(manager.stderr_lines[-100:])
+                    stdout_tail = "\n".join(manager.stdout_lines[-100:])
+                    if process.returncode == -9:
+                        logger.error(
+                            "OpenDarts subprocess was killed (rc=-9). This is often due to OOM kill. "
+                            "Consider lowering worker_count, reducing model size, or limiting threads. "
+                            "Stdout tail:\n%s\nStderr tail:\n%s",
+                            stdout_tail,
+                            stderr_tail,
+                        )
+                    else:
+                        logger.error(
+                            "OpenDarts subprocess failed rc=%s. Stdout tail:\n%s\nStderr tail:\n%s",
+                            process.returncode,
+                            stdout_tail,
+                            stderr_tail,
+                        )
+                        if (
+                            "BlockingIOError" in stderr_tail
+                            and "h5py" in stderr_tail
+                            and "Unable to synchronously create file" in stderr_tail
+                        ):
+                            logger.error(
+                                "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE, "
+                                "but if the error persists, ensure each worker runs in an isolated directory and no other process "
+                                "holds the same HDF5 file open."
+                            )
                     return SimulationStatus.FAILED, default_failed_results
 
                 full_stdout = "\n".join(manager.stdout_lines)

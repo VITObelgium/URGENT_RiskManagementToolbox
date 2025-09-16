@@ -6,10 +6,6 @@ import orchestration.risk_management_service.core.service.risk_management_servic
 
 
 @patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.psutil.cpu_count",
-    return_value=4,
-)
-@patch(
     "orchestration.risk_management_service.core.service.risk_management_service.simulation_cluster_context_manager"
 )
 @patch(
@@ -34,7 +30,6 @@ def test_run_risk_management_happy_path(
     mock_su,
     mock_sim_service,
     mock_sim_cluster_ctx,
-    _mock_cpu_count,
 ):
     mock_ctx = MagicMock()
     mock_sim_cluster_ctx.return_value.__enter__.return_value = mock_ctx
@@ -124,10 +119,6 @@ def test_prepare_simulation_cases_unhandled_service():
 
 
 @patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.psutil.cpu_count",
-    return_value=2,
-)
-@patch(
     "orchestration.risk_management_service.core.service.risk_management_service.simulation_cluster_context_manager"
 )
 @patch(
@@ -152,7 +143,6 @@ def test_run_risk_management_exception(
     _mock_su,
     mock_sim_service,
     mock_sim_cluster_ctx,
-    _mock_cpu_count,
 ):
     # We have so many patches unused because we patch all dependencies that the function under test touches,
     # to prevent side effects and to control the test environment.

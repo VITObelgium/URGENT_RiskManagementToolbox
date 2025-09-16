@@ -3,6 +3,7 @@ NOTE:
 This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
 """
 
+import threading
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Sequence, TypeAlias, TypedDict
@@ -74,4 +75,6 @@ class SimulationStatus(Enum):
 class ConnectorInterface(ABC):
     @staticmethod
     @abstractmethod
-    def run(config: SerializedJson) -> tuple[SimulationStatus, SimulationResults]: ...
+    def run(
+        config: SerializedJson, stop: threading.Event | None = None
+    ) -> tuple[SimulationStatus, SimulationResults]: ...

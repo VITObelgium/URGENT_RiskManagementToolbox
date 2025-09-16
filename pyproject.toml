@@ -87,7 +87,3 @@ dev = [
     "pytest-mypy==0.10.3",
     "pytest-retry==1.7.0",
 ]
-raw-orchestration = [
-    "open-darts==1.2.2",
-    "pandas==2.3.2",
-]

@@ -1,3 +1,3 @@
 grpcio==1.69.0
 grpcio-tools==1.69.0
-open_darts-1.1.3-cp310-cp310-linux_x86_64.whl
+open_darts_whl/open_darts-1.1.3-cp310-cp310-linux_x86_64.whl

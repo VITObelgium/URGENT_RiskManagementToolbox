@@ -11,6 +11,7 @@ from typing import Generator
 
 from logger import get_logger
 from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
+    driver,
     request_server_shutdown,
 )
 from services.simulation_service.core.infrastructure.worker.src._simulation_worker_grpc import (
@@ -69,10 +70,6 @@ class ProcessClusterManager:
         raise TimeoutError("Server did not become ready within timeout")
 
     def _spawn_server(self):
-        from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
-            driver,
-        )
-
         self._server_thread = threading.Thread(
             target=driver, daemon=True, name="server"
         )

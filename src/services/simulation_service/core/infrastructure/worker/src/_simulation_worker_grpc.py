@@ -24,7 +24,7 @@ from services.simulation_service.core.connectors.common import (
 from services.simulation_service.core.connectors.factory import ConnectorFactory
 from services.simulation_service.core.utils.converters import json_to_str
 
-logger = get_logger("worker")
+logger = get_logger(__name__)
 
 channel_options = [
     ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
@@ -116,10 +116,10 @@ def _release_venv_lock(venv_dir: Path) -> None:
 def _prepare_shared_venv(worker_id: str | int) -> Path | None:
     """Create or reuse a shared Python venv and install model requirements.
 
-    - Prefers base interpreter from env RMT_DARTS_PYTHON_BASE if set.
     - Else tries python3.10, else current interpreter.
-    - Installs requirements.txt from the worker temp dir if present.
-    - Sets env var RMT_DARTS_PYTHON to venv's python for downstream subprocesses.
+        - Installs requirements from the shared worker requirements file under
+            src/services/simulation_service/core/infrastructure/worker/worker_requirements.txt
+            so that local relative paths (like the OpenDarts wheel) resolve correctly.
     Returns the path to the venv python if successful, else None.
     """
     venv_dir = _get_shared_venv_dir()
@@ -180,27 +180,24 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
                 e,
             )
 
-        req_file = _compute_worker_temp_dir(worker_id) / "requirements.txt"
-        if req_file.exists():
-            logger.info(
-                "Worker %s: Installing requirements from %s", worker_id, req_file
+        req_path = Path(__file__).resolve().parents[1] / "worker_requirements.txt"
+        logger.info("Worker %s: Installing requirements from %s", worker_id, req_path)
+        install_cwd = str(req_path.parent)
+
+        logger.debug(
+            "Worker %s: Running pip install with cwd=%s", worker_id, install_cwd
+        )
+        try:
+            subprocess.run(
+                [str(venv_python), "-m", "pip", "install", "-r", str(req_path)],
+                check=True,
+                cwd=install_cwd,
             )
-            try:
-                subprocess.run(
-                    [str(venv_python), "-m", "pip", "install", "-r", str(req_file)],
-                    check=True,
-                )
-            except Exception as e:
-                logger.error(
-                    "Worker %s: pip install -r %s failed: %s", worker_id, req_file, e
-                )
-                return None
-        else:
-            logger.info(
-                "Worker %s: No requirements.txt found at %s; skipping installation.",
-                worker_id,
-                req_file,
+        except Exception as e:
+            logger.error(
+                "Worker %s: pip install -r %s failed: %s", worker_id, req_path, e
             )
+            return None
 
         # Quick validation step of darts importability
         try:

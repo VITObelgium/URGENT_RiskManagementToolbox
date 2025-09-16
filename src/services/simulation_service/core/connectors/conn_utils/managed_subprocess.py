@@ -79,7 +79,6 @@ class ManagedSubprocess:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.process and self.process.poll() is None:
-            # Use Popen.terminate()/kill() so tests can assert these were called.
             self.logger_warning_func = getattr(
                 self, "logger_warning_func", self.logger_error_func
             )

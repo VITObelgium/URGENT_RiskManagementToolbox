@@ -24,7 +24,7 @@ from services.simulation_service.core.connectors.common import (
 from services.simulation_service.core.connectors.factory import ConnectorFactory
 from services.simulation_service.core.utils.converters import json_to_str
 
-logger = get_logger("worker")
+logger = get_logger("threading-worker")
 
 channel_options = [
     ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB

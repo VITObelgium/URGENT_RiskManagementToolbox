@@ -198,12 +198,14 @@ class OpenDartsConnector(ConnectorInterface):
             }
         )
 
+        _tw_logger = get_logger("threading-worker")
         manager = ManagedSubprocess(
             command_args=command,
             stream_reader_func=stream_reader,
-            logger_info_func=logger.info,
-            logger_error_func=logger.error,
+            logger_info_func=_tw_logger.info,
+            logger_error_func=_tw_logger.error,
             env=env,
+            thread_name_prefix=f"worker-{wid}" if wid else None,
         )
 
         try:

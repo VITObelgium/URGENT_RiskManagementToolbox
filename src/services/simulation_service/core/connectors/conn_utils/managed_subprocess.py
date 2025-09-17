@@ -12,6 +12,7 @@ class ManagedSubprocess:
         logger_error_func: Callable,
         text: bool = True,
         env: Optional[Mapping[str, str]] = None,
+        thread_name_prefix: Optional[str] = None,
     ):
         self.command_args = command_args
         self.text = text
@@ -20,6 +21,7 @@ class ManagedSubprocess:
         self.logger_error_func = logger_error_func
         self.logger_warning_func = logger_error_func
         self.env = dict(env) if env is not None else None
+        self.thread_name_prefix = thread_name_prefix or ""
 
         self.process: subprocess.Popen | None = None
         self.stdout_thread: threading.Thread | None = None
@@ -66,15 +68,25 @@ class ManagedSubprocess:
                 self.process.wait()
             raise RuntimeError("Subprocess stdout/stderr streams are not available.")
 
+        stdout_name, stderr_name = None, None
+        if self.thread_name_prefix:
+            stdout_name = f"{self.thread_name_prefix}:stdout"
+            stderr_name = f"{self.thread_name_prefix}:stderr"
+        else:
+            stdout_name = "subprocess:stdout"
+            stderr_name = "subprocess:stderr"
+
         self.stdout_thread = threading.Thread(
             target=self.stream_reader_func,
             args=(self.process.stdout, self.stdout_lines, self.logger_info_func),
             daemon=True,
+            name=stdout_name,
         )
         self.stderr_thread = threading.Thread(
             target=self.stream_reader_func,
             args=(self.process.stderr, self.stderr_lines, self.logger_error_func),
             daemon=True,
+            name=stderr_name,
         )
 
         self.stdout_thread.start()

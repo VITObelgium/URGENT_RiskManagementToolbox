@@ -32,12 +32,17 @@ class ManagedSubprocess:
             command = " ".join(self.command_args)
         except Exception:
             command = str(self.command_args)
-        self.logger_info_func(f"Starting subprocess: {command}")
+        cwd = self.env.get("PWD") if self.env else None
+        if cwd:
+            self.logger_info_func(f"Starting subprocess: {command} (cwd={cwd})")
+        else:
+            self.logger_info_func(f"Starting subprocess: {command}")
         try:
             popen_kwargs: dict = {
                 "stdout": subprocess.PIPE,
                 "stderr": subprocess.PIPE,
                 "text": self.text,
+                "cwd": cwd,
             }
 
             # Pass env only if explicitly provided; do not include when None.

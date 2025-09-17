@@ -9,7 +9,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
-from logger import get_logger
+from logger import (
+    configure_server_logger,
+    configure_worker_logger,
+    get_logger,
+)
 from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
     driver,
     request_server_shutdown,
@@ -70,6 +74,12 @@ class ProcessClusterManager:
         raise TimeoutError("Server did not become ready within timeout")
 
     def _spawn_server(self):
+        try:
+            configure_server_logger()
+        except Exception:
+            logger.debug(
+                "Failed to configure server logger; continuing without per-thread file handler"
+            )
         self._server_thread = threading.Thread(
             target=driver, daemon=True, name="server"
         )
@@ -137,6 +147,13 @@ class ProcessClusterManager:
         self._worker_count = max(1, int(worker_count))
 
         for i in range(self._worker_count):
+            try:
+                configure_worker_logger(i + 1)
+            except Exception:
+                logger.debug(
+                    "Failed to configure worker %d logger; continuing without per-thread file handler",
+                    i + 1,
+                )
             th = self._spawn_worker(worker_id=i + 1)
             logger.info("Launched worker thread %d (name=%s)", i + 1, th.name)
 

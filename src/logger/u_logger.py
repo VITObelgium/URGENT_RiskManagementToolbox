@@ -102,11 +102,16 @@ def get_logger(name: Optional[str] = "") -> Logger:
     if not _logger_configured:
         configure_logger()
     profile = get_logger_profile()
-    if profile == "server" or (name and name.startswith("server")):
+    if profile == "server":
         return logging.getLogger("server")
-    elif profile == "worker" or (name and name.startswith("worker")):
+    elif profile == "worker":
         return logging.getLogger("worker")
-    else:
-        log_to_console = get_log_to_console_value()
-        _effective_name = "aux.console" if log_to_console else "aux" if name else "root"
-        return logging.getLogger(_effective_name)
+
+    if name == "threading-server":
+        return logging.getLogger("threading-server")
+    elif name == "threading-worker":
+        return logging.getLogger("threading-worker")
+
+    log_to_console = get_log_to_console_value()
+    _effective_name = "aux.console" if log_to_console else "aux" if name else "root"
+    return logging.getLogger(_effective_name)

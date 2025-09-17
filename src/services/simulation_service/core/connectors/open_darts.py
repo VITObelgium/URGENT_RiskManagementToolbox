@@ -4,6 +4,7 @@ This module must be aligned with python 3.10 syntax, as open-darts whl requires 
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -156,7 +157,10 @@ class OpenDartsConnector(ConnectorInterface):
             k: default_failed_value for k in SimulationResultType
         }
 
-        # Best-effort cleanup of potentially corrupted DARTS point-data caches.
+        repo_root = OpenDartsConnector._repo_root()
+        wid = OpenDartsConnector._current_worker_id()
+        work_dir = repo_root / f"orchestration_files/.worker_{wid}_temp"
+
         try:
             for p in Path.cwd().glob("obl_point_data_*.pkl"):
                 try:
@@ -170,8 +174,8 @@ class OpenDartsConnector(ConnectorInterface):
             )
 
         # Determine Python interpreter to use for OpenDarts subprocess.
-        # Priority: .venv_darts in parent dir > "python3" from PATH
-        venv_candidate = Path.cwd().parent / ".venv_darts" / "bin" / "python"
+        # Priority: shared .venv_darts under orchestration_files > "python3" from PATH
+        venv_candidate = repo_root / "orchestration_files/.venv_darts/bin/python"
         if venv_candidate.exists():
             selected = str(venv_candidate)
             reason = f"auto-detected {venv_candidate}"
@@ -186,11 +190,20 @@ class OpenDartsConnector(ConnectorInterface):
             selected,
         )
 
+        # Build environment for the subprocess with a context-specific path, so that it works in the worker directory
+        env = os.environ.copy()
+        env.update(
+            {
+                "PWD": str(work_dir),
+            }
+        )
+
         manager = ManagedSubprocess(
             command_args=command,
             stream_reader_func=stream_reader,
             logger_info_func=logger.info,
             logger_error_func=logger.error,
+            env=env,
         )
 
         try:
@@ -415,6 +428,24 @@ class OpenDartsConnector(ConnectorInterface):
         filtered_perforations_points = well_perforations_points_ar[in_bounds]
 
         return tuple(filtered_perforations_points)
+
+    @staticmethod
+    def _repo_root() -> Path:
+        here = Path(__file__).resolve()
+        for parent in here.parents:
+            if (parent / "orchestration_files").exists():
+                return parent
+        raise RuntimeError("Failed to locate repository root directory.")
+
+    @staticmethod
+    def _current_worker_id() -> str | None:
+        try:
+            name = threading.current_thread().name
+            if name.startswith("worker-"):
+                return name.split("-", 1)[1]
+        except Exception:
+            raise RuntimeError("Failed to parse current thread name.")
+        return None
 
 
 class _CellConnector:

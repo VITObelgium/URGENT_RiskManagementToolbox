@@ -24,7 +24,7 @@ from services.simulation_service.core.connectors.common import (
 from services.simulation_service.core.connectors.factory import ConnectorFactory
 from services.simulation_service.core.utils.converters import json_to_str
 
-logger = get_logger(__name__)
+logger = get_logger("worker")
 
 channel_options = [
     ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
@@ -274,9 +274,32 @@ async def handle_simulation_job(
     logger.info(f"Worker {worker_id}: Starting simulation {job_id}...")
     logger.debug(f"Worker {worker_id}: Simulation job: {simulation_job}")
 
+    def _run_simulator_with_logging(sim_job, wid, stop):
+        """Wrapper to ensure logs emitted inside to_thread map to worker file.
+
+        We temporarily set the current thread name to match the worker thread
+        (e.g., "worker-3"). Our per-thread file handlers in process logger are
+        filtered by threadName, so this routes logs from the simulator and any
+        nested libraries into the correct `log/worker_{wid}.log` file.
+        """
+        try:
+            th = threading.current_thread()
+            old_name = th.name
+            th.name = f"worker-{wid}"
+        except Exception:
+            old_name = None
+        try:
+            return _run_simulator(sim_job, stop)
+        finally:
+            if old_name is not None:
+                try:
+                    threading.current_thread().name = old_name
+                except Exception:
+                    pass
+
     with worker_file_context(worker_id):
         simulation_status, simulation_result = await asyncio.to_thread(
-            _run_simulator, simulation_job, stop_flag
+            _run_simulator_with_logging, simulation_job, worker_id, stop_flag
         )
 
     if simulation_status == SimulationStatus.SUCCESS:

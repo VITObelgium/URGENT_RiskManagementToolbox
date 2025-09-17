@@ -8,11 +8,9 @@ from grpc import aio
 
 import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2 as sm
 import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2_grpc as sm_grpc
-from logger.u_logger import (
-    get_logger,
-)
+from logger import get_logger
 
-logger = get_logger("server")
+logger = get_logger("threading-server")
 
 SERVER_OPTIONS = [
     ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB

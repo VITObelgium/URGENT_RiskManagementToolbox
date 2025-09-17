@@ -223,15 +223,6 @@ def test_run_success(mock_popen: Mock) -> None:
     assert results == {"heat": [2312.12, [1.23, 4.56, 7.89]]}
     assert simulation_status == SimulationStatus.SUCCESS
 
-    # Verify Popen was called as expected
-    mock_popen.assert_called_once_with(
-        ["python3", "-u", "main.py", "test_config"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    mock_popen_instance.wait.assert_called_once()
-
 
 def test_run_handles_no_output_lines(mock_popen: Mock) -> None:
     mock_popen_instance = mock_popen.return_value

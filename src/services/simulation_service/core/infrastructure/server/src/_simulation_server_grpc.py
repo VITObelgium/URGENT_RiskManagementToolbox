@@ -253,6 +253,8 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 async def serve() -> None:
     global _SERVER_LOOP, _SERVER
     logger.info("Initializing Async gRPC Server setup...")
+    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
+    logger.info(f"Server starting with OPEN_DARTS_RUNNER={mode}")
 
     try:
         # Install an exception handler to silence noisy gRPC poller EAGAIN callbacks

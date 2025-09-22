@@ -1,18 +1,58 @@
+from __future__ import annotations
+
+import json
 import logging
 import logging.config
-import os
-import sys
-from datetime import datetime
 from logging import Logger
+from pathlib import Path
 from typing import Optional
 
 from logger.utils import (
+    _build_console_handler,
+    configure_default_profile,
     get_log_to_console_value,
     get_logger_profile,
-    log_to_datetime_log_file,
 )
 
 _logger_configured = False
+
+
+def _configure_stdout_only_profile() -> None:
+    """Configure logging to stdout only (for server/worker processes or Docker).
+
+    No files, no queue: just a console handler on root.
+    """
+    config_path = Path(__file__).parent / "logging_config.json"
+    console_enabled = (
+        True if get_log_to_console_value() is None else get_log_to_console_value()
+    )
+
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as fh:
+                cfg = json.load(fh)
+
+            if not console_enabled:
+                # Remove file handler if console is explicitly disabled
+                cfg["root"]["handlers"] = [
+                    h for h in cfg["root"].get("handlers", []) if h == "console"
+                ]
+                cfg.get("handlers", {}).pop("file", None)
+
+            logging.config.dictConfig(cfg)
+            return
+        except Exception:
+            pass
+
+    if console_enabled:
+        root = logging.getLogger()
+        # Clear existing handlers to ensure console-only
+        root.handlers.clear()
+        root.setLevel(logging.INFO)
+        root.addHandler(_build_console_handler(logging.INFO))
+    else:
+        # If console explicitly disabled, leave default root logger alone
+        pass
 
 
 def configure_logger() -> None:
@@ -21,97 +61,23 @@ def configure_logger() -> None:
         return
 
     profile = get_logger_profile()
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    log_conf_file_path = ""
-    config_defaults = {}
-
-    if profile == "server":
-        log_conf_file_path = os.path.join(
-            base_dir, "orchestration_loggers", "server_logging.conf"
-        )
-    elif profile == "worker":
-        log_conf_file_path = os.path.join(
-            base_dir, "orchestration_loggers", "worker_logging.conf"
-        )
-    else:  # Default profile
-        log_conf_file_path = os.path.join(base_dir, "logging.conf")
-        log_dir = os.path.join(base_dir, "../../log")
-        log_file_name_part = (
-            "pytest_log.log" if "pytest" in sys.modules else "urgent_log.log"
-        )
-
-        if "pytest" not in sys.modules and log_to_datetime_log_file():
-            log_file_name_part = (
-                datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_urgent_log.log"
-            )
-
-        log_file_path = os.path.join(log_dir, log_file_name_part)
-
-        try:
-            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-            with open(log_file_path, "a", encoding="utf-8"):  # Touch file
-                pass
-            config_defaults["logfilename"] = log_file_path
-        except OSError as e:
-            sys.stderr.write(
-                f"Warning: Could not create/access log file {log_file_path}: {e}\n"
-            )
-
-    if not os.path.exists(log_conf_file_path):
-        sys.stderr.write(
-            f"Error: Logging configuration file not found: {log_conf_file_path}. Falling back to basic logging.\n"
-        )
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
-        _logger_configured = True
-        return
-
-    try:
-        logging.config.fileConfig(
-            log_conf_file_path, defaults=config_defaults, disable_existing_loggers=False
-        )
-    except Exception as e:
-        sys.stderr.write(
-            f"Error configuring logging from {log_conf_file_path}: {e}. Falling back to basic logging.\n"
-        )
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
+    if profile == "default":
+        configure_default_profile()
+    elif profile in ("server", "worker"):
+        _configure_stdout_only_profile()
+    else:
+        # Unknown profile – fall back to default orchestrator behavior
+        configure_default_profile()
 
     _logger_configured = True
 
 
 def get_logger(name: Optional[str] = "") -> Logger:
-    """
-    Get the logger.
+    """Return a named logger; config is applied on first use.
 
-    Parameters
-    ----------
-    name : str, optional
-        The name of the logger. No name results in root logger. For normal use, use __name__ as the name.
-
-    Returns
-    -------
-    Logger
-        The logger object.
-
+    - Names like "threading-worker" and "threading-server" are preserved.
+    - For normal use, pass __name__ to get a module-specific logger.
     """
     if not _logger_configured:
         configure_logger()
-    profile = get_logger_profile()
-    if profile == "server":
-        return logging.getLogger("server")
-    elif profile == "worker":
-        return logging.getLogger("worker")
-
-    if name == "threading-server":
-        return logging.getLogger("threading-server")
-    elif name == "threading-worker":
-        return logging.getLogger("threading-worker")
-
-    log_to_console = get_log_to_console_value()
-    _effective_name = "aux.console" if log_to_console else "aux" if name else "root"
-    return logging.getLogger(_effective_name)
+    return logging.getLogger(name) if name else logging.getLogger()

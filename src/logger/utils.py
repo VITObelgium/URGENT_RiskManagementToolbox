@@ -1,7 +1,21 @@
+from __future__ import annotations
+
+import atexit
+import json
+import logging
 import os
 import subprocess
+import sys
+from datetime import datetime
 from logging import Logger
+from logging.handlers import QueueHandler, QueueListener
+from multiprocessing import Queue
+from pathlib import Path
 from typing import Any, Dict, List
+
+_queue: Queue | None = None
+_listener: QueueListener | None = None
+_shutdown_registered: bool = False
 
 
 def get_logger_profile() -> str:
@@ -138,3 +152,123 @@ def get_services_id() -> List[str]:
         raise RuntimeError(
             "Failed to get Docker services. Ensure Docker is running and you have access to it."
         ) from e
+
+
+def _build_console_handler(level: int = logging.INFO) -> logging.Handler:
+    console = logging.StreamHandler(stream=sys.stdout)
+    console.setLevel(level)
+    console.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s.%(msecs)03d - %(module)-30s %(lineno)-4d - %(levelname)-8s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    return console
+
+
+def configure_default_profile() -> None:
+    """Configure logging for the orchestrator (default profile).
+
+    - All loggers propagate to root.
+    - Root has a QueueHandler; a QueueListener owns the file/console handlers.
+    - No module writes to files directly.
+    """
+    config_path = Path(__file__).parent / "logging_config.json"
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            file_path = _ensure_logfile_path()
+            if file_path is not None:
+                handlers = cfg.get("handlers", {})
+                if "file" in handlers:
+                    handlers["file"]["filename"] = file_path
+
+            logging.config.dictConfig(cfg)
+        except Exception:
+            pass
+    _start_queue_listener()
+
+
+def _start_queue_listener() -> None:
+    global _listener, _queue
+    if _listener is not None:
+        return
+
+    _queue = Queue(-1)
+    file_path = _ensure_logfile_path()
+
+    handlers: list[logging.Handler] = []
+    if get_log_to_console_value() and "pytest" not in sys.modules:
+        handlers.append(_build_console_handler(logging.INFO))
+    if file_path is not None:
+
+        class _SelectiveThreadFilter(logging.Filter):
+            def filter(self, record: logging.LogRecord) -> bool:
+                tn = getattr(record, "threadName", "")
+                # For worker/server threads, only forward ERROR+ to the file
+                if tn == "server" or tn.startswith("server:"):
+                    return record.levelno >= logging.ERROR
+                if tn.startswith("worker-"):
+                    return record.levelno >= logging.ERROR
+                return True
+
+        fh = logging.FileHandler(file_path, mode="a", encoding="utf-8")
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        fh.addFilter(_SelectiveThreadFilter())
+        handlers.append(fh)
+
+    _listener = QueueListener(_queue, *handlers, respect_handler_level=True)
+    _listener.start()
+
+    # For clean shutdown. Using atexit exit handler module to stop listener.
+    global _shutdown_registered
+    if not _shutdown_registered:
+        try:
+            atexit.register(_stop_listener)
+        finally:
+            _shutdown_registered = True
+
+    # Configure root to enqueue records only
+    qh = QueueHandler(_queue)
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(qh)
+    root.setLevel(logging.INFO)
+
+
+def _ensure_logfile_path() -> str | None:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    log_dir = os.path.join(base_dir, "../../log")
+    file_name = "pytest_log.log" if "pytest" in sys.modules else "urgent_log.log"
+    if "pytest" not in sys.modules and log_to_datetime_log_file():
+        file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_urgent_log.log"
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        full_path = os.path.join(log_dir, file_name)
+        with open(full_path, "a", encoding="utf-8"):
+            pass
+        return full_path
+    except OSError as e:
+        sys.stderr.write(
+            f"Warning: Could not create/access log directory/file in {log_dir}: {e}\n"
+        )
+        return None
+
+
+def _stop_listener() -> None:
+    global _listener, _queue
+    try:
+        if _listener is not None:
+            _listener.stop()
+    except Exception:
+        pass
+    finally:
+        _listener = None
+        _queue = None

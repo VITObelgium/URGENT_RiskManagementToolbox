@@ -1,4 +1,8 @@
+import math
+import os
 from typing import Any
+
+import psutil
 
 from logger import get_csv_logger, get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
@@ -30,7 +34,6 @@ def run_risk_management(
     n_size: int = 10,
     patience: int = 10,
     max_generations: int = 10,
-    use_cluster: bool = False,
 ):
     """
     Main entry point for running risk management.
@@ -50,13 +53,14 @@ def run_risk_management(
         n_size,
     )
 
-    # physical_cores = psutil.cpu_count(logical=False)
-    # worker_count = max(1, math.floor(physical_cores / 2))
+    physical_cores = psutil.cpu_count(logical=False)
+    worker_count = max(1, math.floor(physical_cores / 2))
+    runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
 
     cm = (
-        simulation_cluster_context_manager(worker_count=3)
-        if use_cluster
-        else simulation_process_context_manager(worker_count=2)
+        simulation_process_context_manager(worker_count=2)
+        if runner_mode == "thread"
+        else simulation_cluster_context_manager(worker_count=worker_count)
     )
 
     with cm:

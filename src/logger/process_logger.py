@@ -92,12 +92,13 @@ def configure_worker_logger(worker_id: int) -> Path:
     file_path = log_dir / f"worker_{worker_id}.log"
 
     thread_filter = _ThreadNameFilter(f"worker-{worker_id}")
-    aux_logger = logging.getLogger("aux")
-    aux_logger.setLevel(logging.DEBUG)
-    _add_unique_file_handler(aux_logger, file_path, record_filter=thread_filter)
     tw_logger = logging.getLogger("threading-worker")
     tw_logger.setLevel(logging.DEBUG)
     _add_unique_file_handler(tw_logger, file_path, record_filter=thread_filter)
+    try:
+        tw_logger.propagate = False
+    except Exception:
+        pass
 
     if get_external_console_logging() and not _is_pytest_env():
         try:
@@ -132,6 +133,10 @@ def configure_server_logger() -> Path:
     ts_logger = logging.getLogger("threading-server")
     ts_logger.setLevel(logging.DEBUG)
     _add_unique_file_handler(ts_logger, file_path, record_filter=thread_filter)
+    try:
+        ts_logger.propagate = False
+    except Exception:
+        pass
 
     if get_external_console_logging() and not _is_pytest_env():
         try:

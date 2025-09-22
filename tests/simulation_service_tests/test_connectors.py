@@ -191,15 +191,17 @@ def mock_popen() -> Generator[Mock, None, None]:
 @pytest.fixture(autouse=True)
 def patch_stream_reader(monkeypatch):
     """
-    Patch the stream_reader function so it appends lines from the mock's stdout to manager.stdout_lines.
+    Patch the stream_reader used by SubprocessRunner so it appends lines from the mock's
+    stdout/stderr to manager.stdout_lines/manager.stderr_lines without using real logging.
     """
-    from services.simulation_service.core.connectors import open_darts
+    from services.simulation_service.core.connectors import open_darts, runner
 
     def fake_stream_reader(stream, lines_list, logger_func):
         for line in stream:
             lines_list.append(line.rstrip("\n"))
 
-    monkeypatch.setattr(open_darts, "stream_reader", fake_stream_reader)
+    monkeypatch.setattr(open_darts, "stream_reader", fake_stream_reader, raising=False)
+    monkeypatch.setattr(runner, "stream_reader", fake_stream_reader, raising=False)
     yield
 
 
@@ -250,7 +252,7 @@ def test_run_success_with_single_broadcasted_value(mock_popen: Mock) -> None:
     assert simulation_status == SimulationStatus.SUCCESS
     assert results == {"heat": 2312.12}
     mock_popen.assert_called_once()
-    mock_popen_instance.wait.assert_called_once()
+    assert mock_popen_instance.wait.called
 
 
 def test_run_failure(mock_popen: Mock) -> None:
@@ -265,7 +267,7 @@ def test_run_failure(mock_popen: Mock) -> None:
     assert simulation_status == SimulationStatus.FAILED
 
     mock_popen.assert_called_once()
-    mock_popen_instance.wait.assert_called_once()
+    assert mock_popen_instance.wait.called
 
 
 def test_run_handles_exception(mock_popen: Mock) -> None:

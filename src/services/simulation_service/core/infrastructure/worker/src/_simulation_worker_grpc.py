@@ -153,14 +153,43 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
         )
 
         if not venv_python.exists():
+            logger.info(
+                "Venv not found. Worker %s: Creating venv at %s", worker_id, venv_dir
+            )
             try:
-                subprocess.run([base, "-m", "venv", str(venv_dir)], check=True)
+                p = subprocess.run(
+                    [base, "-m", "venv", str(venv_dir)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                logger.debug(
+                    "Worker %s: venv creation stdout:\n%s", worker_id, p.stdout
+                )
+                if p.stderr:
+                    logger.debug(
+                        "Worker %s: venv creation stderr:\n%s", worker_id, p.stderr
+                    )
+            except subprocess.CalledProcessError as e:
+                # Log captured output if available and return failure
+                out = getattr(e, "stdout", None)
+                err = getattr(e, "stderr", None)
+                if out:
+                    logger.error(
+                        "Worker %s: venv creation failed, stdout:\n%s", worker_id, out
+                    )
+                if err:
+                    logger.error(
+                        "Worker %s: venv creation failed, stderr:\n%s", worker_id, err
+                    )
+                logger.error("Worker %s: Failed to create venv: %s", worker_id, e)
+                return None
             except Exception as e:
                 logger.error("Worker %s: Failed to create venv: %s", worker_id, e)
                 return None
 
         try:
-            subprocess.run(
+            p = subprocess.run(
                 [
                     str(venv_python),
                     "-m",
@@ -172,7 +201,28 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
                     "wheel",
                 ],
                 check=True,
+                capture_output=True,
+                text=True,
             )
+            logger.debug("Worker %s: pip upgrade stdout:\n%s", worker_id, p.stdout)
+            if p.stderr:
+                logger.debug("Worker %s: pip upgrade stderr:\n%s", worker_id, p.stderr)
+        except subprocess.CalledProcessError as e:
+            logger.warning(
+                "Worker %s: Failed to upgrade pip tooling in venv (%s); proceeding.",
+                worker_id,
+                e,
+            )
+            out = getattr(e, "stdout", None)
+            err = getattr(e, "stderr", None)
+            if out:
+                logger.debug(
+                    "Worker %s: pip upgrade failed stdout:\n%s", worker_id, out
+                )
+            if err:
+                logger.debug(
+                    "Worker %s: pip upgrade failed stderr:\n%s", worker_id, err
+                )
         except Exception as e:
             logger.warning(
                 "Worker %s: Failed to upgrade pip tooling in venv (%s); proceeding.",
@@ -188,11 +238,39 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
             "Worker %s: Running pip install with cwd=%s", worker_id, install_cwd
         )
         try:
-            subprocess.run(
+            p = subprocess.run(
                 [str(venv_python), "-m", "pip", "install", "-r", str(req_path)],
                 check=True,
                 cwd=install_cwd,
+                capture_output=True,
+                text=True,
             )
+            logger.debug("Worker %s: pip install -r stdout:\n%s", worker_id, p.stdout)
+            if p.stderr:
+                logger.debug(
+                    "Worker %s: pip install -r stderr:\n%s", worker_id, p.stderr
+                )
+        except subprocess.CalledProcessError as e:
+            out = getattr(e, "stdout", None)
+            err = getattr(e, "stderr", None)
+            if out:
+                logger.error(
+                    "Worker %s: pip install -r %s failed stdout:\n%s",
+                    worker_id,
+                    req_path,
+                    out,
+                )
+            if err:
+                logger.error(
+                    "Worker %s: pip install -r %s failed stderr:\n%s",
+                    worker_id,
+                    req_path,
+                    err,
+                )
+            logger.error(
+                "Worker %s: pip install -r %s failed: %s", worker_id, req_path, e
+            )
+            return None
         except Exception as e:
             logger.error(
                 "Worker %s: pip install -r %s failed: %s", worker_id, req_path, e
@@ -549,6 +627,8 @@ def create_channel():
 
 
 async def main(stop_flag: threading.Event | None = None, worker_id: str | None = None):
+    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
+    logger.info(f"Worker starting with OPEN_DARTS_RUNNER={mode}")
     worker_id = worker_id or str(uuid.uuid4().hex)[:8]
 
     loop = asyncio.get_running_loop()

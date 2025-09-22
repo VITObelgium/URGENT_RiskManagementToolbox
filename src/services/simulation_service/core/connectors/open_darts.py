@@ -6,7 +6,6 @@ This module must be aligned with python 3.10 syntax, as open-darts whl requires 
 import json
 import os
 import re
-import subprocess
 import sys
 import threading
 from collections import defaultdict
@@ -18,7 +17,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial import KDTree
 
-from logger import get_logger, stream_reader
+from logger import get_logger
 
 from .common import (
     ConnectorInterface,
@@ -33,8 +32,9 @@ from .common import (
     extract_well_with_perforations_points,
 )  # the relative import, because connectors will be copied to worker, this will prevent import error
 from .conn_utils.managed_subprocess import ManagedSubprocess
+from .runner import SubprocessRunner, ThreadRunner
 
-logger = get_logger(__name__)
+logger = get_logger("threading-worker")
 
 
 class _StructDiscretizerProtocol(Protocol):
@@ -138,170 +138,21 @@ class OpenDartsConnector(ConnectorInterface):
         config: SerializedJson,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        """
-        Start reservoir simulator with given config and model in main.py
-        Simulation is starting in separate process, output is capturing from the stdout
-        and will be searching against template message to get back results parameters.
+        # Choose runner implementation via environment. Default uses subprocess runner.
+        runner_mode = os.environ.get("OPEN_DARTS_RUNNER", "thread").lower()
 
-        On simulation file side, user must use OpenDartsConnector.broadcast_result method to channel the
-        proper results to stdout
-
-        If process terminate with non-zero error code then SimulationResults will be empty (?TBC)
-
-        """
-
-        default_failed_value: float = float(
-            -1e3
-        )  # for maximization problem it should be big negative number
-        default_failed_results: SimulationResults = {
-            k: default_failed_value for k in SimulationResultType
-        }
-
-        repo_root = OpenDartsConnector._repo_root()
-        wid = OpenDartsConnector._current_worker_id()
-        work_dir = repo_root / f"orchestration_files/.worker_{wid}_temp"
-
-        try:
-            for p in Path.cwd().glob("obl_point_data_*.pkl"):
-                try:
-                    p.unlink(missing_ok=True)
-                except Exception:
-                    pass
-        except Exception:
-            # If cleanup fails we still try to proceed.
-            logger.warning(
-                "Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway."
-            )
-
-        # Determine Python interpreter to use for OpenDarts subprocess.
-        # Priority: shared .venv_darts under orchestration_files > "python3" from PATH
-        venv_candidate = repo_root / "orchestration_files/.venv_darts/bin/python"
-        if venv_candidate.exists():
-            selected = str(venv_candidate)
-            reason = f"auto-detected {venv_candidate}"
-        else:
-            selected = "python3"
-            reason = "default fallback"
-
-        command = [selected, "-u", "main.py", config]
-        logger.info(
-            "Launching OpenDarts subprocess using interpreter (%s): %s",
-            reason,
-            selected,
+        subprocess_runner = SubprocessRunner(
+            managed_subprocess_factory=lambda *a, **k: ManagedSubprocess(*a, **k),
+            broadcast_results_parser=OpenDartsConnector._get_broadcast_results,
+            repo_root_getter=OpenDartsConnector._repo_root,
+            worker_id_getter=OpenDartsConnector._current_worker_id,
         )
 
-        # Build environment for the subprocess with a context-specific path, so that it works in the worker directory
-        env = os.environ.copy()
-        env.update(
-            {
-                "PWD": str(work_dir),
-            }
-        )
+        if runner_mode == "thread":
+            thread_runner = ThreadRunner(subprocess_runner)
+            return thread_runner.run(config, stop)
 
-        _tw_logger = get_logger("threading-worker")
-        manager = ManagedSubprocess(
-            command_args=command,
-            stream_reader_func=stream_reader,
-            logger_info_func=_tw_logger.info,
-            logger_error_func=_tw_logger.error,
-            env=env,
-            thread_name_prefix=f"worker-{wid}" if wid else None,
-        )
-
-        try:
-            with manager as process:
-                timeout_duration = 15 * 60
-                try:
-                    waited = 0.0
-                    poll_step = 0.25
-                    while True:
-                        if stop is not None and stop.is_set():
-                            logger.warning(
-                                "Stop requested; terminating OpenDarts subprocess."
-                            )
-                            if process.poll() is None:
-                                process.terminate()
-                                try:
-                                    process.wait(timeout=3)
-                                except subprocess.TimeoutExpired:
-                                    process.kill()
-                                    process.wait()
-                            return SimulationStatus.FAILED, default_failed_results
-                        try:
-                            process.wait(timeout=poll_step)
-                            break
-                        except subprocess.TimeoutExpired:
-                            waited += poll_step
-                            if waited >= timeout_duration:
-                                raise subprocess.TimeoutExpired(
-                                    process.args, timeout_duration
-                                )
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        f"Subprocess timed out after {timeout_duration} seconds. Terminating."
-                    )
-                    if process.poll() is None:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            logger.warning(
-                                "Subprocess did not terminate gracefully. Killing."
-                            )
-                            process.kill()
-                            process.wait()
-                    if manager.stdout_thread and manager.stdout_thread.is_alive():
-                        manager.stdout_thread.join(timeout=2)
-                    if manager.stderr_thread and manager.stderr_thread.is_alive():
-                        manager.stderr_thread.join(timeout=2)
-                    return SimulationStatus.TIMEOUT, default_failed_results
-
-                if process.returncode != 0:
-                    stderr_tail = "\n".join(manager.stderr_lines[-100:])
-                    stdout_tail = "\n".join(manager.stdout_lines[-100:])
-                    if process.returncode == -9:
-                        logger.error(
-                            "OpenDarts subprocess was killed (rc=-9). This is often due to OOM kill. "
-                            "Consider lowering worker_count, reducing model size, or limiting threads. "
-                            "Stdout tail:\n%s\nStderr tail:\n%s",
-                            stdout_tail,
-                            stderr_tail,
-                        )
-                    else:
-                        logger.error(
-                            "OpenDarts subprocess failed rc=%s. Stdout tail:\n%s\nStderr tail:\n%s",
-                            process.returncode,
-                            stdout_tail,
-                            stderr_tail,
-                        )
-                        if (
-                            "BlockingIOError" in stderr_tail
-                            and "h5py" in stderr_tail
-                            and "Unable to synchronously create file" in stderr_tail
-                        ):
-                            logger.error(
-                                "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE, "
-                                "but if the error persists, ensure each worker runs in an isolated directory and no other process "
-                                "holds the same HDF5 file open."
-                            )
-                    return SimulationStatus.FAILED, default_failed_results
-
-                full_stdout = "\n".join(manager.stdout_lines)
-                broadcast_results = OpenDartsConnector._get_broadcast_results(
-                    full_stdout
-                )
-                return SimulationStatus.SUCCESS, broadcast_results
-
-        except FileNotFoundError:
-            logger.exception(
-                f"Failed to start subprocess. Command '{' '.join(command)}' not found."
-            )
-            return SimulationStatus.FAILED, default_failed_results
-        except Exception as e:
-            logger.exception(
-                f"An error occurred while running the simulation subprocess: {e}"
-            )
-            return SimulationStatus.FAILED, default_failed_results
+        return subprocess_runner.run(config, stop)
 
     @staticmethod
     def _get_broadcast_results(

@@ -2,10 +2,10 @@ FROM python:3.10.12-slim AS builder
 
 WORKDIR /app
 
-COPY src/services/simulation_service/core/infrastructure/worker/open_darts_whl/ /app/
+COPY src/services/simulation_service/core/infrastructure/worker/open_darts_whl/ /app/open_darts_whl/
 COPY src/services/simulation_service/core/infrastructure/worker/worker_requirements.txt .
-RUN pip install --no-cache-dir uv &&\
-    uv pip install --no-cache-dir  -r worker_requirements.txt --target /install
+RUN pip install --no-cache-dir uv && \
+    uv pip install --no-cache-dir -r worker_requirements.txt --target /install
 
 FROM python:3.10.12-slim
 
@@ -17,10 +17,12 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY --from=builder /install /usr/local/lib/python3.10/site-packages
-COPY src/services/simulation_service/core/infrastructure/worker/src/ /app/
-COPY src/services/simulation_service/core/infrastructure/generated/ /app/generated/
+COPY src/services/simulation_service/core/infrastructure/worker/src/ /app/services/simulation_service/core/infrastructure/worker/src/
+COPY src/services/simulation_service/core/infrastructure/generated/ /app/services/simulation_service/core/infrastructure/generated/
+COPY src/services/simulation_service/core/connectors/ /app/services/simulation_service/core/connectors/
+COPY src/services/simulation_service/core/utils/ /app/services/simulation_service/core/utils/
+# Copying again, so that the model main.py imports resolve
 COPY src/services/simulation_service/core/connectors/ /app/connectors/
-COPY src/services/simulation_service/core/utils/ /app/utils/
 
 COPY src/logger /app/logger
 
@@ -33,4 +35,4 @@ ARG _SERVER_HOST
 ENV SERVER_PORT=${_SERVER_PORT}
 ENV SERVER_HOST=${_SERVER_HOST}
 
-CMD ["python", "-u", "_simulation_worker_grpc.py"]
+CMD ["python", "-u", "/app/services/simulation_service/core/infrastructure/worker/src/_simulation_worker_grpc.py"]

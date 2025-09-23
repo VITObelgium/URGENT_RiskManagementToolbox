@@ -34,7 +34,7 @@ from .common import (
 from .conn_utils.managed_subprocess import ManagedSubprocess
 from .runner import SubprocessRunner, ThreadRunner
 
-logger = get_logger("threading-worker")
+logger = get_logger("threading-worker", filename=__name__)
 
 
 class _StructDiscretizerProtocol(Protocol):

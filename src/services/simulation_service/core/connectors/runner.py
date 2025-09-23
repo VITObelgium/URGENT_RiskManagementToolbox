@@ -21,7 +21,7 @@ from .common import (
 )
 from .conn_utils.managed_subprocess import ManagedSubprocess
 
-logger = get_logger("threading-worker")
+logger = get_logger("threading-worker", filename=__name__)
 
 
 class SimulationRunner(Protocol):

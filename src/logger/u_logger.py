@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import logging.config
+import os
 from logging import Logger
 from pathlib import Path
 from typing import Optional
@@ -72,7 +73,7 @@ def configure_logger() -> None:
     _logger_configured = True
 
 
-def get_logger(name: Optional[str] = "") -> Logger:
+def get_logger(name: Optional[str] = "", filename: Optional[str] = None) -> Logger:
     """Return a named logger; config is applied on first use.
 
     - Names like "threading-worker" and "threading-server" are preserved.
@@ -80,4 +81,7 @@ def get_logger(name: Optional[str] = "") -> Logger:
     """
     if not _logger_configured:
         configure_logger()
+    if os.getenv("OPEN_DARTS_RUNNER", "thread").lower() == "docker" and filename:
+        if name in ("threading-server", "threading-worker"):
+            name = filename
     return logging.getLogger(name) if name else logging.getLogger()

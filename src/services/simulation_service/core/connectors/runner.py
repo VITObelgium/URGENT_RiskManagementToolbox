@@ -115,7 +115,7 @@ class SubprocessRunner:
             manager = managed_factory(
                 command_args=command,
                 stream_reader_func=stream_reader,
-                logger_info_func=_tw_logger.info,
+                logger_info_func=_tw_logger.debug,
                 logger_error_func=_tw_logger.error,
                 env=env,
                 thread_name_prefix=f"worker-{wid}" if wid else None,

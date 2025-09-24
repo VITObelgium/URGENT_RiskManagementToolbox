@@ -30,10 +30,10 @@
   "loggers": {
     "aux": { "level": "INFO", "handlers": [], "propagate": true },
     "aux.console": { "level": "INFO", "handlers": [], "propagate": true },
-    "threading-worker": { "level": "DEBUG", "handlers": [], "propagate": true },
+  "threading-worker": { "level": "INFO", "handlers": [], "propagate": true },
     "threading-server": { "level": "DEBUG", "handlers": [], "propagate": true },
     "server": { "level": "INFO", "handlers": [], "propagate": true },
-    "worker": { "level": "INFO", "handlers": [], "propagate": true }
+  "worker": { "level": "INFO", "handlers": [], "propagate": true }
   },
   "root": {
     "level": "INFO",

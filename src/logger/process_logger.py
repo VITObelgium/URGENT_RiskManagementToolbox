@@ -51,7 +51,7 @@ def _formatter() -> logging.Formatter:
 def _add_unique_file_handler(
     target_logger: logging.Logger,
     file_path: Path,
-    level: int = logging.DEBUG,
+    level: int = logging.INFO,
     record_filter: logging.Filter | None = None,
 ) -> None:
     """Attach a FileHandler to logger if an identical one isn't present."""
@@ -93,7 +93,6 @@ def configure_worker_logger(worker_id: int) -> Path:
 
     thread_filter = _ThreadNameFilter(f"worker-{worker_id}")
     tw_logger = logging.getLogger("threading-worker")
-    tw_logger.setLevel(logging.DEBUG)
     _add_unique_file_handler(tw_logger, file_path, record_filter=thread_filter)
     try:
         tw_logger.propagate = False

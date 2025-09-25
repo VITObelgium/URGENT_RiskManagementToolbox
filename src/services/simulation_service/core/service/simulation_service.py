@@ -144,6 +144,9 @@ class SimulationService:
             except grpc.RpcError as e:
                 logger.error("Error performing simulations: %s", e)
                 raise
+            except KeyboardInterrupt:
+                logger.warning("Simulation interrupted by user.")
+                raise
 
             return [
                 SimulationService._from_grpc(sim)

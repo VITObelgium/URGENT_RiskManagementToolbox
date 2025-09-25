@@ -107,7 +107,6 @@ def run_risk_management(
                     "Starting generation %d for risk management.",
                     loop_controller.current_generation,
                 )
-
                 # Generate or update solutions
                 solutions = dispatcher.process_iteration(next_solutions)
                 logger.debug("Generated solutions: %s", solutions)
@@ -176,6 +175,9 @@ def run_risk_management(
                 loop_controller.info,
             )
 
+        except KeyboardInterrupt:
+            logger.warning("Risk management process interrupted by user.")
+            return
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)
             raise

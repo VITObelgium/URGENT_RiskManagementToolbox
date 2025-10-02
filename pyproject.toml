@@ -33,7 +33,8 @@ omit = [
     "*_pb2.py",
     "*_pb2_grpc.py",
     "_build_proto.py",
-    "_test_.py"
+    "_test_.py",
+    "*/worker/src/*"
 ]
 exclude_lines = [
     "if __name__ == '__main__':"

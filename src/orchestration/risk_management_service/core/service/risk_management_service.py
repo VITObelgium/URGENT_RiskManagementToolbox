@@ -1,4 +1,5 @@
 import math
+import os
 from typing import Any
 
 import psutil
@@ -15,6 +16,7 @@ from services.problem_dispatcher_service.core.utils.utils import (
 from services.simulation_service import (
     SimulationService,
     simulation_cluster_context_manager,
+    simulation_process_context_manager,
 )
 from services.solution_updater_service import (
     OptimizationEngine,
@@ -53,8 +55,15 @@ def run_risk_management(
 
     physical_cores = psutil.cpu_count(logical=False)
     worker_count = max(1, math.floor(physical_cores / 2))
+    runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
 
-    with simulation_cluster_context_manager(worker_count=worker_count):
+    cm = (
+        simulation_process_context_manager(worker_count=worker_count)
+        if runner_mode == "thread"
+        else simulation_cluster_context_manager(worker_count=worker_count)
+    )
+
+    with cm:
         try:
             SimulationService.transfer_simulation_model(
                 simulation_model_archive=simulation_model_archive
@@ -98,7 +107,6 @@ def run_risk_management(
                     "Starting generation %d for risk management.",
                     loop_controller.current_generation,
                 )
-
                 # Generate or update solutions
                 solutions = dispatcher.process_iteration(next_solutions)
                 logger.debug("Generated solutions: %s", solutions)
@@ -167,6 +175,9 @@ def run_risk_management(
                 loop_controller.info,
             )
 
+        except KeyboardInterrupt:
+            logger.warning("Risk management process interrupted by user.")
+            return
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)
             raise

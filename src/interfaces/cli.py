@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 
 from logger import configure_logger, get_logger
 from orchestration.risk_management_service import run_risk_management
@@ -45,6 +46,11 @@ def cli():
         default=10,
         help="Maximum number of generations. Default is 10.",
     )
+    parser.add_argument(
+        "--use-docker",
+        action="store_true",
+        help="Flag to indicate whether to use Docker for simulations, or use multi-threading-based local execution. Default is False (i.e., use multi-threading).",
+    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -53,6 +59,13 @@ def cli():
     configure_logger()
     logger = get_logger(__name__)
     logger.info("Risk management toolbox started from CLI.")
+
+    if args.use_docker:
+        logger.info("Using Docker for simulations.")
+        os.environ["OPEN_DARTS_RUNNER"] = "docker"
+    else:
+        logger.info("Using multi-threading for simulations.")
+        os.environ["OPEN_DARTS_RUNNER"] = "thread"
 
     # Load the problem_definition from the JSON file
     try:

@@ -3,35 +3,38 @@ import os
 import time
 from queue import SimpleQueue
 
-import generated.simulation_messaging_pb2 as sm
-import generated.simulation_messaging_pb2_grpc as sm_grpc
 import grpc
 from grpc import aio
 
-from logger.u_logger import configure_logger, get_logger
+import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2 as sm
+import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2_grpc as sm_grpc
+from logger import get_logger
 
-configure_logger()
+logger = get_logger("threading-server", filename=__name__)
 
-logger = get_logger(__name__)
-
-server_options = [
+SERVER_OPTIONS = [
     ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
     ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
 ]
 
+_SERVER_LOOP: asyncio.AbstractEventLoop | None = None
+_SERVER: aio.Server | None = None
+
 
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     def __init__(self) -> None:
-        self._jobs = SimpleQueue()  # Queue of simulations
-        self._running_jobs = {}  # Dictionary to track running jobs
-        self._completed_jobs = {}  # Dictionary to store results
+        self._jobs: SimpleQueue = SimpleQueue()  # Queue of simulations
+        self._running_jobs: dict[
+            int, asyncio.Task
+        ] = {}  # Dictionary to track running jobs
+        self._completed_jobs: dict[
+            int, sm.SimulationResult
+        ] = {}  # Dictionary to store results
         self._job_event = asyncio.Event()  # Event to signal job completion
         self._simulation_model_archive: bytes | None = None
 
     async def TransferSimulationModel(self, request, context):
-        archive_size_bytes = (
-            len(request.package_archive) if hasattr(request, "package_archive") else 0
-        )
+        archive_size_bytes = len(getattr(request, "package_archive", b""))
         archive_size_mb = archive_size_bytes / (1024 * 1024)
         logger.info(
             f"Received simulation model archive of size {archive_size_mb:.2f} MB."
@@ -40,7 +43,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._simulation_model_archive = None
         simulation_model_archive = request.package_archive
         self._simulation_model_archive = simulation_model_archive
-
         logger.info("Simulation model archive stored on server successfully.")
 
         return sm.Ack(
@@ -48,11 +50,10 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         )
 
     async def PerformSimulations(self, request, context):
-        logger.info(f"Initializing simulations with {len(request.simulations)} job(s)")
+        total_simulations = len(request.simulations)
+        logger.info(f"Initializing simulations with {total_simulations} job(s)")
 
         # Store the total number of simulations for progress tracking
-        total_simulations = len(request.simulations)
-
         self._jobs = SimpleQueue()
         self._running_jobs.clear()
         self._completed_jobs.clear()
@@ -62,13 +63,13 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             self._running_jobs[i] = None  # Mark job as waiting
 
         logger.info(
-            f"All {len(request.simulations)} simulation(s) queued, waiting for completion"
+            f"All {total_simulations} simulation(s) queued, waiting for completion"
         )
 
         # Set up progress tracking variables
         start_time = time.time()
         last_log_time = start_time
-        log_interval = 30  # Log progress every 30 seconds
+        LOG_INTERVAL_SEC = 30  # Log progress every 30 seconds
 
         # Wait for all jobs to complete with regular progress updates
         while self._running_jobs:
@@ -78,7 +79,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             # Calculate timeout for wait_for
             # If we're due for a log, timeout immediately (0)
             # Otherwise wait until the next log interval is reached
-            timeout = max(0, log_interval - time_since_last_log)
+            timeout = max(0, LOG_INTERVAL_SEC - time_since_last_log)
 
             try:
                 # Wait for the event with timeout
@@ -90,7 +91,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
             # Check if it's time to log progress
             current_time = time.time()
-            if current_time - last_log_time >= log_interval:
+            if current_time - last_log_time >= LOG_INTERVAL_SEC:
                 completed = len(self._completed_jobs)
                 remaining = len(self._running_jobs)
                 percent_complete = (completed / total_simulations) * 100
@@ -250,13 +251,42 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
 
 async def serve() -> None:
+    global _SERVER_LOOP, _SERVER
     logger.info("Initializing Async gRPC Server setup...")
+    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
+    logger.info(f"Server starting with OPEN_DARTS_RUNNER={mode}")
 
     try:
-        # Log server options for troubleshooting and transparency
-        logger.debug(f"gRPC server options: {server_options}")
+        # Install an exception handler to silence noisy gRPC poller EAGAIN callbacks
+        loop = asyncio.get_running_loop()
+        _warned = {"done": False}
 
-        server = aio.server(options=server_options)
+        def _ignore_poller_eagain(loop, context):
+            exc = context.get("exception")
+            message = context.get("message", "")
+            if isinstance(exc, BlockingIOError) and getattr(exc, "errno", None) == 11:
+                if not _warned["done"]:
+                    logger.warning(
+                        "Suppressing gRPC AIO poller EAGAIN noise (BlockingIOError 11)"
+                    )
+                    _warned["done"] = True
+                return
+            if "PollerCompletionQueue._handle_events" in message:
+                # Some environments report only via message without exception
+                if not _warned["done"]:
+                    logger.warning(
+                        "Suppressing gRPC AIO poller _handle_events noise via message"
+                    )
+                    _warned["done"] = True
+                return
+            # Fallback to default handler for other errors
+            loop.default_exception_handler(context)
+
+        loop.set_exception_handler(_ignore_poller_eagain)
+
+        logger.debug(f"gRPC server options: {SERVER_OPTIONS}")
+
+        server = aio.server(options=SERVER_OPTIONS)
         logger.debug("gRPC aio server instance created.")
 
         sm_grpc.add_SimulationMessagingServicer_to_server(
@@ -274,6 +304,9 @@ async def serve() -> None:
         await server.start()
         logger.info("Async gRPC Server successfully started.")
 
+        _SERVER_LOOP = asyncio.get_running_loop()
+        _SERVER = server
+
         try:
             logger.info("Server is running and waiting for termination...")
             await server.wait_for_termination()
@@ -284,8 +317,50 @@ async def serve() -> None:
         logger.critical(f"Critical error during server startup or operation: {e}")
         raise
     finally:
+        globals()["_SERVER_LOOP"] = None
+        globals()["_SERVER"] = None
         logger.info("Server serve() routine completed or interrupted.")
 
 
 if __name__ == "__main__":
+    logger.info("Starting Simulation gRPC Server...")
     asyncio.run(serve())
+
+
+def driver():
+    asyncio.run(serve())
+
+
+def request_server_shutdown(timeout: float | None = 2.0) -> None:
+    """Signal the in-process gRPC server to stop gracefully.
+
+    Safe to call from other threads. If the server hasn't finished initializing,
+    will wait up to `timeout` seconds for the loop/server references to appear.
+    """
+    end = time.time() + (timeout or 0.0)
+    while (_SERVER_LOOP is None or _SERVER is None) and time.time() < end:
+        time.sleep(0.05)
+
+    if _SERVER_LOOP is None or _SERVER is None:
+        logger.warning(
+            "request_server_shutdown: server not initialized; nothing to stop."
+        )
+        return
+
+    def _stop():
+        try:
+            if _SERVER is not None:
+                logger.info(
+                    "request_server_shutdown: initiating graceful server.stop()"
+                )
+                if _SERVER_LOOP is not None:
+                    _SERVER_LOOP.create_task(_SERVER.stop(grace=None))
+                else:
+                    asyncio.create_task(_SERVER.stop(grace=None))
+        except Exception:
+            logger.exception("Error while requesting server shutdown")
+
+    try:
+        _SERVER_LOOP.call_soon_threadsafe(_stop)
+    except Exception:
+        logger.exception("Failed to schedule server shutdown on event loop")

@@ -1,4 +1,3 @@
-
 <p align="center">
   <img src="https://github.com/user-attachments/assets/d25f9fd7-7610-4725-9a8e-bead501ce568" width="250">
 </p>
@@ -37,8 +36,8 @@ This Python-based toolbox is designed to optimize geothermal reservoir developme
 ## Development Requirements
 
 - **Operating System**: Ubuntu 22.04 (recommended)
-- **Python Version**: 3.12 (configured in the Makefile)
-- **Make and common Unix tools**: git, curl
+- **Python Version**: 3.12 (managed via uv; configured in `pyproject.toml` and `justfile`)
+- **Just and common Unix tools**: git, curl
 
 ---
 
@@ -50,34 +49,46 @@ You can install either a **development environment** (recommended for developers
 
 > **Note:** Currently, Windows OS is not supported for this setup.
 
-#### Development Environment:
+#### Development Environment
 
-This installs all the necessary tools, including development dependencies, pre-commit hooks, Docker, LaTeX, and Python/uv environments:
+Installs the tools needed for development (Python via uv, dev dependencies, pre-commit, LaTeX, optional Docker):
 
-```shell
-make install-dev
-```
-
-This command will specifically:
-
-- Install Python 3.12 and set up a virtual environment using `uv`.
-- Install LaTeX and TeXstudio for documentation purposes.
-- Install Docker, verifying its functionality.
-- Install all Python development dependencies and pre-commit hooks.
-
-#### Release Environment:
-
-Installs only the dependencies necessary to run the application in a production setting. Run:
+- Full dev (includes Docker):
 
 ```shell
-make install-release
+just install-dev
 ```
 
-This command will specifically:
+- Dev without Docker (threaded runner only):
 
-- Install Python 3.12 and set up a virtual environment using `uv`.
-- Install Docker, verifying its functionality.
-- Install all Python development dependencies and pre-commit hooks.
+```shell
+just install-dev-thread
+```
+
+The full dev setup will:
+
+- Install Python 3.12 and create a virtual environment with `uv`.
+- Install LaTeX and TeXstudio for docs.
+- Install Docker and verify it.
+- Install all Python dev dependencies and pre-commit hooks.
+
+#### Release Environment
+
+Choose based on your runner mode:
+
+- Docker runner:
+
+```shell
+just install-docker-release
+```
+
+- Threaded runner (without Docker):
+
+```shell
+just install-thread-release
+```
+
+Both variants install Python 3.12 runtime deps via `uv`; the Docker option also installs and verifies Docker. Pre-commit hooks are set up by the recipes.
 
 ---
 
@@ -86,13 +97,13 @@ This command will specifically:
 To edit the project documentation using TeXstudio, execute:
 
 ```shell
-make edit-docs
+just edit-docs
 ```
 
 - This will open the documentation in TeXstudio if installed.
 - If TeXstudio is not detected, please install it along with LaTeX by running:
 ```shell
-make install-latex
+just install-latex
 ```
 
 ---
@@ -102,7 +113,7 @@ make install-latex
 Maintain codebase quality by executing pre-commit hooks, which will run set of the tools including pytest and coverage:
 
 ```shell
-make run-check
+just run-check
 ```
 ---
 
@@ -111,7 +122,29 @@ make run-check
 ### 1. Supported Reservoir Simulators:
 - OpenDarts (1.1.3) [open_darts-1.1.3-cp310-cp310-linux_x86_64] (default)
 
-### 2. Reservoir simulation interoperability
+### 2. Execution modes
+
+The toolbox supports two execution modes for running simulations:
+
+- Threaded runner (default): local execution without containers.
+- Docker runner: containerized workers.
+
+Pick a runner using either the CLI flag `--use-docker` or the convenience `just` recipes:
+
+- Threaded:
+
+```shell
+just run-thread <config_filepath> <model_filepath>
+```
+
+- Docker:
+
+```shell
+just run-docker <config_filepath> <model_filepath>
+```
+
+
+### 3. Reservoir simulation interoperability
 Interoperability between reservoir simulator and toolbox is established by the proper `Connector` [src/services/simulation_service/core/connectors].
 Connector allows exchange information (simulation configuration and simulation results) between toolbox and simulator.
 
@@ -195,7 +228,7 @@ Connector allows exchange information (simulation configuration and simulation r
 6. Simulation model implementation is read to run an optimization process using RiskManagementToolbox.
 7. All simulation model files must be archived in `.zip` format. User should ensure that after unpacking all simulation model files are accessible in folder without any additional subfolders.
 
-### 3. Toolbox configuration file
+### 4. Toolbox configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s),
 initial state, and variable constraints.
 
@@ -305,7 +338,7 @@ Recently the following optimization problem(s) are supported:
 
 If the user does not define the optimization strategy, the default value is `maximize`.
 
-#### 3.1. Optimization parameters: linear inequalities
+#### 4.1. Optimization parameters: linear inequalities
 
 You can optionally express additional relationships between variables using sparse linear (in)equalities.
 
@@ -398,7 +431,7 @@ During validation the upper bound is automatically reduced if it exceeds a physi
 }
 ```
 
-#### 3.2. Example of the configuration file
+#### 4.2. Example of the configuration file
 
 Well placement problem for two wells with maximization optimization strategy:
    ```json
@@ -468,25 +501,32 @@ Well placement problem for two wells with maximization optimization strategy:
 
 ---
 
-### 4. Toolbox running
+### 5. Running the toolbox
 
-To run the RiskManagementToolbox the virtual environment corresponded with the repository must be
-activated
+Required arguments:
+1. `--config-file` path to JSON config
+2. `--model-file` path to zipped model archive
 
-```URGENT_RiskManagementToolbox$ source .venv/bin/activate```
+Optional:
+- `--population-size` (default 10)
+- `--patience` (default 10)
+- `--max-generations` (default 10)
+- `--use-docker` to run via the Docker-based cluster
 
-User must set:
- 1. path to config file (--config-file)
- 2. path to model archive(--model-file)
-
-optionally:
-1. population size (--population-size)
-2. iteration count without progress (--patience)
-3. max generations count (-max-generations)
+CLI usage:
 
 ```
-uv run src/main.py
-usage: main.py [-h] --config-file CONFIG_FILE --model-file MODEL_FILE [--population-size POPULATION_SIZE] [--patience PATIENCE] [--max-generations MAX_GENERATIONS]
+uv run src/main.py \
+  --config-file <config_filepath> \
+  --model-file <model_filepath> \
+  [--population-size 10] [--patience 10] [--max-generations 10] [--use-docker]
+```
+
+Equivalent with `just`:
+
+```
+just run-thread <config_filepath> <model_filepath>
+just run-docker <config_filepath> <model_filepath>
 ```
 
 ## Contact

@@ -16,6 +16,11 @@ del _hard_dependencies, _dependency, _missing_dependencies
 from services.simulation_service.core.api import (  # noqa: F401, E402
     SimulationService,
     simulation_cluster_context_manager,
+    simulation_process_context_manager,
 )
 
-__all__ = ["SimulationService", "simulation_cluster_context_manager"]
+__all__ = [
+    "SimulationService",
+    "simulation_cluster_context_manager",
+    "simulation_process_context_manager",
+]

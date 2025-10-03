@@ -12,18 +12,19 @@ WORKDIR /app
 
 
 COPY --from=builder /install /usr/local/lib/python3.12/site-packages
-COPY src/services/simulation_service/core/infrastructure/server/src/ /app/
-COPY src/services/simulation_service/core/infrastructure/generated/ /app/generated/
-COPY src/services/simulation_service/core/connectors/ /app/connectors/
-COPY src/services/simulation_service/core/utils/ /app/utils/
+
+COPY src/services/simulation_service/core/infrastructure/server/src/ /app/services/simulation_service/core/infrastructure/server/src/
+COPY src/services/simulation_service/core/infrastructure/generated/ /app/services/simulation_service/core/infrastructure/generated/
+COPY src/services/simulation_service/core/connectors/ /app/services/simulation_service/core/connectors/
+COPY src/services/simulation_service/core/utils/ /app/services/simulation_service/core/utils/
 
 COPY src/logger /app/logger
 
-ENV PYTHONPATH=/app/generated
+ENV PYTHONPATH=/app
 ENV URGENT_LOGGER_PROFILE=server
 
 ARG _SERVER_PORT
 
 ENV SERVER_PORT=${_SERVER_PORT}
 
-CMD ["python", "-u", "_simulation_server_grpc.py"]
+CMD ["python", "-u", "/app/services/simulation_service/core/infrastructure/server/src/_simulation_server_grpc.py"]

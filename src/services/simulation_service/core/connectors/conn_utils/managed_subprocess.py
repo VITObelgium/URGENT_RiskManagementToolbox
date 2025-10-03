@@ -1,6 +1,6 @@
 import subprocess
 import threading
-from typing import Callable
+from typing import Callable, Mapping, Optional
 
 
 class ManagedSubprocess:
@@ -11,6 +11,8 @@ class ManagedSubprocess:
         logger_info_func: Callable,
         logger_error_func: Callable,
         text: bool = True,
+        env: Optional[Mapping[str, str]] = None,
+        thread_name_prefix: Optional[str] = None,
     ):
         self.command_args = command_args
         self.text = text
@@ -18,6 +20,8 @@ class ManagedSubprocess:
         self.logger_info_func = logger_info_func
         self.logger_error_func = logger_error_func
         self.logger_warning_func = logger_error_func
+        self.env = dict(env) if env is not None else None
+        self.thread_name_prefix = thread_name_prefix or ""
 
         self.process: subprocess.Popen | None = None
         self.stdout_thread: threading.Thread | None = None
@@ -26,17 +30,31 @@ class ManagedSubprocess:
         self.stderr_lines: list[str] = []
 
     def __enter__(self) -> subprocess.Popen:
-        self.logger_info_func(f"Starting subprocess: {' '.join(self.command_args[:3])}")
         try:
+            command = " ".join(self.command_args)
+        except Exception:
+            command = str(self.command_args)
+        cwd = self.env.get("PWD") if self.env else None
+        self.logger_info_func("Starting subprocess...")
+        try:
+            popen_kwargs: dict = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": self.text,
+                "cwd": cwd,
+            }
+
+            # Pass env only if explicitly provided; do not include when None.
+            if self.env is not None:
+                popen_kwargs["env"] = self.env
+
             self.process = subprocess.Popen(
                 self.command_args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=self.text,
+                **popen_kwargs,
             )
         except Exception:
             self.logger_error_func(
-                f"Failed to start subprocess with command: {' '.join(self.command_args[:3])}"
+                f"Failed to start subprocess with command: {command}"
             )
             self.process = None
             raise  # Re-raise the exception from Popen
@@ -47,15 +65,25 @@ class ManagedSubprocess:
                 self.process.wait()
             raise RuntimeError("Subprocess stdout/stderr streams are not available.")
 
+        stdout_name, stderr_name = None, None
+        if self.thread_name_prefix:
+            stdout_name = f"{self.thread_name_prefix}:stdout"
+            stderr_name = f"{self.thread_name_prefix}:stderr"
+        else:
+            stdout_name = "subprocess:stdout"
+            stderr_name = "subprocess:stderr"
+
         self.stdout_thread = threading.Thread(
             target=self.stream_reader_func,
             args=(self.process.stdout, self.stdout_lines, self.logger_info_func),
             daemon=True,
+            name=stdout_name,
         )
         self.stderr_thread = threading.Thread(
             target=self.stream_reader_func,
             args=(self.process.stderr, self.stderr_lines, self.logger_error_func),
             daemon=True,
+            name=stderr_name,
         )
 
         self.stdout_thread.start()
@@ -71,14 +99,20 @@ class ManagedSubprocess:
             self.logger_warning_func(
                 f"Subprocess (PID: {self.process.pid}) still running upon exiting context. Exception: {exc_type}. Terminating."
             )
-            self.process.terminate()
+            try:
+                self.process.terminate()
+            except Exception as e:
+                self.logger_warning_func(f"Error sending terminate to subprocess: {e}")
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.logger_warning_func(
                     f"Subprocess (PID: {self.process.pid}) did not terminate gracefully. Killing."
                 )
-                self.process.kill()
+                try:
+                    self.process.kill()
+                except Exception as e:
+                    self.logger_warning_func(f"Error sending kill to subprocess: {e}")
                 self.process.wait()
 
         # Join threads to ensure all output is processed and resources are released

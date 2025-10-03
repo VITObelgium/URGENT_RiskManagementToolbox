@@ -13,6 +13,8 @@ services:
       - grpc-network
     ports:
       - "50051:50051"
+    environment:
+      - OPEN_DARTS_RUNNER=${OPEN_DARTS_RUNNER:-docker}
     healthcheck:
       test: [ "CMD", "nc", "-z", "localhost", "50051" ]
       interval: 10s
@@ -35,6 +37,8 @@ services:
         condition: service_healthy
     networks:
       - grpc-network
+    environment:
+      - OPEN_DARTS_RUNNER=${OPEN_DARTS_RUNNER:-docker}
     deploy:
       replicas: 1
 

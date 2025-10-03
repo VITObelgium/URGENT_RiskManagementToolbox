@@ -58,7 +58,7 @@ def run_risk_management(
     runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
 
     cm = (
-        simulation_process_context_manager(worker_count=2)
+        simulation_process_context_manager(worker_count=worker_count)
         if runner_mode == "thread"
         else simulation_cluster_context_manager(worker_count=worker_count)
     )

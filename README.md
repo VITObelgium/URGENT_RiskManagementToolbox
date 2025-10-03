@@ -1,4 +1,3 @@
-just
 <p align="center">
   <img src="https://github.com/user-attachments/assets/d25f9fd7-7610-4725-9a8e-bead501ce568" width="250">
 </p>
@@ -38,7 +37,7 @@ This Python-based toolbox is designed to optimize geothermal reservoir developme
 
 - **Operating System**: Ubuntu 22.04 (recommended)
 - **Python Version**: 3.12 (configured in the Makefile)
-- **Make and common Unix tools**: git, curl
+- **Just and common Unix tools**: git, curl
 
 ---
 
@@ -55,7 +54,7 @@ You can install either a **development environment** (recommended for developers
 This installs all the necessary tools, including development dependencies, pre-commit hooks, Docker, LaTeX, and Python/uv environments:
 
 ```shell
-make install-dev
+just install-dev
 ```
 
 This command will specifically:
@@ -65,12 +64,20 @@ This command will specifically:
 - Install Docker, verifying its functionality.
 - Install all Python development dependencies and pre-commit hooks.
 
+For development aimed at only threading solution:
+
+```shell
+just install-dev-thread
+```
+
+This command omits Docker installation
+
 #### Release Environment:
 
 Installs only the dependencies necessary to run the application in a production setting. Run:
 
 ```shell
-make install-release
+just install-release
 ```
 
 This command will specifically:
@@ -86,13 +93,13 @@ This command will specifically:
 To edit the project documentation using TeXstudio, execute:
 
 ```shell
-make edit-docs
+just edit-docs
 ```
 
 - This will open the documentation in TeXstudio if installed.
 - If TeXstudio is not detected, please install it along with LaTeX by running:
 ```shell
-make install-latex
+just install-latex
 ```
 
 ---
@@ -102,7 +109,7 @@ make install-latex
 Maintain codebase quality by executing pre-commit hooks, which will run set of the tools including pytest and coverage:
 
 ```shell
-make run-check
+just run-check
 ```
 ---
 

@@ -96,16 +96,9 @@ install-xterm:
     sudo apt-get install -y xfonts-base
     printf "\n\033[0;32m==== xfonts-base installed successfully. ====\033[0m\n\n"
 
-# High-level installation targets
-[group('install')]
-[doc('Install all dependencies for release (Ubuntu only)')]
-install-release: install-python-and-uv install-docker verify-docker install-xterm
-    printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
-    uv sync --no-dev
-    uv run pre-commit install
-    printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
-[group('install')]
+
+[group('setup')]
 [doc('Install base development dependencies (Ubuntu): Python, uv, LaTeX, xterm, sync dev deps, pre-commit')]
 dev: install-python-and-uv install-latex install-xterm
     printf "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
@@ -113,15 +106,37 @@ dev: install-python-and-uv install-latex install-xterm
     uv run pre-commit install
     printf "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
 
+# High-level installation targets
+[group('install')]
+[doc('Install all dependencies needed for release threading solution (Ubuntu only)')]
+install-thread-release: install-python-and-uv install-xterm
+    printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
+    uv sync --no-dev
+    uv run pre-commit install
+    printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
+
+[group('install')]
+[doc('Install all dependencies for release (Ubuntu only)')]
+install-docker-release: install-python-and-uv install-docker verify-docker install-xterm
+    printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
+    uv sync --no-dev
+    uv run pre-commit install
+    printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
+
 [group('install')]
 [doc('Install development environment for Docker runner (includes base dev + Docker)')]
-dev-docker: dev install-docker verify-docker
+install-dev-docker: dev install-docker verify-docker
     printf "\n\033[0;32m==== Docker development setup complete. ====\033[0m\n\n"
 
 [group('install')]
 [doc('Install development environment for Threading runner (base dev only, no Docker)')]
-dev-thread: dev
+install-dev-thread: dev
     printf "\n\033[0;32m==== Threading development setup complete. ====\033[0m\n\n"
+
+[group('install')]
+[doc('install every dependency for every toolbox approach')]
+install-dev: install-dev-docker
+    printf "\n\033[0;32m==== Full development setup complete. ====\033[0m\n\n"
 
 # Development workflow recipes
 [group('dev')]
@@ -136,11 +151,6 @@ run-check: lock-dev
     @printf "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
     uv run pre-commit run -a
     @printf "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
-
-[group('dev')]
-[doc('Run an interactive shell in a new container for a service')]
-shell NAME:
-    docker compose -f {{compose_file}} run --rm --service-ports {{NAME}} /bin/bash
 
 # Docker workflow recipes
 [group('docker')]
@@ -173,6 +183,10 @@ docker-prune:
 run-docker CONFIG_FILE MODEL_FILE:
     uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}} --use-docker
 
+[group('docker')]
+[doc('Run an interactive shell in a new container for a service')]
+shell NAME:
+    docker compose -f {{compose_file}} run --rm --service-ports {{NAME}} /bin/bash
 
 # Threading workflow recipes
 [group('threading')]

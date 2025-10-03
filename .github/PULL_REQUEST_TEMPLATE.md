@@ -46,7 +46,7 @@ If your PR includes UI changes or modifications to the command-line interface (C
 
 Ensure that all the following tasks are completed before submitting your PR:
 
-- [ ] Code is formatted and has been linted using 'makefile' run-check option
+- [ ] Code is formatted and has been linted using `just run-check`
 - [ ] New and existing tests pass locally.
 - [ ] All relevant documentation has been updated (e.g., docstrings, README, etc.).
 - [ ] Dependencies have been updated in `pyproject.toml`, and `uv.lock` has been regenerated accordingly.

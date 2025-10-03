@@ -124,19 +124,14 @@ install-docker-release: install-python-and-uv install-docker verify-docker insta
     printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
 [group('install')]
-[doc('Install development environment for Docker runner (includes base dev + Docker)')]
-install-dev-docker: dev install-docker verify-docker
-    printf "\n\033[0;32m==== Docker development setup complete. ====\033[0m\n\n"
+[doc('install every dependency for every toolbox approach')]
+install-dev: dev install-docker verify-docker
+    printf "\n\033[0;32m==== Full development setup complete. ====\033[0m\n\n"
 
 [group('install')]
 [doc('Install development environment for Threading runner (base dev only, no Docker)')]
 install-dev-thread: dev
     printf "\n\033[0;32m==== Threading development setup complete. ====\033[0m\n\n"
-
-[group('install')]
-[doc('install every dependency for every toolbox approach')]
-install-dev: install-dev-docker
-    printf "\n\033[0;32m==== Full development setup complete. ====\033[0m\n\n"
 
 # Development workflow recipes
 [group('dev')]

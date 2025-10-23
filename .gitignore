@@ -455,3 +455,6 @@ log/*.csv
 
 # orchestration files
 orchestration_files/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

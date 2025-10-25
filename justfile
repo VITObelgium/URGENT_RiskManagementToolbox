@@ -78,8 +78,8 @@ install-python-and-uv: prerequisites
         echo "\033[0;33mPython {{python_version}} is already installed. Skipping installation.\033[0m"
     fi
 
-    # Install uv if not present
-    if ! command -v uv >/dev/null; then
+    # Install~/.local/bin/uv if not present
+    if ! command -v~/.local/bin/uv >/dev/null; then
         curl -LsSf https://astral.sh/uv/install.sh | sh
     fi
 
@@ -102,8 +102,8 @@ install-xterm:
 [doc('Install base development dependencies (Ubuntu): Python, uv, LaTeX, xterm, sync dev deps, pre-commit')]
 dev: install-python-and-uv install-latex install-xterm
     printf "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
-    uv sync --all-groups
-    uv run pre-commit install
+    ~/.local/bin/uv sync --all-groups
+    ~/.local/bin/uv run pre-commit install
     printf "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
 
 # High-level installation targets
@@ -111,16 +111,16 @@ dev: install-python-and-uv install-latex install-xterm
 [doc('Install all dependencies needed for release threading solution (Ubuntu only)')]
 install-thread-release: install-python-and-uv install-xterm
     printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
-    uv sync --no-dev
-    uv run pre-commit install
+    ~/.local/bin/uv sync --no-dev
+    ~/.local/bin/uv run pre-commit install
     printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
 [group('install')]
 [doc('Install all dependencies for release (Ubuntu only)')]
 install-docker-release: install-python-and-uv install-docker verify-docker install-xterm
     printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
-    uv sync --no-dev
-    uv run pre-commit install
+    ~/.local/bin/uv sync --no-dev
+    ~/.local/bin/uv run pre-commit install
     printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
 [group('install')]
@@ -138,13 +138,13 @@ install-dev-thread: dev
 [doc('Update and lock all dependencies')]
 lock-dev:
     @printf "\n==== Updating dependencies... ====\n\n"
-    uv sync --all-groups
+    ~/.local/bin/uv sync --all-groups
 
 [group('dev')]
 [doc('Run repository pre-commit hooks and health checks')]
 run-check: lock-dev
     @printf "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
-    uv run pre-commit run -a
+    ~/.local/bin/uv run pre-commit run -a
     @printf "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
 
 # Docker workflow recipes
@@ -176,7 +176,7 @@ docker-prune:
 [group('docker')]
 [doc('Run optimization using Docker runner')]
 run-docker CONFIG_FILE MODEL_FILE:
-    uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}} --use-docker
+   ~/.local/bin/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}} --use-docker
 
 [group('docker')]
 [doc('Run an interactive shell in a new container for a service')]
@@ -187,7 +187,7 @@ shell NAME:
 [group('threading')]
 [doc('Run optimization using Thread runner')]
 run-thread CONFIG_FILE MODEL_FILE:
-    uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}
+   ~/.local/bin/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}
 
 
 # Documentation recipes
@@ -216,6 +216,6 @@ info:
     @echo -e "\033[0;32mPython version:\033[0m      {{python_version}}"
     @echo -e "\033[0;32mVirtual environment:\033[0m {{venv_dir}}"
     @echo -e "\033[0;32mCurrent Python:\033[0m      $(which python3 2>/dev/null || echo 'Not found')"
-    @echo -e "\033[0;32mUV location:\033[0m         $(which uv 2>/dev/null || echo 'Not found')"
+    @echo -e "\033[0;32mUV location:\033[0m         $(which~/.local/bin/uv 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mDocker status:\033[0m       $(docker --version 2>/dev/null || echo 'Not installed')"
     @echo -e "\033[0;32mCurrent directory:\033[0m   $(pwd)"

@@ -1,6 +1,7 @@
 import numpy as np
 from numpy import typing as npt
 
+from common import OptimizationStrategy
 from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
@@ -29,7 +30,12 @@ class _PSOState:
 
 class PSOEngine(OptimizationEngineInterface):
     def __init__(
-        self, w: float = 0.8, c1: float = 1.6, c2: float = 1.6, seed: int | None = None
+        self,
+        strategy: OptimizationStrategy,
+        w: float = 0.8,
+        c1: float = 1.6,
+        c2: float = 1.6,
+        seed: int | None = None,
     ) -> None:
         """Initialize PSO parameters with optional random seed for reproducibility.
 
@@ -50,6 +56,7 @@ class PSOEngine(OptimizationEngineInterface):
         self.w, self.c1, self.c2 = w, c1, c2
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
+        self._strategy = strategy
 
     @property
     def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
@@ -74,7 +81,15 @@ class PSOEngine(OptimizationEngineInterface):
         Constraint Handling:
             If A,b provided, feasibility handled by adding a static penalty to objective for ranking
             personal/global bests (Deb's rule simplified: penalized value = result + penalty*sum(violations)).
+
+        NaN Handling:
+            NaN results are replaced with +inf (for minimization) or -inf (for maximization)
+            so they are never selected as best values.
         """
+
+        # Replace NaN values based on optimization strategy
+        results = self._replace_nan_with_inf(results)
+
         if A is not None and b is not None:
             penalized_results = self._compute_penalized_results(
                 parameters, results, A, b
@@ -99,11 +114,32 @@ class PSOEngine(OptimizationEngineInterface):
 
         return new_positions
 
+    def _replace_nan_with_inf(
+        self, results: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        """Replace NaN values with +inf (minimize) or -inf (maximize) to exclude them from selection."""
+        results = results.copy()
+        nan_mask = np.isnan(results)
+
+        if np.any(nan_mask):
+            if self._strategy == OptimizationStrategy.MINIMIZE:
+                # For minimization, NaN becomes +inf (worst possible value)
+                results[nan_mask] = np.inf
+            else:
+                # For maximization, NaN becomes -inf (worst possible value)
+                results[nan_mask] = -np.inf
+
+        return results
+
     def _initialize_state_on_first_call(
         self, parameters: npt.NDArray[np.float64], results: npt.NDArray[np.float64]
     ) -> None:
         """Initializes the state on the first call, setting up best positions, velocities, and global best."""
-        best_index = np.argmin(results)
+        best_index = (
+            np.argmin(results)
+            if self._strategy == OptimizationStrategy.MINIMIZE
+            else np.argmax(results)
+        )
         self._state = _PSOState(
             particles_best_positions=np.copy(parameters),
             particles_best_results=np.copy(results),
@@ -142,7 +178,10 @@ class PSOEngine(OptimizationEngineInterface):
     ) -> None:
         """Updates the best-known positions of each particle."""
         state: _PSOState = ensure_not_none(self._state)
-        mask = results < state.particles_best_results
+        if self._strategy == OptimizationStrategy.MINIMIZE:
+            mask = results < state.particles_best_results
+        else:
+            mask = results > state.particles_best_results
 
         state.particles_best_positions[mask[:, 0]] = positions[mask[:, 0]]
         state.particles_best_results[mask] = results[mask]
@@ -152,10 +191,19 @@ class PSOEngine(OptimizationEngineInterface):
     ) -> None:
         """Updates the global best position if a new best is found."""
         state: _PSOState = ensure_not_none(self._state)
-        best_index = np.argmin(results)
+        best_index = (
+            np.argmin(results)
+            if self._strategy == OptimizationStrategy.MINIMIZE
+            else np.argmax(results)
+        )
         best_result = float(results[best_index].item())
 
-        if best_result < state.global_best_result:
+        if self._strategy == OptimizationStrategy.MINIMIZE:
+            is_better = best_result < state.global_best_result
+        else:
+            is_better = best_result > state.global_best_result
+
+        if is_better:
             state.global_best_position = positions[best_index]
             state.global_best_result = best_result
 
@@ -183,7 +231,13 @@ class PSOEngine(OptimizationEngineInterface):
         violations = np.maximum(violations, 0.0)
         total_violation = violations.sum(axis=1, keepdims=True)
         penalty_factor = 1e6 * (np.median(np.abs(results)) + 1.0)
-        return results + penalty_factor * total_violation
+
+        # For minimization: add penalty (worse = higher value)
+        # For maximization: subtract penalty (worse = lower value)
+        if self._strategy == OptimizationStrategy.MINIMIZE:
+            return results + penalty_factor * total_violation
+        else:
+            return results - penalty_factor * total_violation
 
     def _repair_infeasible_positions(self, *args, **kwargs):
         # Deprecated in favor of shared helper. Keep signature for backward compatibility if referenced elsewhere.

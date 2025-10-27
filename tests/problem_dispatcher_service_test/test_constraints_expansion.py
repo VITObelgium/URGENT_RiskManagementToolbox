@@ -43,7 +43,7 @@ def md_problem_definition():
             },
         ],
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "optimization_strategy": "minimize",
             "linear_inequalities": {
                 "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
                 "b": [5000.0],
@@ -88,7 +88,7 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
     boundaries = svc.get_boundaries()
     lb, ub = boundaries["well_placement#INJ#md"]
 
-    engine = PSOEngine(seed=42)
+    engine = PSOEngine(svc.get_optimization_strategy(), seed=42)
 
     parameters = np.array([[2500.0], [2400.0], [2600.0]], dtype=float)
 

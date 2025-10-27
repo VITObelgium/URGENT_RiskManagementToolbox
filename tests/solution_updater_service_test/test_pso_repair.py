@@ -1,5 +1,6 @@
 import numpy as np
 
+from common import OptimizationStrategy
 from services.solution_updater_service.core.engines.pso import PSOEngine
 
 
@@ -13,7 +14,7 @@ def test_pso_repairs_infeasible_population():
     """
 
     rng_seed = 42
-    engine = PSOEngine(seed=rng_seed)
+    engine = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     # Three particles in 2D, all outside bounds and violating A x <= b
     parameters = np.array([[5.0, 5.0], [6.0, 7.0], [10.0, 10.0]], dtype=float)
@@ -55,7 +56,7 @@ def test_pso_repairs_infeasible_population_no_linear_constraints():
     """PSOEngine should repair an entire population that starts outside bounds."""
 
     rng_seed = 42
-    engine = PSOEngine(seed=rng_seed)
+    engine = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     # Three particles in 2D, all outside bounds and violating lb and ub
     parameters = np.array([[5.0, 5.0], [6.0, 7.0], [10.0, 10.0]], dtype=float)
@@ -81,7 +82,7 @@ def test_pso_repairs_infeasible_population_no_linear_constraints():
 def test_pso_repairs_particles_with_tiny_violations():
     """Particles slightly outside bounds should be corrected within tolerance."""
     rng_seed = 42
-    engine = PSOEngine(seed=rng_seed)
+    engine = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     epsilon = 1e-9
     parameters = np.array([[0.0 - epsilon, 4.0 + epsilon]], dtype=float)
@@ -99,7 +100,7 @@ def test_pso_repairs_particles_with_tiny_violations():
 def test_pso_repairs_multiple_linear_constraints():
     """Particles should satisfy multiple linear inequalities after repair."""
     rng_seed = 42
-    engine = PSOEngine(seed=rng_seed)
+    engine = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     parameters = np.array([[5.0, 5.0], [6.0, -1.0]], dtype=float)
     results = np.array([[1.0], [2.0]], dtype=float)
@@ -122,7 +123,7 @@ def test_pso_repairs_multiple_linear_constraints():
 def test_pso_repairs_large_population():
     """Repair should handle large populations and make all feasible."""
     rng_seed = 42
-    engine = PSOEngine(seed=rng_seed)
+    engine = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     np.random.seed(rng_seed)
     parameters = np.random.uniform(5.0, 10.0, size=(100, 2))
@@ -149,8 +150,8 @@ def test_pso_repairs_large_population():
 def test_pso_repair_deterministic_with_seed():
     """Repair should be deterministic under fixed random seed."""
     rng_seed = 42
-    engine1 = PSOEngine(seed=rng_seed)
-    engine2 = PSOEngine(seed=rng_seed)
+    engine1 = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
+    engine2 = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     parameters = np.array([[5.0, 5.0], [6.0, 7.0]], dtype=float)
     results = np.array([[1.0], [2.0]], dtype=float)
@@ -169,7 +170,7 @@ def test_pso_repair_deterministic_with_seed():
 def test_pso_keeps_md_within_bounds_when_optimal_out_of_reach():
     """If the unconstrained optimum lies beyond the md upper bound, PSO must keep values within [lb, ub]."""
     rng_seed = 123
-    engine = PSOEngine(seed=rng_seed)
+    engine = PSOEngine(strategy=OptimizationStrategy.MINIMIZE, seed=rng_seed)
 
     parameters = np.array([[95.0], [96.0], [97.0]], dtype=float)
     results = np.array([[10.0], [9.0], [8.0]], dtype=float)

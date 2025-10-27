@@ -63,7 +63,7 @@ def test_run_risk_management_happy_path(
     mock_su_inst.loop_controller.running.side_effect = [True, False]
     mock_su_inst.loop_controller.current_generation = 1
     mock_su_inst.get_optimization_metrics.return_value = MagicMock(
-        global_min=1.0,
+        global_best=1.0,
         last_population_min=1.0,
         last_population_max=2.0,
         last_population_avg=1.5,

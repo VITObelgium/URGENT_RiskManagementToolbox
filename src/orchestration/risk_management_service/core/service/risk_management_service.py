@@ -85,7 +85,7 @@ def run_risk_management(
                 "optimization_metrics.csv",
                 columns=[
                     "generation",
-                    "global_min",
+                    "global_best",
                     "population_min",
                     "population_max",
                     "population_avg",
@@ -156,8 +156,8 @@ def run_risk_management(
                 )
                 metrics = solution_updater.get_optimization_metrics()
                 logger.info(
-                    "Generation statistics: global_min=%.6f, population_min=%.6f, population_max=%.6f, population_avg=%.6f, population_std=%.6f",
-                    metrics.global_min,
+                    "Generation statistics: global_best=%.6f, population_min=%.6f, population_max=%.6f, population_avg=%.6f, population_std=%.6f",
+                    metrics.global_best,
                     metrics.last_population_min,
                     metrics.last_population_max,
                     metrics.last_population_avg,
@@ -166,7 +166,7 @@ def run_risk_management(
 
                 # Log metrics to CSV
                 metrics_logger.info(
-                    f"{loop_controller.current_generation},{metrics.global_min:.9f},{metrics.last_population_min:.9f},{metrics.last_population_max:.9f},{metrics.last_population_avg:.9f},{metrics.last_population_std:.9f}"
+                    f"{loop_controller.current_generation},{metrics.global_best:.9f},{metrics.last_population_min:.9f},{metrics.last_population_max:.9f},{metrics.last_population_avg:.9f},{metrics.last_population_std:.9f}"
                 )
 
             logger.info(

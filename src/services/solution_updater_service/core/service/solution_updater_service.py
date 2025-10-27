@@ -426,7 +426,9 @@ class SolutionUpdaterService:
         """
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
-            OptimizationEngineFactory.get_engine(optimization_engine)
+            OptimizationEngineFactory.get_engine(
+                optimization_engine, optimization_strategy
+            )
         )
         self._logger = get_logger(__name__)
         self.loop_controller = _SolutionUpdaterServiceLoopController(
@@ -434,7 +436,6 @@ class SolutionUpdaterService:
             patience=patience,
             solution_updater_service=self,
         )
-        self._optimization_strategy = optimization_strategy
 
     def get_optimization_metrics(self) -> SolutionMetrics:
         return self._engine.metrics
@@ -511,8 +512,6 @@ class SolutionUpdaterService:
         control_vector, cost_function_values = self._mapper.to_numpy(
             config.solution_candidates
         )
-        if self._optimization_strategy == OptimizationStrategy.MAXIMIZE:
-            cost_function_values = -cost_function_values
 
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints

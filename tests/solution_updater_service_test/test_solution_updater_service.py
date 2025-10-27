@@ -103,10 +103,10 @@ def mocked_engine_with_metrics():  # type: ignore
             if self._metrics is None:  # first run
                 global_min = population_min
             else:
-                global_min = min(population_min, self._metrics.global_min)
+                global_min = min(population_min, self._metrics.global_best)
 
             self._metrics = SolutionMetrics(
-                global_min=global_min,
+                global_best=global_min,
                 last_population_min=population_min,
                 last_population_max=population_max,
                 last_population_avg=population_avg,
@@ -119,7 +119,7 @@ def mocked_engine_with_metrics():  # type: ignore
 
         @property
         def global_best_result(self) -> float:
-            return self.metrics.global_min
+            return self.metrics.global_best
 
         @property
         def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
@@ -688,7 +688,7 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
         expected = test_case["expected_metrics"]
 
         # Verify all metric values
-        assert metrics.global_min == expected["global_min"], (
+        assert metrics.global_best == expected["global_min"], (
             f"Population {i}: Wrong global minimum"
         )
         assert metrics.last_population_min == expected["last_population_min"], (
@@ -778,9 +778,4 @@ def test_maximization_service_full_round(test_case):
 
     assert np.isclose(best_result, expected_max_val, atol=tol), (
         f"Best result {best_result} is not close enough to the global maximum value {expected_max_val}."
-    )
-
-    # Verify that the service's reported best result is the negated value of the true maximum
-    assert np.isclose(service.global_best_result, -expected_max_val, atol=tol), (
-        "Service's global_best_result should be the negated value for maximization."
     )

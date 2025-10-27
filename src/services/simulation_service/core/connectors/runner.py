@@ -57,7 +57,7 @@ class SubprocessRunner:
                 "SubprocessRunner requires a broadcast_results_parser to be provided"
             )
 
-        default_failed_value: float = float(-1e3)
+        default_failed_value: float = float("nan")
         default_failed_results: SimulationResults = {
             k: default_failed_value for k in SimulationResultType
         }

@@ -50,10 +50,27 @@ class OptimizationEngineInterface(ABC):
 
     def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
         """Updates metrics based on optimization strategy."""
-        population_min = float(new_results.min())
-        population_max = float(new_results.max())
-        population_avg = float(np.average(new_results))
-        population_std = float(np.std(new_results))
+        # Filter out infinite values for statistics calculation
+        finite_mask = np.isfinite(new_results)
+
+        if np.any(finite_mask):
+            # Use only finite results for statistics
+            finite_results = new_results[finite_mask]
+            population_min = float(finite_results.min())
+            population_max = float(finite_results.max())
+            population_avg = float(np.average(finite_results))
+            population_std = float(np.std(finite_results))
+        else:
+            # All values are inf/-inf (all particles failed this iteration)
+            # Use sentinel values that indicate failure
+            if self._strategy == OptimizationStrategy.MINIMIZE:
+                population_min = np.inf
+                population_max = np.inf
+            else:
+                population_min = -np.inf
+                population_max = -np.inf
+            population_avg = np.nan  # No meaningful average
+            population_std = np.nan  # No meaningful std deviation
 
         if self._metrics is None:  # first run
             if self._strategy == OptimizationStrategy.MINIMIZE:

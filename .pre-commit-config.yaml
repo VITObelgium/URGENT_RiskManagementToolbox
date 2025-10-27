@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -14,19 +14,19 @@ repos:
 
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.4
+    rev: v8.28.0
     hooks:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.11
+    rev: v0.14.2
     hooks:
       - id: ruff
         entry: ruff check --extend-select I --fix
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.17.1'
+    rev: 'v1.18.2'
     hooks:
       - id: mypy
         language: system
@@ -34,7 +34,7 @@ repos:
         args: ["--enable-incomplete-feature=NewGenericSyntax", '.']
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.8.14
+    rev: 0.9.5
     hooks:
       - id: uv-lock
 

@@ -283,7 +283,9 @@ def test_run_handles_exception(mock_popen: Mock) -> None:
             SimulationResultType,
         )
 
-        assert results == {k: -1e3 for k in SimulationResultType}
+        # Check that all keys are present and all values are NaN
+        assert set(results.keys()) == set(SimulationResultType)
+        assert all(np.isnan(v) for v in results.values())
 
 
 @open_darts_input_configuration_injector

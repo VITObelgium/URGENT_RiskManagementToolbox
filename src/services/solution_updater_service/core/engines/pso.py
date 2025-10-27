@@ -81,7 +81,15 @@ class PSOEngine(OptimizationEngineInterface):
         Constraint Handling:
             If A,b provided, feasibility handled by adding a static penalty to objective for ranking
             personal/global bests (Deb's rule simplified: penalized value = result + penalty*sum(violations)).
+
+        NaN Handling:
+            NaN results are replaced with +inf (for minimization) or -inf (for maximization)
+            so they are never selected as best values.
         """
+
+        # Replace NaN values based on optimization strategy
+        results = self._replace_nan_with_inf(results)
+
         if A is not None and b is not None:
             penalized_results = self._compute_penalized_results(
                 parameters, results, A, b
@@ -105,6 +113,23 @@ class PSOEngine(OptimizationEngineInterface):
             )
 
         return new_positions
+
+    def _replace_nan_with_inf(
+        self, results: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        """Replace NaN values with +inf (minimize) or -inf (maximize) to exclude them from selection."""
+        results = results.copy()
+        nan_mask = np.isnan(results)
+
+        if np.any(nan_mask):
+            if self._strategy == OptimizationStrategy.MINIMIZE:
+                # For minimization, NaN becomes +inf (worst possible value)
+                results[nan_mask] = np.inf
+            else:
+                # For maximization, NaN becomes -inf (worst possible value)
+                results[nan_mask] = -np.inf
+
+        return results
 
     def _initialize_state_on_first_call(
         self, parameters: npt.NDArray[np.float64], results: npt.NDArray[np.float64]

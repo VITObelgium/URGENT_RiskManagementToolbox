@@ -66,8 +66,8 @@ install-python: prerequisites
     sudo apt update
     sudo apt upgrade -y
 
-    @just install-python-ver {{python_version}}
-    @just install-python-ver {{python_venv_darts_version}}
+    just install-python-ver {{python_version}}
+    just install-python-ver {{python_venv_darts_version}}
 
 [group('setup')]
 [doc('Install xterm for external terminal logging')]

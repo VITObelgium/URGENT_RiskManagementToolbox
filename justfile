@@ -84,7 +84,10 @@ install-xterm:
 dev: install-python install-xterm
     printf "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
     {{base_path}}/uv sync --all-groups
+    printf "\n==== Running pre-commit hooks... ====\n\n"
+    pre-commit install
     printf "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
+
 #=============================
 
 # High-level installation targets

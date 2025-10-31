@@ -3,7 +3,6 @@ import io
 import os
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import uuid
@@ -24,6 +23,7 @@ from services.simulation_service.core.connectors.common import (
 from services.simulation_service.core.connectors.factory import ConnectorFactory
 from services.simulation_service.core.utils.converters import json_to_str
 
+setup_logger = get_logger()  # Logger for setup phase, i.e. venv preparation
 logger = get_logger("threading-worker", filename=__name__)
 
 channel_options = [
@@ -78,7 +78,7 @@ def _get_shared_venv_dir() -> Path:
 
 def _venv_python_path(venv_dir: Path) -> Path:
     # Linux/macOS layout
-    return venv_dir / "bin/python"
+    return venv_dir / "bin/python3.10"
 
 
 def _acquire_venv_lock(venv_dir: Path, timeout: float = 600.0) -> bool:
@@ -114,12 +114,14 @@ def _release_venv_lock(venv_dir: Path) -> None:
 
 
 def _prepare_shared_venv(worker_id: str | int) -> Path | None:
-    """Create or reuse a shared Python venv and install model requirements.
-
-    - Else tries python3.10, else current interpreter.
-        - Installs requirements from the shared worker requirements file under
-            src/services/simulation_service/core/infrastructure/worker/worker_requirements.txt
-            so that local relative paths (like the OpenDarts wheel) resolve correctly.
+    """Create or reuse a shared Python3.10 venv and install model requirements.
+            Creation strategy:
+                    1) Use system `python3.10 -m venv` if available.
+                    2) Else use `uv venv --python 3.10` (uv will fetch a 3.10 runtime if missing).
+                    3) Else try pixi ephemeral runtime: `pixi run -p python==3.10.* -- python -m venv ...`.
+                    4) If none of the above is possible, abort and return None.
+            After creation, install requirements from
+            `src/services/simulation_service/core/infrastructure/worker/worker_requirements.txt`
     Returns the path to the venv python if successful, else None.
     """
     venv_dir = _get_shared_venv_dir()
@@ -138,36 +140,84 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
         if venv_python.exists() and ready_marker.exists():
             return venv_python
 
-        # Prefer python3.10 if available (for DARTS compatibility), else fallback
-        base = (
-            shutil.which("python3.10")
-            or sys.executable
-            or shutil.which("python3")
-            or "python3"
-        )
+        uv_bin = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
+        if uv_bin and not shutil.which("uv") and not Path(uv_bin).exists():
+            uv_bin = ""
 
-        logger.info(
-            "Worker %s: Preparing shared venv using base interpreter: %s",
-            worker_id,
-            base,
-        )
+        pixi_bin = shutil.which("pixi") or str(Path.home() / ".pixi/bin/pixi")
+        if pixi_bin and not shutil.which("pixi") and not Path(pixi_bin).exists():
+            pixi_bin = ""
+
+        py310 = shutil.which("python3.10")
 
         if not venv_python.exists():
-            logger.info(
-                "Venv not found. Worker %s: Creating venv at %s", worker_id, venv_dir
+            setup_logger.info(
+                "Venv not found. Worker %s: Creating venv at %s (Python 3.10 required)",
+                worker_id,
+                venv_dir,
             )
             try:
-                p = subprocess.run(
-                    [base, "-m", "venv", str(venv_dir)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                logger.debug(
+                if py310:
+                    setup_logger.info(
+                        "Worker %s: Using system python3.10:%s to create venv.",
+                        worker_id,
+                        py310,
+                    )
+                    p = subprocess.run(
+                        [py310, "-m", "venv", str(venv_dir)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                elif uv_bin:
+                    setup_logger.info(
+                        "Worker %s: Using uv to create Python 3.10 venv (uv=%s).",
+                        worker_id,
+                        uv_bin,
+                    )
+                    p = subprocess.run(
+                        [uv_bin, "venv", "--python", "3.10", str(venv_dir)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                elif pixi_bin:
+                    setup_logger.info(
+                        "Worker %s: Using pixi ephemeral Python 3.10 to create venv (pixi=%s).",
+                        worker_id,
+                        pixi_bin,
+                    )
+                    # Attempt to use a pixi-provided Python 3.10 to bootstrap the venv
+                    # This uses an ephemeral environment with python==3.10.* if supported by pixi.
+                    p = subprocess.run(
+                        [
+                            pixi_bin,
+                            "run",
+                            "-p",
+                            "python==3.10.*",
+                            "--",
+                            "python",
+                            "-m",
+                            "venv",
+                            str(venv_dir),
+                        ],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                else:
+                    setup_logger.error(
+                        "Worker %s: python3.10 not found and uv unavailable. "
+                        "pixi also unavailable or unsupported. Cannot create required Python 3.10 environment.",
+                        worker_id,
+                    )
+                    return None
+
+                setup_logger.debug(
                     "Worker %s: venv creation stdout:\n%s", worker_id, p.stdout
                 )
                 if p.stderr:
-                    logger.debug(
+                    setup_logger.debug(
                         "Worker %s: venv creation stderr:\n%s", worker_id, p.stderr
                     )
             except subprocess.CalledProcessError as e:
@@ -175,18 +225,44 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
                 out = getattr(e, "stdout", None)
                 err = getattr(e, "stderr", None)
                 if out:
-                    logger.error(
+                    setup_logger.error(
                         "Worker %s: venv creation failed, stdout:\n%s", worker_id, out
                     )
                 if err:
-                    logger.error(
+                    setup_logger.error(
                         "Worker %s: venv creation failed, stderr:\n%s", worker_id, err
                     )
-                logger.error("Worker %s: Failed to create venv: %s", worker_id, e)
+                setup_logger.error("Worker %s: Failed to create venv: %s", worker_id, e)
                 return None
             except Exception as e:
-                logger.error("Worker %s: Failed to create venv: %s", worker_id, e)
+                setup_logger.error("Worker %s: Failed to create venv: %s", worker_id, e)
                 return None
+
+        # Sanity-check the interpreter version inside the venv is 3.10
+        try:
+            ver = subprocess.run(
+                [
+                    str(venv_python),
+                    "-c",
+                    "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            if ver.stdout.strip() != "3.10":
+                setup_logger.error(
+                    "Worker %s: venv interpreter is not Python 3.10 (got %s). Aborting.",
+                    worker_id,
+                    ver.stdout.strip(),
+                )
+                return None
+
+        except subprocess.CalledProcessError as e:
+            setup_logger.error(
+                "Worker %s: Failed to verify venv interpreter version: %s", worker_id, e
+            )
+            return None
 
         try:
             p = subprocess.run(
@@ -204,11 +280,15 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
                 capture_output=True,
                 text=True,
             )
-            logger.debug("Worker %s: pip upgrade stdout:\n%s", worker_id, p.stdout)
+            setup_logger.debug(
+                "Worker %s: pip upgrade stdout:\n%s", worker_id, p.stdout
+            )
             if p.stderr:
-                logger.debug("Worker %s: pip upgrade stderr:\n%s", worker_id, p.stderr)
+                setup_logger.debug(
+                    "Worker %s: pip upgrade stderr:\n%s", worker_id, p.stderr
+                )
         except subprocess.CalledProcessError as e:
-            logger.warning(
+            setup_logger.warning(
                 "Worker %s: Failed to upgrade pip tooling in venv (%s); proceeding.",
                 worker_id,
                 e,
@@ -216,25 +296,27 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
             out = getattr(e, "stdout", None)
             err = getattr(e, "stderr", None)
             if out:
-                logger.debug(
+                setup_logger.debug(
                     "Worker %s: pip upgrade failed stdout:\n%s", worker_id, out
                 )
             if err:
-                logger.debug(
+                setup_logger.debug(
                     "Worker %s: pip upgrade failed stderr:\n%s", worker_id, err
                 )
         except Exception as e:
-            logger.warning(
+            setup_logger.warning(
                 "Worker %s: Failed to upgrade pip tooling in venv (%s); proceeding.",
                 worker_id,
                 e,
             )
 
         req_path = Path(__file__).resolve().parents[1] / "worker_requirements.txt"
-        logger.info("Worker %s: Installing requirements from %s", worker_id, req_path)
+        setup_logger.info(
+            "Worker %s: Installing requirements from %s", worker_id, req_path
+        )
         install_cwd = str(req_path.parent)
 
-        logger.debug(
+        setup_logger.debug(
             "Worker %s: Running pip install with cwd=%s", worker_id, install_cwd
         )
         try:
@@ -245,34 +327,36 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
                 capture_output=True,
                 text=True,
             )
-            logger.debug("Worker %s: pip install -r stdout:\n%s", worker_id, p.stdout)
+            setup_logger.debug(
+                "Worker %s: pip install -r stdout:\n%s", worker_id, p.stdout
+            )
             if p.stderr:
-                logger.debug(
+                setup_logger.warning(
                     "Worker %s: pip install -r stderr:\n%s", worker_id, p.stderr
                 )
         except subprocess.CalledProcessError as e:
             out = getattr(e, "stdout", None)
             err = getattr(e, "stderr", None)
             if out:
-                logger.error(
+                setup_logger.error(
                     "Worker %s: pip install -r %s failed stdout:\n%s",
                     worker_id,
                     req_path,
                     out,
                 )
             if err:
-                logger.error(
+                setup_logger.error(
                     "Worker %s: pip install -r %s failed stderr:\n%s",
                     worker_id,
                     req_path,
                     err,
                 )
-            logger.error(
+            setup_logger.error(
                 "Worker %s: pip install -r %s failed: %s", worker_id, req_path, e
             )
             return None
         except Exception as e:
-            logger.error(
+            setup_logger.error(
                 "Worker %s: pip install -r %s failed: %s", worker_id, req_path, e
             )
             return None

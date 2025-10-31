@@ -90,11 +90,12 @@ class SubprocessRunner:
                 )
 
             # Determine Python interpreter: prefer shared venv if present
-            selected = "python3"
+            # TODO: Make this configurable and join logic with worker logic
+            selected = "python3.10"
             reason = "default fallback"
             if repo_root is not None:
                 venv_candidate = (
-                    repo_root / "orchestration_files/.venv_darts/bin/python"
+                    repo_root / "orchestration_files/.venv_darts/bin/python3.10"
                 )
                 if venv_candidate.exists():
                     selected = str(venv_candidate)

@@ -130,7 +130,6 @@ def configure_server_logger() -> Path:
 
     thread_filter = _ThreadNameFilter("server")
     ts_logger = logging.getLogger("threading-server")
-    ts_logger.setLevel(logging.DEBUG)
     _add_unique_file_handler(ts_logger, file_path, record_filter=thread_filter)
     try:
         ts_logger.propagate = False

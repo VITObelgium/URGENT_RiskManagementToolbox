@@ -84,8 +84,6 @@ install-xterm:
 dev: install-python install-xterm
     printf "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
     {{base_path}}/uv sync --all-groups
-    printf "\n==== Running pre-commit hooks... ====\n\n"
-    pre-commit install
     printf "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
 
 #=============================
@@ -174,11 +172,11 @@ shell NAME:
 [doc('Run optimization using Thread runner')]
 run-thread CONFIG_FILE MODEL_FILE:
     @just check-runner
+    #!/usr/bin/env bash
     if [ "{{runner}}" = "uv" ]; then \
-        {{base_path}}/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}
-    fi
-    if [ "{{runner}}" = "pixi" ]; then \
-        pixi run python src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}
+        {{base_path}}/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}; \
+    elif [ "{{runner}}" = "pixi" ]; then \
+       pixi run python src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}; \
     fi
 #=============================
 
@@ -189,18 +187,14 @@ install-python-ver VERSION:
     #!/usr/bin/env bash
     sudo apt update
     printf "\n==== Installing Python {{VERSION}} ... ====\n\n"
-    if ! command -v python{{VERSION}} >/dev/null; then
-        echo "\033[0;33mPython {{VERSION}} not found: Installing...\033[0m"
-        if ! apt-cache policy python{{VERSION}} | grep -q 'Candidate:'; then
-            echo "\033[0;33mPython {{VERSION}} not found in current repos: Adding Deadsnakes PPA...\033[0m"
-            sudo apt install -y software-properties-common
-            sudo add-apt-repository -y ppa:deadsnakes/ppa
-            sudo apt update
-        fi
-        sudo apt install -y python{{VERSION}} python{{VERSION}}-venv python3-pip
-    else
-        echo "\033[0;33mPython {{VERSION}} is already installed. Skipping installation.\033[0m"
+    echo "\033[0;33mPython {{VERSION}} not found: Installing...\033[0m"
+    if ! apt-cache policy python{{VERSION}} | grep -q 'Candidate:'; then
+        echo "\033[0;33mPython {{VERSION}} not found in current repos: Adding Deadsnakes PPA...\033[0m"
+        sudo apt install -y software-properties-common
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt update
     fi
+    sudo apt install -y python{{VERSION}} python{{VERSION}}-venv python3-pip
     printf "\n\033[0;32m==== Python {{VERSION}} installed successfully. ====\033[0m\n\n"
 
 

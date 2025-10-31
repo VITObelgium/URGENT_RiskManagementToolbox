@@ -154,13 +154,17 @@ def get_services_id() -> List[str]:
         ) from e
 
 
-def _build_console_handler(level: int = logging.INFO) -> logging.Handler:
+def _build_console_handler(
+    level: int = logging.INFO, format: str = "simple"
+) -> logging.Handler:
     console = logging.StreamHandler(stream=sys.stdout)
     console.setLevel(level)
+    cfg = get_log_config()
+    fmt = cfg.get("formatters", {}).get(format, {})
     console.setFormatter(
         logging.Formatter(
-            fmt="%(asctime)s.%(msecs)03d - %(module)-30s %(lineno)-4d - %(levelname)-8s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            fmt=fmt["format"],
+            datefmt=fmt["datefmt"],
         )
     )
     return console
@@ -173,20 +177,11 @@ def configure_default_profile() -> None:
     - Root has a QueueHandler; a QueueListener owns the file/console handlers.
     - No module writes to files directly.
     """
-    config_path = Path(__file__).parent / "logging_config.json"
-    if config_path.exists():
-        try:
-            with open(config_path, "r", encoding="utf-8") as fh:
-                cfg = json.load(fh)
-            file_path = _ensure_logfile_path()
-            if file_path is not None:
-                handlers = cfg.get("handlers", {})
-                if "file" in handlers:
-                    handlers["file"]["filename"] = file_path
-
-            logging.config.dictConfig(cfg)
-        except Exception:
-            pass
+    logging_config = get_log_config()
+    handlers = logging_config.get("handlers", {})
+    if "file" in handlers:
+        handlers["file"]["filename"] = _ensure_logfile_path()
+    logging.config.dictConfig(logging_config)
     _start_queue_listener()
 
 
@@ -197,6 +192,7 @@ def _start_queue_listener() -> None:
 
     _queue = Queue(-1)
     file_path = _ensure_logfile_path()
+    logging_config = get_log_config()
 
     handlers: list[logging.Handler] = []
     if get_log_to_console_value() and "pytest" not in sys.modules:
@@ -214,11 +210,20 @@ def _start_queue_listener() -> None:
                 return True
 
         fh = logging.FileHandler(file_path, mode="a", encoding="utf-8")
-        fh.setLevel(logging.INFO)
+        fh.setLevel(
+            logging_config.get("handlers", {})
+            .get("file", {})
+            .get("level", logging.INFO)
+        )
+        ffmt_name = logging_config.get("handlers", {}).get("file", {}).get("formatter")
+        formatter_cfg = logging_config.get("formatters", {}).get(ffmt_name, {})
+        ffmt = formatter_cfg.get("format")
+        fdatefmt = formatter_cfg.get("datefmt")
         fh.setFormatter(
             logging.Formatter(
-                fmt="%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
+                fmt=ffmt
+                or "%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s",
+                datefmt=fdatefmt or "%Y-%m-%d %H:%M:%S",
             )
         )
         fh.addFilter(_SelectiveThreadFilter())
@@ -240,7 +245,8 @@ def _start_queue_listener() -> None:
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(qh)
-    root.setLevel(logging.INFO)
+    root_level_name = logging_config.get("root", {}).get("level", "INFO")
+    root.setLevel(root_level_name)
 
 
 def _ensure_logfile_path() -> str | None:
@@ -272,3 +278,35 @@ def _stop_listener() -> None:
     finally:
         _listener = None
         _queue = None
+
+
+def get_log_config() -> Dict[str, Any]:
+    """
+    Get the current logging configuration as a dictionary.
+
+    Returns
+    -------
+    Dict[str, Any]
+        The current logging configuration.
+    """
+    config_path = get_log_config_path()
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            return cfg
+        except Exception:
+            raise RuntimeError("Failed to load logging configuration.")
+    raise RuntimeError("Logging configuration file does not exist.")
+
+
+def get_log_config_path() -> Path:
+    """
+    Get the path to the logging configuration file.
+
+    Returns
+    -------
+    Path
+        The path to the logging configuration file.
+    """
+    return Path(__file__).parent / "logging_config.json"

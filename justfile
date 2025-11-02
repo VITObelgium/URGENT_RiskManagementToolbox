@@ -22,20 +22,20 @@ default:
 [group('setup')]
 [doc('Install basic tools like git and curl needed by other installations')]
 prerequisites:
-    printf "\n==== Installing prerequisites (git, curl)... ====\n\n"
+    @echo -e "\n==== Installing prerequisites (git, curl)... ====\n\n"
     sudo apt update
     sudo apt install -y git curl
-    printf "\n\033[0;32m==== Prerequisites installed successfully. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Prerequisites installed successfully. ====\033[0m\n\n"
 
 [group('setup')]
 [doc('Install Docker Engine with latest best practices')]
 install-docker: prerequisites
-    printf "\n==== Removing old Docker packages... ====\n\n"
+    @echo -e "\n==== Removing old Docker packages... ====\n\n"
     for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd.io runc; do
     sudo apt-get remove -y "$pkg" || true
     done
 
-    printf "\n==== Setting up Docker repository... ====\n\n"
+    @echo -e "\n==== Setting up Docker repository... ====\n\n"
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl gnupg lsb-release
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -47,22 +47,22 @@ install-docker: prerequisites
         sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
     sudo apt-get update
-    printf "\n==== Installing Docker Engine... ====\n\n"
+    @echo -e "\n==== Installing Docker Engine... ====\n\n"
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    printf "\n\033[0;32m==== Docker installed successfully. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Docker installed successfully. ====\033[0m\n\n"
 
 [group('setup')]
 [doc('Verify Docker installation works correctly')]
 verify-docker:
-    printf "\n==== Verifying Docker installation... ====\n\n"
+    @echo -e "\n==== Verifying Docker installation... ====\n\n"
     sudo docker run --rm hello-world
-    printf "\n\033[0;32m==== Docker verification complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Docker verification complete. ====\033[0m\n\n"
 
 [group('setup')]
 [doc('Check and install Python')]
 install-python: prerequisites
     #!/usr/bin/env bash
-    printf "\n==== Checking and installing Python {{python_version}}, {{python_venv_darts_version}} ... ====\n\n"
+    echo -e "\n==== Checking and installing Python {{python_version}}, {{python_venv_darts_version}} ... ====\n\n"
     sudo apt update
     sudo apt upgrade -y
 
@@ -72,19 +72,19 @@ install-python: prerequisites
 [group('setup')]
 [doc('Install xterm for external terminal logging')]
 install-xterm:
-    printf "\n==== Installing xterm... ====\n\n"
+    @echo -e "\n==== Installing xterm... ====\n\n"
     sudo apt-get install -y xterm
-    printf "\n\033[0;32m==== xterm installed successfully. ====\033[0m\n\n"
-    printf "\n==== Installing xfonts-base... ====\n\n"
+    @echo -e "\n\033[0;32m==== xterm installed successfully. ====\033[0m\n\n"
+    @echo -e "\n==== Installing xfonts-base... ====\n\n"
     sudo apt-get install -y xfonts-base
-    printf "\n\033[0;32m==== xfonts-base installed successfully. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== xfonts-base installed successfully. ====\033[0m\n\n"
 
 [group('setup')]
 [doc('Install base development dependencies (Ubuntu): Python, xterm, sync dev deps, pre-commit')]
 dev: install-python install-xterm
-    printf "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
+    @echo -e "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
     {{base_path}}/uv sync --all-groups
-    printf "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
 
 #=============================
 
@@ -92,57 +92,57 @@ dev: install-python install-xterm
 [group('install')]
 [doc('Install all dependencies needed for release threading solution (Ubuntu and uv only)')]
 install-thread-release: install-python install-xterm
-    printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
+    @echo -e "\n==== Installing release packages and pre-commit hooks... ====\n\n"
     {{base_path}}/uv sync --no-dev
-    printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
 [group('install')]
 [doc('Install all dependencies for release (Ubuntu and uv only)')]
 install-docker-release: install-python install-docker verify-docker install-xterm
-    printf "\n==== Installing release packages and pre-commit hooks... ====\n\n"
+    @echo -e "\n==== Installing release packages and pre-commit hooks... ====\n\n"
     {{base_path}}/uv sync --no-dev
-    printf "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
 [group('install')]
 [doc('install every dependency for every toolbox approach')]
 install-dev: dev install-docker verify-docker
-    printf "\n\033[0;32m==== Full development setup complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Full development setup complete. ====\033[0m\n\n"
 
 [group('install')]
 [doc('Install development environment for Threading runner (base dev only, no Docker)')]
 install-dev-thread: dev
-    printf "\n\033[0;32m==== Threading development setup complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Threading development setup complete. ====\033[0m\n\n"
 #=============================
 
 # Development workflow recipes
 [group('dev')]
 [doc('Update and lock all python uv dependencies')]
 lock-dev:
-    @printf "\n==== Updating dependencies... ====\n\n"
+    @echo -e "\n==== Updating dependencies... ====\n\n"
     {{base_path}}/uv sync --all-groups
 
 [group('dev')]
 [doc('Run repository pre-commit hooks and health checks')]
 run-check: lock-dev
-    @printf "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
+    @echo -e "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
     {{base_path}}/uv run pre-commit run -a
-    @printf "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
 #=============================
 
 # Docker workflow recipes
 [group('docker')]
 [doc('Start the Docker-based simulation cluster ')]
 docker-up:
-    printf "\n==== Starting Docker simulation cluster... ====\n\n"
+    @echo -e "\n==== Starting Docker simulation cluster... ====\n\n"
     docker compose -f {{compose_file}} up --build -d
-    printf "\n\033[0;32m==== Docker cluster is up. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Docker cluster is up. ====\033[0m\n\n"
 
 [group('docker')]
 [doc('Stop and remove the Docker simulation cluster')]
 docker-down:
-    printf "\n==== Stopping Docker simulation cluster... ====\n\n"
+    @echo -e "\n==== Stopping Docker simulation cluster... ====\n\n"
     docker compose -f {{compose_file}} down -v
-    printf "\n\033[0;32m==== Docker cluster stopped. ====\033[0m\n\n"
+    @echo -e "\n\033[0;32m==== Docker cluster stopped. ====\033[0m\n\n"
 
 [group('docker')]
 [doc('Tail logs from the Docker simulation cluster')]
@@ -186,7 +186,7 @@ run-thread CONFIG_FILE MODEL_FILE:
 install-python-ver VERSION:
     #!/usr/bin/env bash
     sudo apt update
-    printf "\n==== Installing Python {{VERSION}} ... ====\n\n"
+    echo -e "\n==== Installing Python {{VERSION}} ... ====\n\n"
     echo "\033[0;33mPython {{VERSION}} not found: Installing...\033[0m"
     if ! apt-cache policy python{{VERSION}} | grep -q 'Candidate:'; then
         echo "\033[0;33mPython {{VERSION}} not found in current repos: Adding Deadsnakes PPA...\033[0m"
@@ -195,7 +195,7 @@ install-python-ver VERSION:
         sudo apt update
     fi
     sudo apt install -y python{{VERSION}} python{{VERSION}}-venv python3-pip
-    printf "\n\033[0;32m==== Python {{VERSION}} installed successfully. ====\033[0m\n\n"
+    echo -e "\n\033[0;32m==== Python {{VERSION}} installed successfully. ====\033[0m\n\n"
 
 
 [group('utils')]
@@ -215,12 +215,12 @@ info:
 detect-runner:
     #!/usr/bin/env bash
     if command -v pixi >/dev/null 2>&1; then \
-        printf "pixi available\n"; \
+        echo -e "pixi available"; \
     fi
     if command -v {{base_path}}/uv >/dev/null 2>&1 || command -v uv >/dev/null 2>&1; then \
-        printf "{{runner}} available\n"; \
+        echo -e "{{runner}} available"; \
     else \
-        printf "No pixi or uv detected in PATH or {{base_path}}/{{runner}}\n"; \
+        echo -e "No pixi or uv detected in PATH or {{base_path}}/{{runner}}"; \
     fi
 
 [group('utils')]
@@ -229,13 +229,13 @@ check-runner:
     #!/usr/bin/env bash
     if [ "{{runner}}" = "pixi" ]; then \
         if ! command -v pixi >/dev/null 2>&1; then \
-            printf "\033[0;31mError: pixi runner selected but not found in PATH.\033[0m\n"; \
+            echo -e "\033[0;31mError: pixi runner selected but not found in PATH.\033[0m\n"; \
             exit 1; \
         fi; \
     fi
     if [ "{{runner}}" = "uv" ]; then \
         if ! command -v {{base_path}}/uv >/dev/null 2>&1 && ! command -v uv >/dev/null 2>&1; then \
-            printf "\033[0;31mError: uv runner selected but not found in PATH or {{base_path}}/{{runner}}.\033[0m\n"; \
+            echo -e "\033[0;31mError: uv runner selected but not found in PATH or {{base_path}}/{{runner}}.\033[0m\n"; \
             exit 1; \
         fi; \
     fi

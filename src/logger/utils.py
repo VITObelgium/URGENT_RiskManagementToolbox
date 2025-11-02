@@ -178,9 +178,7 @@ def configure_default_profile() -> None:
     - No module writes to files directly.
     """
     logging_config = get_log_config()
-    handlers = logging_config.get("handlers", {})
-    if "file" in handlers:
-        handlers["file"]["filename"] = _ensure_logfile_path()
+    logging_config.setdefault("root", {}).update({"handlers": []})
     logging.config.dictConfig(logging_config)
     _start_queue_listener()
 

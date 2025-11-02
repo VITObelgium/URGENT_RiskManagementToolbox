@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import atexit
-import json
+import copy
 import logging
 import os
 import subprocess
@@ -16,6 +16,34 @@ from typing import Any, Dict, List
 _queue: Queue | None = None
 _listener: QueueListener | None = None
 _shutdown_registered: bool = False
+
+
+def find_pyproject_toml(start: Path | None = None) -> Path | None:
+    """
+    Locate pyproject.toml by checking:
+    1) Current working directory
+    2) Walking up from the provided start path (or this file) to filesystem root
+
+    Returns
+    -------
+    Path | None
+        Returns the resolved Path if found, else None.
+    """
+    try:
+        cwd_candidate = Path.cwd() / "pyproject.toml"
+        if cwd_candidate.exists():
+            return cwd_candidate.resolve()
+    except Exception:
+        pass
+
+    base = start or Path(__file__).resolve()
+    for candidate in [base] + list(base.parents):
+        pp = candidate / "pyproject.toml"
+        if pp.exists():
+            return pp.resolve()
+
+    # Not found
+    return None
 
 
 def get_logger_profile() -> str:
@@ -75,16 +103,8 @@ def get_logging_output() -> Dict[str, Any]:
         The logging output configuration.
 
     """
-    pyproject_toml_path = os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../pyproject.toml"))
-    )
-
-    if not os.path.exists(pyproject_toml_path):
-        pyproject_toml_path = os.path.join(
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "pyproject.toml"))
-        )
-
-    if not os.path.exists(pyproject_toml_path):
+    pyproject_path = find_pyproject_toml()
+    if pyproject_path is None or not pyproject_path.exists():
         # Returning safe defaults if pyproject.toml is not found.
         return {
             "log_to_console": False,
@@ -94,9 +114,9 @@ def get_logging_output() -> Dict[str, Any]:
 
     import tomli
 
-    with open(pyproject_toml_path, "rb") as f:
+    with open(pyproject_path, "rb") as f:
         pyproject_toml = tomli.load(f)
-    return dict(pyproject_toml["logging"]["output"])
+    return dict(pyproject_toml.get("logging", {}).get("output", {}))
 
 
 def get_external_console_logging() -> bool:
@@ -178,8 +198,11 @@ def configure_default_profile() -> None:
     - No module writes to files directly.
     """
     logging_config = get_log_config()
-    logging_config.setdefault("root", {}).update({"handlers": []})
-    logging.config.dictConfig(logging_config)
+    cfg = copy.deepcopy(logging_config)
+    cfg.setdefault("root", {}).update({"handlers": []})
+    cfg.get("handlers", {}).pop("file", None)
+    cfg.get("handlers", {}).pop("console", None)
+    logging.config.dictConfig(cfg)
     _start_queue_listener()
 
 
@@ -280,31 +303,65 @@ def _stop_listener() -> None:
 
 def get_log_config() -> Dict[str, Any]:
     """
-    Get the current logging configuration as a dictionary.
+    Load the logging.config dictionary from pyproject.toml.
 
     Returns
     -------
     Dict[str, Any]
-        The current logging configuration.
+        The logging configuration compatible with logging.config.dictConfig.
     """
-    config_path = get_log_config_path()
-    if config_path.exists():
+    pyproject_path = find_pyproject_toml()
+    import tomli
+
+    if pyproject_path and pyproject_path.exists():
         try:
-            with open(config_path, "r", encoding="utf-8") as fh:
-                cfg = json.load(fh)
-            return cfg
-        except Exception:
-            raise RuntimeError("Failed to load logging configuration.")
-    raise RuntimeError("Logging configuration file does not exist.")
+            with open(pyproject_path, "rb") as f:
+                pyproject_toml = tomli.load(f)
+            config = pyproject_toml.get("logging", {}).get("config")
+            if isinstance(config, dict):
+                return config
+        except Exception as e:
+            sys.stderr.write(
+                f"Warning: Failed to parse [logging.config] from {pyproject_path}: {e}\n"
+            )
+
+    # Fallback
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "detailed": {
+                "format": "%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+            "simple": {
+                "format": "%(asctime)s.%(msecs)03d - %(module)-30s %(lineno)-4d - %(levelname)-8s - %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "level": "INFO",
+                "formatter": "simple",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {},
+        "root": {"level": "INFO", "handlers": ["console"]},
+    }
 
 
 def get_log_config_path() -> Path:
     """
-    Get the path to the logging configuration file.
+    Return the path to pyproject.toml (source of logging configuration).
 
     Returns
     -------
     Path
-        The path to the logging configuration file.
+        The path to pyproject.toml.
     """
-    return Path(__file__).parent / "logging_config.json"
+    p = find_pyproject_toml()
+    if p is not None:
+        return p
+    return Path(__file__).resolve().parents[2] / "pyproject.toml"

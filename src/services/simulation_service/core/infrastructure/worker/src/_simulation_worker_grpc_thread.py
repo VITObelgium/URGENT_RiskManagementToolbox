@@ -117,9 +117,7 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
     """Create or reuse a shared Python3.10 venv and install model requirements.
             Creation strategy:
                     1) Use system `python3.10 -m venv` if available.
-                    2) Else use `uv venv --python 3.10` (uv will fetch a 3.10 runtime if missing).
-                    3) Else try pixi ephemeral runtime: `pixi run -p python==3.10.* -- python -m venv ...`.
-                    4) If none of the above is possible, abort and return None.
+                    2) If not possible, abort and return None.
             After creation, install requirements from
             `src/services/simulation_service/core/infrastructure/worker/worker_requirements.txt`
     Returns the path to the venv python if successful, else None.
@@ -139,14 +137,6 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
         # Re-check after acquiring/contending for the lock
         if venv_python.exists() and ready_marker.exists():
             return venv_python
-
-        uv_bin = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
-        if uv_bin and not shutil.which("uv") and not Path(uv_bin).exists():
-            uv_bin = ""
-
-        pixi_bin = shutil.which("pixi") or str(Path.home() / ".pixi/bin/pixi")
-        if pixi_bin and not shutil.which("pixi") and not Path(pixi_bin).exists():
-            pixi_bin = ""
 
         py310 = shutil.which("python3.10")
 
@@ -169,46 +159,9 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
                         capture_output=True,
                         text=True,
                     )
-                elif uv_bin:
-                    setup_logger.info(
-                        "Worker %s: Using uv to create Python 3.10 venv (uv=%s).",
-                        worker_id,
-                        uv_bin,
-                    )
-                    p = subprocess.run(
-                        [uv_bin, "venv", "--python", "3.10", str(venv_dir)],
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
-                elif pixi_bin:
-                    setup_logger.info(
-                        "Worker %s: Using pixi ephemeral Python 3.10 to create venv (pixi=%s).",
-                        worker_id,
-                        pixi_bin,
-                    )
-                    # Attempt to use a pixi-provided Python 3.10 to bootstrap the venv
-                    # This uses an ephemeral environment with python==3.10.* if supported by pixi.
-                    p = subprocess.run(
-                        [
-                            pixi_bin,
-                            "run",
-                            "-p",
-                            "python==3.10.*",
-                            "--",
-                            "python",
-                            "-m",
-                            "venv",
-                            str(venv_dir),
-                        ],
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
                 else:
                     setup_logger.error(
-                        "Worker %s: python3.10 not found and uv unavailable. "
-                        "pixi also unavailable or unsupported. Cannot create required Python 3.10 environment.",
+                        "Worker %s: python3.10 not found!",
                         worker_id,
                     )
                     return None

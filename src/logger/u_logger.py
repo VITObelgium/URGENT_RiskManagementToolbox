@@ -22,9 +22,7 @@ def _configure_stdout_only_profile() -> None:
     No files, no queue: just a console handler on root.
     """
     cfg = get_log_config()
-    console_enabled = (
-        True if get_log_to_console_value() is None else get_log_to_console_value()
-    )
+    console_enabled = bool(get_log_to_console_value())
 
     if console_enabled:
         cfg["root"]["handlers"] = ["console"]

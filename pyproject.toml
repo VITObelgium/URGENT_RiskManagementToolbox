@@ -19,6 +19,65 @@ log_to_console = true
 datetime_log_file = false
 external_docker_log_console = true
 
+[logging.config]
+version = 1
+disable_existing_loggers = false
+
+[logging.config.formatters.detailed]
+format = "%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s"
+datefmt = "%Y-%m-%d %H:%M:%S"
+
+[logging.config.formatters.simple]
+format = "%(asctime)s.%(msecs)03d - %(module)-30s %(lineno)-4d - %(levelname)-8s - %(message)s"
+datefmt = "%Y-%m-%d %H:%M:%S"
+
+[logging.config.handlers.console]
+class = "logging.StreamHandler"
+level = "INFO"
+formatter = "simple"
+stream = "ext://sys.stdout"
+
+[logging.config.handlers.file]
+class = "logging.FileHandler"
+level = "INFO"
+formatter = "detailed"
+encoding = "utf-8"
+mode = "a"
+
+["logging.config".loggers."aux"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."aux.console"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."threading-worker"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."threading-server"]
+level = "DEBUG"
+handlers = []
+propagate = true
+
+["logging.config".loggers."server"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."worker"]
+level = "INFO"
+handlers = []
+propagate = true
+
+[logging.config.root]
+level = "INFO"
+handlers = ["console", "file"]
+
 [tool.coverage.run]
 branch = true
 source = ["src"]

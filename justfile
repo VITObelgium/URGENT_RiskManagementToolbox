@@ -9,7 +9,7 @@ compose_file := "src/services/simulation_service/core/docker-compose.yml"
 # ==============================
 
 # Runner configuration
-runner := "uv"
+runner := env("RUNNER", "uv")
 base_path := "~/.local/bin"
 # ==============================
 
@@ -205,6 +205,7 @@ info:
     @echo -e "\033[0;32mPython version:\033[0m      {{python_version}}"
     @echo -e "\033[0;32mVirtual environment:\033[0m {{venv_dir}}"
     @echo -e "\033[0;32mCurrent Python:\033[0m      $(which python3 2>/dev/null || echo 'Not found')"
+    @echo -e "\033[0;32mSelected runner:\033[0m      {{runner}}"
     @echo -e "\033[0;32mUV location:\033[0m         $(which {{base_path}}/{{runner}} 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mPixi location:\033[0m      $(which pixi 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mDocker status:\033[0m       $(docker --version 2>/dev/null || echo 'Not installed')"
@@ -214,6 +215,7 @@ info:
 [doc('Detect available runner binary (pixi or uv)')]
 detect-runner:
     #!/usr/bin/env bash
+    echo -e "The current runner is: $runner"
     if command -v pixi >/dev/null 2>&1; then \
         echo -e "pixi available"; \
     fi
@@ -239,4 +241,16 @@ check-runner:
             exit 1; \
         fi; \
     fi
+
+[group('utils')]
+[doc('Select default runner (pixi or uv)')]
+set-runner RUNNER_NAME:
+    #!/usr/bin/env bash
+    if [ "{{RUNNER_NAME}}" != "pixi" ] && [ "{{RUNNER_NAME}}" != "uv" ]; then
+        echo -e "\033[0;31mError: Invalid runner name '{{RUNNER_NAME}}'. Use 'pixi' or 'uv'.\033[0m\n"
+        exit 1
+    fi
+    echo "RUNNER={{RUNNER_NAME}}" > .env
+    echo -e "\n\033[0;32m==== Runner set to '{{RUNNER_NAME}}'. ====\033[0m\n\n"
+
 #=============================

@@ -220,7 +220,7 @@ detect-runner:
         echo -e "pixi available"; \
     fi
     if command -v {{base_path}}/uv >/dev/null 2>&1 || command -v uv >/dev/null 2>&1; then \
-        echo -e "{{runner}} available"; \
+        echo -e "uv available"; \
     else \
         echo -e "No pixi or uv detected in PATH or {{base_path}}/{{runner}}"; \
     fi

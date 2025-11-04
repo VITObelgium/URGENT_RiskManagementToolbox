@@ -171,8 +171,8 @@ shell NAME:
 [group('threading')]
 [doc('Run optimization using Thread runner')]
 run-thread CONFIG_FILE MODEL_FILE:
-    @just check-runner
     #!/usr/bin/env bash
+    just check-runner
     if [ "{{runner}}" = "uv" ]; then \
         {{base_path}}/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}; \
     elif [ "{{runner}}" = "pixi" ]; then \
@@ -206,7 +206,7 @@ info:
     @echo -e "\033[0;32mVirtual environment:\033[0m {{venv_dir}}"
     @echo -e "\033[0;32mCurrent Python:\033[0m      $(which python3 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mSelected runner:\033[0m      {{runner}}"
-    @echo -e "\033[0;32mUV location:\033[0m         $(which {{base_path}}/{{runner}} 2>/dev/null || echo 'Not found')"
+    @echo -e "\033[0;32mUV location:\033[0m         $(which {{base_path}}/uv 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mPixi location:\033[0m      $(which pixi 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mDocker status:\033[0m       $(docker --version 2>/dev/null || echo 'Not installed')"
     @echo -e "\033[0;32mCurrent directory:\033[0m   $(pwd)"
@@ -215,7 +215,7 @@ info:
 [doc('Detect available runner binary (pixi or uv)')]
 detect-runner:
     #!/usr/bin/env bash
-    echo -e "The current runner is: $runner"
+    echo -e "The current runner is: {{runner}}"
     if command -v pixi >/dev/null 2>&1; then \
         echo -e "pixi available"; \
     fi

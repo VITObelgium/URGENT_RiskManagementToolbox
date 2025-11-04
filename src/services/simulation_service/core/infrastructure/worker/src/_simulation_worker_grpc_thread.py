@@ -337,7 +337,7 @@ def _prepare_shared_venv(worker_id: str | int) -> Path | None:
         except Exception:
             pass
 
-        logger.info("Worker %s: Shared venv ready at %s", worker_id, venv_dir)
+        setup_logger.info("Worker %s: Shared venv ready", worker_id)
         return venv_python
     finally:
         if got_lock:

@@ -89,24 +89,37 @@ class SubprocessRunner:
                     "Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway."
                 )
 
-            # Determine Python interpreter: prefer shared venv if present
-            # TODO: Make this configurable and join logic with worker logic
-            selected = "python3.10"
-            reason = "default fallback"
-            if repo_root is not None:
-                venv_candidate = (
-                    repo_root / "orchestration_files/.venv_darts/bin/python3.10"
-                )
-                if venv_candidate.exists():
-                    selected = str(venv_candidate)
-                    reason = f"auto-detected {venv_candidate}"
+            if os.environ.get("PIXI_ENVIRONMENT_NAME"):
+                logger.info("Using pixi runtime environment for subprocess...")
+                command = [
+                    "pixi",
+                    "run",
+                    "-e",
+                    "worker",
+                    "python",
+                    "-u",
+                    "main.py",
+                    config,
+                ]
+            else:
+                # Determine Python interpreter: prefer shared venv if present
+                # TODO: Make this configurable and join logic with worker logic
+                selected = "python3.10"
+                reason = "default fallback"
+                if repo_root is not None:
+                    venv_candidate = (
+                        repo_root / "orchestration_files/.venv_darts/bin/python3.10"
+                    )
+                    if venv_candidate.exists():
+                        selected = str(venv_candidate)
+                        reason = f"auto-detected {venv_candidate}"
 
-            command = [selected, "-u", "main.py", config]
-            logger.info(
-                "Launching OpenDarts subprocess using interpreter (%s): %s",
-                reason,
-                selected,
-            )
+                command = [selected, "-u", "main.py", config]
+                logger.info(
+                    "Launching OpenDarts subprocess using interpreter (%s): %s",
+                    reason,
+                    selected,
+                )
 
             env = os.environ.copy()
             if work_dir is not None:

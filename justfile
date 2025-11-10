@@ -9,7 +9,7 @@ compose_file := "src/services/simulation_service/core/docker-compose.yml"
 # ==============================
 
 # Runner configuration
-runner := env("RUNNER", "uv")
+runner := env("RUNNER", "pixi")
 base_path := "~/.local/bin"
 # ==============================
 

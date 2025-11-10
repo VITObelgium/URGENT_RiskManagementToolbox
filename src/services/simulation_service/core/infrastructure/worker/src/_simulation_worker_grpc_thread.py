@@ -36,6 +36,12 @@ MODEL_RETRY_DELAY_SEC = 5
 JOB_RETRY_DELAY_SEC = 5
 
 
+def _detect_pixi_runtime() -> bool:
+    if os.environ.get("PIXI_ENVIRONMENT_NAME"):
+        return True
+    return False
+
+
 async def _sleep_with_stop(
     delay: float, stop_flag: threading.Event | None = None, granularity: float = 0.1
 ) -> None:
@@ -537,27 +543,32 @@ async def ask_for_simulation_model(
                 logger.info(
                     f"Worker {worker_id}: Unpacking simulation model archive successful."
                 )
-                try:
-                    venv_python = await asyncio.to_thread(
-                        _prepare_shared_venv, worker_id
+                if _detect_pixi_runtime():
+                    logger.info(
+                        f"Worker {worker_id}: Detected Pixi runtime environment."
                     )
-                    if venv_python:
-                        logger.info(
-                            "Worker %s: Using venv python at %s for DARTS runs.",
-                            worker_id,
-                            venv_python,
+                else:
+                    try:
+                        venv_python = await asyncio.to_thread(
+                            _prepare_shared_venv, worker_id
                         )
-                    else:
+                        if venv_python:
+                            logger.info(
+                                "Worker %s: Using venv python at %s for DARTS runs.",
+                                worker_id,
+                                venv_python,
+                            )
+                        else:
+                            logger.warning(
+                                "Worker %s: Proceeding without venv; DARTS may fail if dependencies are missing.",
+                                worker_id,
+                            )
+                    except Exception as e:
                         logger.warning(
-                            "Worker %s: Proceeding without venv; DARTS may fail if dependencies are missing.",
+                            "Worker %s: Unexpected error while preparing venv: %s",
                             worker_id,
+                            e,
                         )
-                except Exception as e:
-                    logger.warning(
-                        "Worker %s: Unexpected error while preparing venv: %s",
-                        worker_id,
-                        e,
-                    )
                 return  # Successfully retrieved and unpacked model
             else:
                 logger.warning(

@@ -8,6 +8,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
   <img alt="Code Quality" src="https://img.shields.io/badge/Code%20Quality-80%25%2B-yellow">
   <img alt="OS" src="https://img.shields.io/badge/OS-Ubuntu%2022.04-blueviolet">
+  <img alt="Pixi" src=https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square>
   <img alt="Status" src="https://img.shields.io/badge/Status-Development-pink">
 </p>
 
@@ -36,7 +37,7 @@ This Python-based toolbox is designed to optimize geothermal reservoir developme
 ## Development Requirements
 
 - **Operating System**: Ubuntu 22.04 (recommended)
-- **Python Version**: 3.12 (managed via uv; configured in `pyproject.toml` and `justfile`)
+- **Python Version**: 3.12 (managed via pixi; configured in `pyproject.toml` and `justfile`)
 - **Just and common Unix tools**: git, curl
 
 ---
@@ -51,7 +52,7 @@ You can install either a **development environment** (recommended for developers
 
 #### Development Environment
 
-Installs the tools needed for development (Python via uv, dev dependencies, pre-commit, LaTeX, optional Docker):
+Installs the tools needed for development (Python via pixi, dev dependencies, pre-commit, LaTeX, optional Docker):
 
 - Full dev (includes Docker):
 
@@ -67,7 +68,7 @@ just install-dev-thread
 
 The full dev setup will:
 
-- Install Python 3.12 and create a virtual environment with `uv`.
+- Install Python 3.12 and create a environments with `pixi`.
 - Install LaTeX and TeXstudio for docs.
 - Install Docker and verify it.
 - Install all Python dev dependencies and pre-commit hooks.
@@ -88,7 +89,7 @@ just install-docker-release
 just install-thread-release
 ```
 
-Both variants install Python 3.12 runtime deps via `uv`; the Docker option also installs and verifies Docker. Pre-commit hooks are set up by the recipes.
+Both variants install Python 3.12 runtime deps via `pixi`; the Docker option also installs and verifies Docker. Pre-commit hooks are set up by the recipes.
 
 ---
 
@@ -507,19 +508,13 @@ Required arguments:
 1. `--config-file` path to JSON config
 2. `--model-file` path to zipped model archive
 
-Optional:
-- `--population-size` (default 10)
-- `--patience` (default 10)
-- `--max-generations` (default 10)
-- `--use-docker` to run via the Docker-based cluster
-
 CLI usage:
 
 ```
-uv run src/main.py \
+pixi run src/main.py \
   --config-file <config_filepath> \
   --model-file <model_filepath> \
-  [--population-size 10] [--patience 10] [--max-generations 10] [--use-docker]
+  [--use-docker]
 ```
 
 Equivalent with `just`:

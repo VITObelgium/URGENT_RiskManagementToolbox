@@ -88,7 +88,7 @@ install-dev-thread: dev
 [doc('Run repository pre-commit hooks and health checks')]
 run-check:
     @echo -e "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
-    pixi run pre-commit run -a
+    pixi run -e dev pre-commit run -a
     @echo -e "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
 #=============================
 

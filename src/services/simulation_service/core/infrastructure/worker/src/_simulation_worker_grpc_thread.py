@@ -20,8 +20,6 @@ from services.simulation_service.core.connectors.common import (
 from services.simulation_service.core.connectors.factory import ConnectorFactory
 from services.simulation_service.core.infrastructure.worker.src.utils import (
     compute_worker_temp_dir,
-    detect_pixi_runtime,
-    prepare_shared_venv,
     sleep_with_stop,
 )
 from services.simulation_service.core.utils.converters import json_to_str
@@ -231,32 +229,6 @@ async def ask_for_simulation_model(
                 logger.info(
                     f"Worker {worker_id}: Unpacking simulation model archive successful."
                 )
-                if detect_pixi_runtime():
-                    logger.info(
-                        f"Worker {worker_id}: Detected Pixi runtime environment."
-                    )
-                else:
-                    try:
-                        venv_python = await asyncio.to_thread(
-                            prepare_shared_venv, worker_id, logger
-                        )
-                        if venv_python:
-                            logger.info(
-                                "Worker %s: Using venv python at %s for DARTS runs.",
-                                worker_id,
-                                venv_python,
-                            )
-                        else:
-                            logger.warning(
-                                "Worker %s: Proceeding without venv; DARTS may fail if dependencies are missing.",
-                                worker_id,
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            "Worker %s: Unexpected error while preparing venv: %s",
-                            worker_id,
-                            e,
-                        )
                 return  # Successfully retrieved and unpacked model
             else:
                 logger.warning(

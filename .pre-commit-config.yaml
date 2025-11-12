@@ -28,9 +28,9 @@ repos:
     rev: 'v1.18.2'
     hooks:
       - id: mypy
-        language: system
         pass_filenames: false
-        args: ["--enable-incomplete-feature=NewGenericSyntax", '.']
+        additional_dependencies: [ 'pydantic' ]
+
 
   - repo: local
     hooks:

@@ -31,7 +31,7 @@ jobs:
         run: pixi install -e dev
 
       - name: Install pre-commit hooks
-        run:  pixi run pre-commit install
+        run:  pixi run -e dev pre-commit install
 
       - name: Run pre-commit hooks
-        run: pixi run pre-commit run -a
+        run: pixi run -e dev pre-commit run -a

@@ -36,7 +36,7 @@ repos:
     hooks:
       - id: test-coverage
         name: Run tests with coverage
-        entry: bash -c "coverage run -m pytest && coverage html && coverage report"
+        entry: bash -c "pixi run -e dev coverage run -m pytest && pixi run -e dev coverage html && pixi run -e dev coverage report"
         language: system
         always_run: true
         pass_filenames: false

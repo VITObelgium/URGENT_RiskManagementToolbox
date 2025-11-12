@@ -86,7 +86,7 @@ install-dev-thread: dev
 # Development workflow recipes
 [group('dev')]
 [doc('Run repository pre-commit hooks and health checks')]
-run-check: lock-dev
+run-check:
     @echo -e "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
     pixi run pre-commit run -a
     @echo -e "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
@@ -142,8 +142,6 @@ run-thread CONFIG_FILE MODEL_FILE:
 [doc('Show current environment information')]
 info:
     @echo -e "\033[1;33m=== Environment Information ===\033[0m"
-    @echo -e "\033[0;32mPython version:\033[0m      {{python_version}}"
-    @echo -e "\033[0;32mVirtual environment:\033[0m {{venv_dir}}"
     @echo -e "\033[0;32mCurrent Python:\033[0m      $(which python3 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mPixi location:\033[0m       $(which pixi 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mDocker status:\033[0m       $(docker --version 2>/dev/null || echo 'Not installed')"

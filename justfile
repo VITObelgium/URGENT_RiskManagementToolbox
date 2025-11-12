@@ -2,15 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
 
 # Configuration variables
-python_version := "3.12"
-python_venv_darts_version := "3.10"
-venv_dir := ".venv"
 compose_file := "src/services/simulation_service/core/docker-compose.yml"
-# ==============================
-
-# Runner configuration
-runner := env("RUNNER", "pixi")
-base_path := "~/.local/bin"
 # ==============================
 
 # Default recipe - shows available commands
@@ -59,17 +51,6 @@ verify-docker:
     @echo -e "\n\033[0;32m==== Docker verification complete. ====\033[0m\n\n"
 
 [group('setup')]
-[doc('Check and install Python')]
-install-python: prerequisites
-    #!/usr/bin/env bash
-    echo -e "\n==== Checking and installing Python {{python_version}}, {{python_venv_darts_version}} ... ====\n\n"
-    sudo apt update
-    sudo apt upgrade -y
-
-    just install-python-ver {{python_version}}
-    just install-python-ver {{python_venv_darts_version}}
-
-[group('setup')]
 [doc('Install xterm for external terminal logging')]
 install-xterm:
     @echo -e "\n==== Installing xterm... ====\n\n"
@@ -81,26 +62,14 @@ install-xterm:
 
 [group('setup')]
 [doc('Install base development dependencies (Ubuntu): Python, xterm, sync dev deps, pre-commit')]
-dev: install-python install-xterm
-    @echo -e "\n==== Installing base development packages and pre-commit hooks... ====\n\n"
-    {{base_path}}/uv sync --all-groups
+dev: install-xterm
     @echo -e "\n\033[0;32m==== Base development setup complete. ====\033[0m\n\n"
 
 #=============================
 
-# High-level installation targets
 [group('install')]
-[doc('Install all dependencies needed for release threading solution (Ubuntu and uv only)')]
-install-thread-release: install-python install-xterm
-    @echo -e "\n==== Installing release packages and pre-commit hooks... ====\n\n"
-    {{base_path}}/uv sync --no-dev
-    @echo -e "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
-
-[group('install')]
-[doc('Install all dependencies for release (Ubuntu and uv only)')]
-install-docker-release: install-python install-docker verify-docker install-xterm
-    @echo -e "\n==== Installing release packages and pre-commit hooks... ====\n\n"
-    {{base_path}}/uv sync --no-dev
+[doc('Install all dependencies for release')]
+install-docker-release: install-docker verify-docker install-xterm
     @echo -e "\n\033[0;32m==== Release setup complete. ====\033[0m\n\n"
 
 [group('install')]
@@ -116,16 +85,10 @@ install-dev-thread: dev
 
 # Development workflow recipes
 [group('dev')]
-[doc('Update and lock all python uv dependencies')]
-lock-dev:
-    @echo -e "\n==== Updating dependencies... ====\n\n"
-    {{base_path}}/uv sync --all-groups
-
-[group('dev')]
 [doc('Run repository pre-commit hooks and health checks')]
 run-check: lock-dev
     @echo -e "\n==== Running repository health checks with pre-commit hooks... ====\n\n"
-    {{base_path}}/uv run pre-commit run -a
+    pixi run pre-commit run -a
     @echo -e "\n\033[0;32m==== Pre-commit checks complete. ====\033[0m\n\n"
 #=============================
 
@@ -159,7 +122,7 @@ docker-prune:
 [doc('Run optimization using Docker runner')]
 run-docker CONFIG_FILE MODEL_FILE:
     @just check-runner
-    {{base_path}}/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}} --use-docker
+    pixi run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}} --use-docker
 
 [group('docker')]
 [doc('Run an interactive shell in a new container for a service')]
@@ -171,32 +134,9 @@ shell NAME:
 [group('threading')]
 [doc('Run optimization using Thread runner')]
 run-thread CONFIG_FILE MODEL_FILE:
-    #!/usr/bin/env bash
-    just check-runner
-    if [ "{{runner}}" = "uv" ]; then \
-        {{base_path}}/uv run src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}; \
-    elif [ "{{runner}}" = "pixi" ]; then \
-       pixi run python src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}; \
-    fi
+    pixi run python src/main.py --config-file {{CONFIG_FILE}} --model-file {{MODEL_FILE}}
+
 #=============================
-
-# Utility recipes
-[group('utils')]
-[doc('Install specific Python version')]
-install-python-ver VERSION:
-    #!/usr/bin/env bash
-    sudo apt update
-    echo -e "\n==== Installing Python {{VERSION}} ... ====\n\n"
-    echo "\033[0;33mPython {{VERSION}} not found: Installing...\033[0m"
-    if ! apt-cache policy python{{VERSION}} | grep -q 'Candidate:'; then
-        echo "\033[0;33mPython {{VERSION}} not found in current repos: Adding Deadsnakes PPA...\033[0m"
-        sudo apt install -y software-properties-common
-        sudo add-apt-repository -y ppa:deadsnakes/ppa
-        sudo apt update
-    fi
-    sudo apt install -y python{{VERSION}} python{{VERSION}}-venv python3-pip
-    echo -e "\n\033[0;32m==== Python {{VERSION}} installed successfully. ====\033[0m\n\n"
-
 
 [group('utils')]
 [doc('Show current environment information')]
@@ -205,52 +145,17 @@ info:
     @echo -e "\033[0;32mPython version:\033[0m      {{python_version}}"
     @echo -e "\033[0;32mVirtual environment:\033[0m {{venv_dir}}"
     @echo -e "\033[0;32mCurrent Python:\033[0m      $(which python3 2>/dev/null || echo 'Not found')"
-    @echo -e "\033[0;32mSelected runner:\033[0m      {{runner}}"
-    @echo -e "\033[0;32mUV location:\033[0m         $(which {{base_path}}/uv 2>/dev/null || echo 'Not found')"
-    @echo -e "\033[0;32mPixi location:\033[0m      $(which pixi 2>/dev/null || echo 'Not found')"
+    @echo -e "\033[0;32mPixi location:\033[0m       $(which pixi 2>/dev/null || echo 'Not found')"
     @echo -e "\033[0;32mDocker status:\033[0m       $(docker --version 2>/dev/null || echo 'Not installed')"
     @echo -e "\033[0;32mCurrent directory:\033[0m   $(pwd)"
-
-[group('utils')]
-[doc('Detect available runner binary (pixi or uv)')]
-detect-runner:
-    #!/usr/bin/env bash
-    echo -e "The current runner is: {{runner}}"
-    if command -v pixi >/dev/null 2>&1; then \
-        echo -e "pixi available"; \
-    fi
-    if command -v {{base_path}}/uv >/dev/null 2>&1 || command -v uv >/dev/null 2>&1; then \
-        echo -e "uv available"; \
-    else \
-        echo -e "No pixi or uv detected in PATH or {{base_path}}/{{runner}}"; \
-    fi
 
 [group('utils')]
 [doc('Check that the selected runner is installed')]
 check-runner:
     #!/usr/bin/env bash
-    if [ "{{runner}}" = "pixi" ]; then \
-        if ! command -v pixi >/dev/null 2>&1; then \
-            echo -e "\033[0;31mError: pixi runner selected but not found in PATH.\033[0m\n"; \
-            exit 1; \
-        fi; \
+    if ! command -v pixi >/dev/null 2>&1; then \
+        echo -e "\033[0;31mError: pixi runner selected but not found in PATH.\033[0m\n"; \
+        exit 1; \
     fi
-    if [ "{{runner}}" = "uv" ]; then \
-        if ! command -v {{base_path}}/uv >/dev/null 2>&1 && ! command -v uv >/dev/null 2>&1; then \
-            echo -e "\033[0;31mError: uv runner selected but not found in PATH or {{base_path}}/{{runner}}.\033[0m\n"; \
-            exit 1; \
-        fi; \
-    fi
-
-[group('utils')]
-[doc('Select default runner (pixi or uv)')]
-set-runner RUNNER_NAME:
-    #!/usr/bin/env bash
-    if [ "{{RUNNER_NAME}}" != "pixi" ] && [ "{{RUNNER_NAME}}" != "uv" ]; then
-        echo -e "\033[0;31mError: Invalid runner name '{{RUNNER_NAME}}'. Use 'pixi' or 'uv'.\033[0m\n"
-        exit 1
-    fi
-    echo "RUNNER={{RUNNER_NAME}}" > .env
-    echo -e "\n\033[0;32m==== Runner set to '{{RUNNER_NAME}}'. ====\033[0m\n\n"
 
 #=============================

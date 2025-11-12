@@ -132,9 +132,6 @@ cumulative_timing = false
 requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
-[tool.uv]
-package = false
-
 
 [dependency-groups]
 dev = [

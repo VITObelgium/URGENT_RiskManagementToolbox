@@ -28,7 +28,7 @@ jobs:
           python-version-file: "pyproject.toml"
 
       - name: Install dependencies with pipx
-        run: pixi install --dev
+        run: pixi install -e dev
 
       - name: Install pre-commit hooks
         run:  pixi run pre-commit install

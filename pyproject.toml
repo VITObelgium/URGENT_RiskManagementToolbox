@@ -4,15 +4,6 @@ version = "0.1.0"
 description = ""
 readme = "README.md"
 requires-python = "==3.12.*"
-dependencies = [
-    "grpcio==1.69.0",
-    "grpcio-tools==1.69.0",
-    "numpy==2.2.1",
-    "psutil>=7.0.0",
-    "pydantic==2.10.4",
-    "scipy==1.15.2",
-    "tomli==2.2.1",
-]
 
 [logging.output]
 log_to_console = true

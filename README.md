@@ -37,8 +37,8 @@ This Python-based toolbox is designed to optimize geothermal reservoir developme
 ## Development Requirements
 
 - **Operating System**: Ubuntu 22.04 (recommended)
-- **Python Version**: 3.12 (managed via pixi; configured in `pyproject.toml` and `justfile`)
-- **Just and common Unix tools**: git, curl
+- **Python Version**: 3.12 (managed via pixi; configured in `pyproject.toml`)
+- **common Unix tools**: git, curl
 
 ---
 
@@ -54,57 +54,15 @@ You can install either a **development environment** (recommended for developers
 
 Installs the tools needed for development (Python via pixi, dev dependencies, pre-commit, LaTeX, optional Docker):
 
-- Full dev (includes Docker):
 
 ```shell
-just install-dev
+pixi install -e dev
 ```
 
-- Dev without Docker (threaded runner only):
+This will install only the necessary dependencies for development. For pre-commit hooks to work, make sure to run:
 
 ```shell
-just install-dev-thread
-```
-
-The full dev setup will:
-
-- Install Python 3.12 and create a environments with `pixi`.
-- Install LaTeX and TeXstudio for docs.
-- Install Docker and verify it.
-- Install all Python dev dependencies and pre-commit hooks.
-
-#### Release Environment
-
-Choose based on your runner mode:
-
-- Docker runner:
-
-```shell
-just install-docker-release
-```
-
-- Threaded runner (without Docker):
-
-```shell
-just install-thread-release
-```
-
-Both variants install Python 3.12 runtime deps via `pixi`; the Docker option also installs and verifies Docker. Pre-commit hooks are set up by the recipes.
-
----
-
-### 2. Documentation Editing
-
-To edit the project documentation using TeXstudio, execute:
-
-```shell
-just edit-docs
-```
-
-- This will open the documentation in TeXstudio if installed.
-- If TeXstudio is not detected, please install it along with LaTeX by running:
-```shell
-just install-latex
+pixi run -e dev pre-commit install
 ```
 
 ---
@@ -114,8 +72,9 @@ just install-latex
 Maintain codebase quality by executing pre-commit hooks, which will run set of the tools including pytest and coverage:
 
 ```shell
-just run-check
+pixi run -e dev pre-commit run -a
 ```
+
 ---
 
 ## Getting started
@@ -130,18 +89,18 @@ The toolbox supports two execution modes for running simulations:
 - Threaded runner (default): local execution without containers.
 - Docker runner: containerized workers.
 
-Pick a runner using either the CLI flag `--use-docker` or the convenience `just` recipes:
+Pick a runner using either the CLI flag `--use-docker`:
 
 - Threaded:
 
 ```shell
-just run-thread <config_filepath> <model_filepath>
+pixi run src/main.py --config-file <config_filepath> --model-file <model_filepath>
 ```
 
 - Docker:
 
 ```shell
-just run-docker <config_filepath> <model_filepath>
+pixi run src/main.py --config-file <config_filepath> --model-file <model_filepath> --use-docker
 ```
 
 

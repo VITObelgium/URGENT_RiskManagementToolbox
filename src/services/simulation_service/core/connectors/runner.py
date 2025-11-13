@@ -89,37 +89,16 @@ class SubprocessRunner:
                     "Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway."
                 )
 
-            if os.environ.get("PIXI_ENVIRONMENT_NAME"):
-                logger.info("Using pixi runtime environment for subprocess...")
-                command = [
-                    "pixi",
-                    "run",
-                    "-e",
-                    "worker",
-                    "python",
-                    "-u",
-                    "main.py",
-                    config,
-                ]
-            else:
-                # Determine Python interpreter: prefer shared venv if present
-                # TODO: Make this configurable and join logic with worker logic
-                selected = "python3.10"
-                reason = "default fallback"
-                if repo_root is not None:
-                    venv_candidate = (
-                        repo_root / "orchestration_files/.venv_darts/bin/python3.10"
-                    )
-                    if venv_candidate.exists():
-                        selected = str(venv_candidate)
-                        reason = f"auto-detected {venv_candidate}"
-
-                command = [selected, "-u", "main.py", config]
-                logger.info(
-                    "Launching OpenDarts subprocess using interpreter (%s): %s",
-                    reason,
-                    selected,
-                )
+            command = [
+                "pixi",
+                "run",
+                "-e",
+                "worker",
+                "python",
+                "-u",
+                "main.py",
+                config,
+            ]
 
             env = os.environ.copy()
             if work_dir is not None:
@@ -228,61 +207,7 @@ class SubprocessRunner:
                 )
                 return SimulationStatus.FAILED, default_failed_results
 
-        # Fallback simpler behaviour
-        command = ["python3", "-u", "main.py", config]
-
-        manager = managed_factory(
-            command_args=command,
-            stream_reader_func=stream_reader,
-            logger_info_func=logger.info,
-            logger_error_func=logger.error,
-        )
-
-        try:
-            with manager as process:
-                timeout_duration = 15 * 60
-                try:
-                    process.wait(timeout=timeout_duration)
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        f"Subprocess timed out after {timeout_duration} seconds. Terminating."
-                    )
-                    if process.poll() is None:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            logger.warning(
-                                "Subprocess did not terminate gracefully. Killing."
-                            )
-                            process.kill()
-                            process.wait()
-                    if manager.stdout_thread and manager.stdout_thread.is_alive():
-                        manager.stdout_thread.join(timeout=2)
-                    if manager.stderr_thread and manager.stderr_thread.is_alive():
-                        manager.stderr_thread.join(timeout=2)
-                    return SimulationStatus.TIMEOUT, default_failed_results
-
-                if process.returncode != 0:
-                    logger.error(
-                        f"Subprocess failed with return code {process.returncode}."
-                    )
-                    return SimulationStatus.FAILED, default_failed_results
-
-                full_stdout = "\n".join(manager.stdout_lines)
-                broadcast_results = self._broadcast_results_parser(full_stdout)
-                return SimulationStatus.SUCCESS, broadcast_results
-
-        except FileNotFoundError:
-            logger.exception(
-                f"Failed to start subprocess. Command '{' '.join(command)}' not found."
-            )
-            return SimulationStatus.FAILED, default_failed_results
-        except Exception as e:
-            logger.exception(
-                f"An error occurred while running the simulation subprocess: {e}"
-            )
-            return SimulationStatus.FAILED, default_failed_results
+        return SimulationStatus.FAILED, default_failed_results
 
     def _default_managed_subprocess_factory(*a, **k):
         return ManagedSubprocess(*a, **k)

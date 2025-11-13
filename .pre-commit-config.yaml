@@ -12,7 +12,6 @@ repos:
       - id: mixed-line-ending
         args: [ '--fix=lf' ]
 
-
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0
     hooks:
@@ -29,21 +28,14 @@ repos:
     rev: 'v1.18.2'
     hooks:
       - id: mypy
-        language: system
         pass_filenames: false
-        args: ["--enable-incomplete-feature=NewGenericSyntax", '.']
-
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.5
-    hooks:
-      - id: uv-lock
-
+        additional_dependencies: [ 'pydantic' ]
 
   - repo: local
     hooks:
       - id: test-coverage
         name: Run tests with coverage
-        entry: bash -c "coverage run -m pytest && coverage html && coverage report"
+        entry: bash -c "pixi run -e dev coverage run -m pytest && pixi run -e dev coverage html && pixi run -e dev coverage report"
         language: system
         always_run: true
         pass_filenames: false

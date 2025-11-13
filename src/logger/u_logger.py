@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import json
 import logging
 import logging.config
 import os
 from logging import Logger
-from pathlib import Path
 from typing import Optional
 
 from logger.utils import (
-    _build_console_handler,
     configure_default_profile,
+    get_log_config,
     get_log_to_console_value,
     get_logger_profile,
 )
@@ -23,37 +21,16 @@ def _configure_stdout_only_profile() -> None:
 
     No files, no queue: just a console handler on root.
     """
-    config_path = Path(__file__).parent / "logging_config.json"
-    console_enabled = (
-        True if get_log_to_console_value() is None else get_log_to_console_value()
-    )
-
-    if config_path.exists():
-        try:
-            with open(config_path, "r", encoding="utf-8") as fh:
-                cfg = json.load(fh)
-
-            if not console_enabled:
-                # Remove file handler if console is explicitly disabled
-                cfg["root"]["handlers"] = [
-                    h for h in cfg["root"].get("handlers", []) if h == "console"
-                ]
-                cfg.get("handlers", {}).pop("file", None)
-
-            logging.config.dictConfig(cfg)
-            return
-        except Exception:
-            pass
+    cfg = get_log_config()
+    console_enabled = bool(get_log_to_console_value())
 
     if console_enabled:
-        root = logging.getLogger()
-        # Clear existing handlers to ensure console-only
-        root.handlers.clear()
-        root.setLevel(logging.INFO)
-        root.addHandler(_build_console_handler(logging.INFO))
+        cfg["root"]["handlers"] = ["console"]
     else:
-        # If console explicitly disabled, leave default root logger alone
-        pass
+        cfg["root"]["handlers"] = []
+    cfg.get("handlers", {}).pop("file", None)
+
+    logging.config.dictConfig(cfg)
 
 
 def configure_logger() -> None:

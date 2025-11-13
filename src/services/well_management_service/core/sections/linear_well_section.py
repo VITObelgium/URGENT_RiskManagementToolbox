@@ -81,10 +81,6 @@ class LinearWellSection(SectionInterface):
                 section_trajectory.append(perf_point)
                 perforation_md = perforation_md_provider.get_next_md()
 
-            self.__logger.debug(
-                f"Appending point: {TrajectoryPoint(x, y, z, point_md)} to the trajectory"
-            )
-
             section_trajectory.append(TrajectoryPoint(x, y, z, point_md))
 
         if remaining_md > 0.0:
@@ -110,9 +106,6 @@ class LinearWellSection(SectionInterface):
                 section_trajectory.append(perf_point)
                 perforation_md = perforation_md_provider.get_next_md()
 
-            self.__logger.debug(
-                f"Appending point: {TrajectoryPoint(x, y, z, point_md)} to the trajectory"
-            )
             section_trajectory.append(TrajectoryPoint(x, y, z, point_md))
 
         return Trajectory(tuple(section_trajectory))

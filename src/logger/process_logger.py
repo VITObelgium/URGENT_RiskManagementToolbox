@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from logger.orchestration_logger import _start_external_log_terminal
-from logger.utils import get_external_console_logging
+from logger.utils import get_external_console_logging, get_log_config
 
 TAIL_LINES = 0
 
@@ -42,10 +42,15 @@ def _pytest_log_path() -> Path:
 
 
 def _formatter() -> logging.Formatter:
-    return logging.Formatter(
-        fmt="%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    """Build a formatter using the 'detailed' formatter from logging config."""
+    cfg = get_log_config()
+    fmt_cfg = cfg.get("formatters", {}).get("detailed", {})
+    fmt = fmt_cfg.get(
+        "format",
+        "%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s",
     )
+    datefmt = fmt_cfg.get("datefmt", "%Y-%m-%d %H:%M:%S")
+    return logging.Formatter(fmt=fmt, datefmt=datefmt)
 
 
 def _add_unique_file_handler(
@@ -130,7 +135,6 @@ def configure_server_logger() -> Path:
 
     thread_filter = _ThreadNameFilter("server")
     ts_logger = logging.getLogger("threading-server")
-    ts_logger.setLevel(logging.DEBUG)
     _add_unique_file_handler(ts_logger, file_path, record_filter=thread_filter)
     try:
         ts_logger.propagate = False

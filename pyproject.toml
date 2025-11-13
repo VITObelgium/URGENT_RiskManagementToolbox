@@ -3,21 +3,71 @@ name = "urgent-riskmanagementtoolbox"
 version = "0.1.0"
 description = ""
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "grpcio==1.69.0",
-    "grpcio-tools==1.69.0",
-    "numpy==2.2.1",
-    "psutil>=7.0.0",
-    "pydantic==2.10.4",
-    "scipy==1.15.2",
-    "tomli==2.2.1",
-]
+requires-python = "==3.12.*"
 
 [logging.output]
 log_to_console = true
 datetime_log_file = false
 external_docker_log_console = true
+
+[logging.config]
+version = 1
+disable_existing_loggers = false
+
+[logging.config.formatters.detailed]
+format = "%(asctime)s.%(msecs)03d %(module)s:%(lineno)d %(levelname)s - %(message)s"
+datefmt = "%Y-%m-%d %H:%M:%S"
+
+[logging.config.formatters.simple]
+format = "%(asctime)s.%(msecs)03d - %(module)-30s %(lineno)-4d - %(levelname)-8s - %(message)s"
+datefmt = "%Y-%m-%d %H:%M:%S"
+
+[logging.config.handlers.console]
+class = "logging.StreamHandler"
+level = "INFO"
+formatter = "simple"
+stream = "ext://sys.stdout"
+
+[logging.config.handlers.file]
+class = "logging.FileHandler"
+level = "INFO"
+formatter = "detailed"
+encoding = "utf-8"
+mode = "a"
+
+["logging.config".loggers."aux"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."aux.console"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."threading-worker"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."threading-server"]
+level = "DEBUG"
+handlers = []
+propagate = true
+
+["logging.config".loggers."server"]
+level = "INFO"
+handlers = []
+propagate = true
+
+["logging.config".loggers."worker"]
+level = "INFO"
+handlers = []
+propagate = true
+
+[logging.config.root]
+level = "INFO"
+handlers = ["console", "file"]
 
 [tool.coverage.run]
 branch = true
@@ -73,18 +123,48 @@ cumulative_timing = false
 requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
-[tool.uv]
-package = false
 
 
-[dependency-groups]
-dev = [
-    "coverage==7.6.10",
-    "mypy==1.15.0",
-    "mypy-protobuf==3.6.0",
-    "pre-commit==4.0.1",
-    "protoletariat==3.3.9",
-    "pytest==8.3.4",
-    "pytest-mypy==0.10.3",
-    "pytest-retry==1.7.0",
-]
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.pypi-dependencies]
+urgent-riskmanagementtoolbox = { path = ".", editable = true }
+
+[tool.pixi.dependencies]
+python = "3.12.*"
+grpcio = "==1.69.0"
+grpcio-tools = "==1.69.0"
+numpy = "==2.2.1"
+psutil = ">=7.0.0"
+pydantic = "==2.10.4"
+scipy = "==1.15.2"
+tomli = "==2.2.1"
+
+[tool.pixi.feature.dev.dependencies]
+coverage = "==7.6.10"
+mypy = "==1.15.0"
+mypy-protobuf = ">=3.5"
+pre-commit = "==4.0.1"
+protoletariat = "==3.3.9"
+pytest = "==8.3.4"
+pytest-mypy = "==0.10.3"
+pytest-retry = "==1.7.0"
+
+
+[tool.pixi.feature.py310.dependencies]
+python = "3.10.*"
+grpcio = "==1.69.0"
+grpcio-tools = "==1.69.0"
+tomli = "==2.2.1"
+
+[tool.pixi.feature.py310.pypi-dependencies]
+open-darts = { path = "./src/services/simulation_service/core/infrastructure/worker/open_darts_whl/open_darts-1.1.3-cp310-cp310-linux_x86_64.whl" }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+worker = { features = ["py310"], solve-group = "worker", no-default-feature = true }
+
+[tool.pixi.tasks]

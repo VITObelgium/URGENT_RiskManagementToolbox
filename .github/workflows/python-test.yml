@@ -20,7 +20,6 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.9.3
         with:
           pixi-version: v0.59.0
-          cache: true
 
       - name: Set up Python
         uses: actions/setup-python@v5

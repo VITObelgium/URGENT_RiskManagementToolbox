@@ -60,7 +60,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
         population_size (int): The size of the population in each generation.
         patience (int): The number of generations to wait for improvement before stopping.
         worker_count (int): The number of parallel workers to use for simulations.
-        simulation_timeout (int): The maximum time (in seconds) allowed for each simulation.
         optimization_strategy (str): The direction of the optimization objective,
             either 'maximize' or 'minimize'.
         linear_inequalities (dict[str, list] | None): The linear inequality constraints

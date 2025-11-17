@@ -19,7 +19,7 @@ from .common import (
     SimulationResultType,
     SimulationStatus,
 )
-from .conn_utils.managed_subprocess import ManagedSubprocess
+from .conn_utils import ManagedSubprocess, get_timeout_value
 
 logger = get_logger("threading-worker", filename=__name__)
 
@@ -44,6 +44,7 @@ class SubprocessRunner:
         self._broadcast_results_parser = broadcast_results_parser
         self._repo_root_getter = repo_root_getter
         self._worker_id_getter = worker_id_getter
+        self._timeout_duration = get_timeout_value()
 
     def run(
         self, config: SerializedJson, stop: threading.Event | None = None
@@ -116,7 +117,6 @@ class SubprocessRunner:
 
             try:
                 with manager as process:
-                    timeout_duration = 15 * 60
                     try:
                         waited = 0.0
                         poll_step = 0.25
@@ -138,13 +138,13 @@ class SubprocessRunner:
                                 break
                             except subprocess.TimeoutExpired:
                                 waited += poll_step
-                                if waited >= timeout_duration:
+                                if waited >= self._timeout_duration:
                                     raise subprocess.TimeoutExpired(
-                                        process.args, timeout_duration
+                                        process.args, self._timeout_duration
                                     )
                     except subprocess.TimeoutExpired:
                         logger.warning(
-                            f"Subprocess timed out after {timeout_duration} seconds. Terminating."
+                            f"Subprocess timed out after {self._timeout_duration} seconds. Terminating."
                         )
                         if process.poll() is None:
                             process.terminate()

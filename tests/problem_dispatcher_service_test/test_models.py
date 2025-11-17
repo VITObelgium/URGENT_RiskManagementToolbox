@@ -173,9 +173,9 @@ def test_worker_count_within_limits():
 # Tests for valid custom values
 def test_optimization_parameters_with_valid_custom_values():
     params = OptimizationParameters(
-        max_generations=50, population_size=100, patience=15, worker_count=2
+        max_generations=50, population_size=100, patience=15, worker_count=1
     )
     assert params.max_generations == 50
     assert params.population_size == 100
     assert params.patience == 15
-    assert params.worker_count == 2
+    assert params.worker_count == 1

@@ -29,24 +29,6 @@ def cli():
         help="Path to the simulation model archive file.",
     )
     parser.add_argument(
-        "--population-size",
-        type=int,
-        default=10,
-        help="Population size. Default is 10",
-    )
-    parser.add_argument(
-        "--patience",
-        type=int,
-        default=10,
-        help="Iterations limit without better result. Default is 10.",
-    )
-    parser.add_argument(
-        "--max-generations",
-        type=int,
-        default=10,
-        help="Maximum number of generations. Default is 10.",
-    )
-    parser.add_argument(
         "--use-docker",
         action="store_true",
         help="Flag to indicate whether to use Docker for simulations, or use multi-threading-based local execution. Default is False (i.e., use multi-threading).",
@@ -81,9 +63,6 @@ def cli():
         run_risk_management(
             problem_definition=problem_definition,
             simulation_model_archive=args.model_file,
-            n_size=args.population_size,
-            patience=args.patience,
-            max_generations=args.max_generations,
         )
         logger.info("Risk management process completed successfully.")
     except Exception as e:

@@ -1,3 +1,6 @@
+import math
+
+import psutil
 import pytest
 from pydantic import ValidationError
 
@@ -98,3 +101,81 @@ def test_linear_inequalities_mixed_attributes():
 def test_linear_inequalities_non_numeric_b():
     with pytest.raises(TypeError, match="b\\[0\\] must be numeric"):
         OptimizationParameters(linear_inequalities={"A": [{"X.md": 1}], "b": ["a"]})
+
+
+# Tests for default values
+def test_optimization_parameters_defaults():
+    params = OptimizationParameters()
+    assert params.max_generations == 10
+    assert params.population_size == 10
+    assert params.patience == 10
+    assert params.worker_count == 4
+
+
+# Tests for positive integer validation
+def test_max_generations_must_be_positive():
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(max_generations=0)
+
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(max_generations=-5)
+
+
+def test_population_size_must_be_positive():
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(population_size=0)
+
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(population_size=-10)
+
+
+def test_patience_must_be_positive():
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(patience=0)
+
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(patience=-3)
+
+
+def test_worker_count_must_be_positive():
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(worker_count=0)
+
+    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+        OptimizationParameters(worker_count=-2)
+
+
+# Tests for worker_count physical core validation
+def test_worker_count_exceeds_physical_cores():
+    physical_cores = psutil.cpu_count(logical=False)
+    max_allowed = max(1, math.floor(physical_cores / 2))
+
+    with pytest.raises(
+        ValidationError,
+        match=f"worker_count {max_allowed + 1} exceeds available physical cores",
+    ):
+        OptimizationParameters(worker_count=max_allowed + 1)
+
+
+def test_worker_count_within_limits():
+    physical_cores = psutil.cpu_count(logical=False)
+    max_allowed = max(1, math.floor(physical_cores / 2))
+
+    # Should not raise an error
+    params = OptimizationParameters(worker_count=max_allowed)
+    assert params.worker_count == max_allowed
+
+    # Test with 1 worker (always valid)
+    params = OptimizationParameters(worker_count=1)
+    assert params.worker_count == 1
+
+
+# Tests for valid custom values
+def test_optimization_parameters_with_valid_custom_values():
+    params = OptimizationParameters(
+        max_generations=50, population_size=100, patience=15, worker_count=2
+    )
+    assert params.max_generations == 50
+    assert params.population_size == 100
+    assert params.patience == 15
+    assert params.worker_count == 2

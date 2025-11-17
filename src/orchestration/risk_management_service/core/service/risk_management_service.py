@@ -1,8 +1,5 @@
-import math
 import os
 from typing import Any
-
-import psutil
 
 from logger import get_csv_logger, get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
@@ -31,9 +28,6 @@ logger = get_logger(__name__)
 def run_risk_management(
     problem_definition: dict[str, Any],
     simulation_model_archive: bytes | str,
-    n_size: int = 10,
-    patience: int = 10,
-    max_generations: int = 10,
 ):
     """
     Main entry point for running risk management.
@@ -41,22 +35,17 @@ def run_risk_management(
     Args:
         problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
-        n_size (int, optional): Number of samples for the dispatcher. Defaults to 10.
-        patience: Patience limit for the optimization process.
-        max_generations: Maximum number of generations for the optimization process.
     """
     logger.info("Starting risk management process...")
     logger.debug(
-        "Input problem definition: %s, simulation_model_archive: %s, n_size: %d",
+        "Input problem definition: %s, simulation_model_archive: %s",
         problem_definition,
         type(simulation_model_archive),
-        n_size,
     )
 
-    physical_cores = psutil.cpu_count(logical=False)
-    worker_count = max(1, math.floor(physical_cores / 2))
     runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
 
+    worker_count = int(problem_definition["optimization_parameters"]["worker_count"])
     cm = (
         simulation_process_context_manager(worker_count=worker_count)
         if runner_mode == "thread"
@@ -67,6 +56,13 @@ def run_risk_management(
         try:
             SimulationService.transfer_simulation_model(
                 simulation_model_archive=simulation_model_archive
+            )
+            n_size = int(
+                problem_definition["optimization_parameters"]["population_size"]
+            )
+            patience = int(problem_definition["optimization_parameters"]["patience"])
+            max_generations = int(
+                problem_definition["optimization_parameters"]["max_generations"]
             )
 
             dispatcher = ProblemDispatcherService(

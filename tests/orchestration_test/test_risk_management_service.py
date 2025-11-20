@@ -81,7 +81,16 @@ def test_run_risk_management_happy_path(
         return_value={"x": 5},
     ):
         rms.run_risk_management(
-            {"foo": "bar"}, b"model", n_size=1, patience=1, max_generations=1
+            {
+                "foo": "bar",
+                "optimization_parameters": {
+                    "worker_count": 1,
+                    "population_size": 1,
+                    "patience": 1,
+                    "max_generations": 1,
+                },
+            },
+            b"model",
         )
     mock_sim_service.transfer_simulation_model.assert_called_once()
     mock_dispatcher_inst.get_boundaries.assert_called_once()

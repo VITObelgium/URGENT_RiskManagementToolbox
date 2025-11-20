@@ -110,14 +110,14 @@ plugins = [
 ]
 
 [tool.pytest.ini_options]
+retries = 2
+retry_delay = 0.5
 pythonpath = "src"
 log_file = "log/pytest_log.log"
 log_file_format = "%(process)d %(thread)d %(asctime)s %(module)s:%(lineno)d %(levelname)s - %(message)s"
 log_level = "INFO"
 
 [toolbox-config]
-retries = 2
-retry_delay = 0.5
 timeout_seconds = 900
 
 [build-system]

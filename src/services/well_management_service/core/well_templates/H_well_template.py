@@ -20,7 +20,7 @@ from services.well_management_service.core.well_templates.well_template_interfac
 
 class HWellTemplate(WellTemplateInterface):
     """
-    J-shaped well with 90 degrees angle and fixed DLS.
+    H-shaped well template.
     """
 
     FIXED_ANGLE = 90.0  # degrees

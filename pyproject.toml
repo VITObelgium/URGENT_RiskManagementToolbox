@@ -118,7 +118,7 @@ log_file_format = "%(process)d %(thread)d %(asctime)s %(module)s:%(lineno)d %(le
 log_level = "INFO"
 
 [toolbox-config]
-timeout_seconds = 900
+simulation_timeout_seconds = 900
 
 [build-system]
 requires = ["setuptools>=42"]

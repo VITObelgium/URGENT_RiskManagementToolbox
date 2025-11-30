@@ -46,17 +46,23 @@ def get_timeout_value() -> int:
     try:
         with pyproject_path.open("rb") as f:
             pyproject_data = tomli.load(f)
-        timeout_seconds = pyproject_data.get("toolbox-config", {}).get(
-            "timeout_seconds"
+        simulation_timeout_seconds = pyproject_data.get("toolbox-config", {}).get(
+            "simulation_timeout_seconds"
         )
-        logger.debug("timeout_seconds read from pyproject.toml: %s", timeout_seconds)
-        if not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
+        logger.debug(
+            "simulation_timeout_seconds read from pyproject.toml: %s",
+            simulation_timeout_seconds,
+        )
+        if (
+            not isinstance(simulation_timeout_seconds, int)
+            or simulation_timeout_seconds <= 0
+        ):
             raise ValueError(
-                "timeout_seconds must be a positive integer in pyproject.toml"
+                "simulation_timeout_seconds must be a positive integer in pyproject.toml"
             )
-        return timeout_seconds
+        return simulation_timeout_seconds
     except Exception:
         logger.warning(
-            "Error reading timeout_seconds from pyproject.toml; using default of 15 minutes"
+            "Error reading simulation_timeout_seconds from pyproject.toml; using default of 15 minutes"
         )
         return 15 * 60

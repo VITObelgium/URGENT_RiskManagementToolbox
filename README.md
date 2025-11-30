@@ -188,7 +188,13 @@ Connector allows exchange information (simulation configuration and simulation r
 6. Simulation model implementation is read to run an optimization process using RiskManagementToolbox.
 7. All simulation model files must be archived in `.zip` format. User should ensure that after unpacking all simulation model files are accessible in folder without any additional subfolders.
 
-### 4. Toolbox configuration file
+### 4. Global Configuration
+
+Global toolbox settings are defined in `pyproject.toml` under the `[toolbox-config]` table.
+
+- `simulation_timeout_seconds`: Maximum allowed time (in seconds) for a single simulation run before it is terminated.
+
+### 5. Toolbox configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s),
 initial state, and variable constraints.
 
@@ -292,13 +298,24 @@ Recently the following optimization problem(s) are supported:
 
 ```json
   "optimization_parameters": {
-    "optimization_strategy": "maximize"
+    "optimization_strategy": "maximize",
+    "max_generations": 50,
+    "population_size": 100,
+    "patience": 10,
+    "worker_count": 4
   }
 ```
 
 If the user does not define the optimization strategy, the default value is `maximize`.
 
-#### 4.1. Optimization parameters: linear inequalities
+The available parameters are:
+- `optimization_strategy`: `maximize` or `minimize` (default: `maximize`)
+- `max_generations`: Maximum number of generations for the optimization algorithm.
+- `population_size`: The size of the population in each generation.
+- `patience`: Number of generations with no improvement after which the optimization stops.
+- `worker_count`: Number of parallel workers to use for simulations.
+
+#### 5.1. Optimization parameters: linear inequalities
 
 You can optionally express additional relationships between variables using sparse linear (in)equalities.
 
@@ -307,6 +324,10 @@ These have the following norm form:
 ```json
 "optimization_parameters": {
   "optimization_strategy": "maximize",
+  "max_generations": 50,
+  "population_size": 100,
+  "patience": 10,
+  "worker_count": 4,
   "linear_inequalities": {
     "A": [ {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0} ],
     "b": [30.0, 3000.0],
@@ -377,6 +398,10 @@ During validation the upper bound is automatically reduced if it exceeds a physi
   "well_placement": [ /* ... wells definition ... */ ],
   "optimization_parameters": {
     "optimization_strategy": "minimize",
+    "max_generations": 50,
+    "population_size": 100,
+    "patience": 10,
+    "worker_count": 4,
     "linear_inequalities": {
       "A": [
         {"INJ.md": 1, "PRO.md": 1},   // corridor lower
@@ -391,7 +416,7 @@ During validation the upper bound is automatically reduced if it exceeds a physi
 }
 ```
 
-#### 4.2. Example of the configuration file
+#### 5.2. Example of the configuration file
 
 Well placement problem for two wells with maximization optimization strategy:
    ```json
@@ -450,6 +475,10 @@ Well placement problem for two wells with maximization optimization strategy:
      ],
       "optimization_parameters": {
         "optimization_strategy": "maximize",
+        "max_generations": 50,
+        "population_size": 100,
+        "patience": 10,
+        "worker_count": 4,
         "linear_inequalities": {
           "A": [ {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0} ],
           "b": [30.0, 3000.0],
@@ -461,7 +490,7 @@ Well placement problem for two wells with maximization optimization strategy:
 
 ---
 
-### 5. Running the toolbox
+### 6. Running the toolbox
 
 Required arguments:
 1. `--config-file` path to JSON config
@@ -474,13 +503,6 @@ pixi run src/main.py \
   --config-file <config_filepath> \
   --model-file <model_filepath> \
   [--use-docker]
-```
-
-Equivalent with `just`:
-
-```
-just run-thread <config_filepath> <model_filepath>
-just run-docker <config_filepath> <model_filepath>
 ```
 
 ## Contact

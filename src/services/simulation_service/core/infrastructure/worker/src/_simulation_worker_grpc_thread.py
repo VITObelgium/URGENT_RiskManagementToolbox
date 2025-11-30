@@ -1,6 +1,8 @@
 import asyncio
 import io
+import json
 import os
+import tempfile
 import threading
 import uuid
 from contextlib import contextmanager
@@ -37,10 +39,14 @@ JOB_RETRY_DELAY_SEC = 5
 
 
 def _run_simulator(
-    simulation_job, stop_flag: threading.Event | None = None
+    simulation_job,
+    stop_flag: threading.Event | None = None,
 ) -> Tuple[SimulationStatus, SimulationResults]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
-    return connector.run(simulation_job.simulation.input.wells, stop=stop_flag)
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tf:
+        json.dump(simulation_job.simulation.input.wells, tf)
+        tf_path = tf.name
+    return connector.run(tf_path, stop=stop_flag)
 
 
 async def request_simulation_job(stub, worker_id):
@@ -64,7 +70,7 @@ async def submit_simulation_job(stub, simulation_job, simulation_result, status)
 
 
 async def handle_simulation_job(
-    stub, simulation_job, worker_id, stop_flag: threading.Event | None = None
+    stub, simulation_job, worker_id: str, stop_flag: threading.Event | None = None
 ):
     """
     Handle a single simulation job with proper error handling and logging.

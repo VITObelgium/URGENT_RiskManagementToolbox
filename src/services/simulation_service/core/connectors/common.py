@@ -11,7 +11,7 @@ from typing import Sequence, TypeAlias, TypedDict
 WellName: TypeAlias = str
 GridCell: TypeAlias = tuple[int, int, int]
 Point: TypeAlias = tuple[float, float, float]
-SerializedJson: TypeAlias = str
+JsonPath: TypeAlias = str
 
 
 class PerforationSchema(TypedDict):
@@ -76,5 +76,5 @@ class ConnectorInterface(ABC):
     @staticmethod
     @abstractmethod
     def run(
-        config: SerializedJson, stop: threading.Event | None = None
+        config: JsonPath, stop: threading.Event | None = None
     ) -> tuple[SimulationStatus, SimulationResults]: ...

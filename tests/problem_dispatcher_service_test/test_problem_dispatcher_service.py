@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import (
     ControlVector,
+    ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
     SolutionCandidateServicesTasks,
@@ -46,7 +47,10 @@ def dict_problem_definition():
                 },
             },
         ],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "population_size": 10,
+        },
     }
 
 
@@ -54,9 +58,11 @@ def dict_problem_definition():
 def test_handle_initial_request_returns_expected_structure(
     dict_problem_definition, n_size
 ):
-    service = ProblemDispatcherService(
-        problem_definition=dict_problem_definition, n_size=n_size
+    dict_problem_definition["optimization_parameters"]["population_size"] = n_size
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
     )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
     response = service.process_iteration()
 
     assert isinstance(response, ProblemDispatcherServiceResponse)
@@ -78,7 +84,10 @@ def test_handle_initial_request_returns_expected_structure(
 def test_handle_iteration_loop_valid_input(
     dict_problem_definition, control_vector_items
 ):
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
     control_vectors = [ControlVector(items=items) for items in control_vector_items]
     response = service.process_iteration(control_vectors)
 
@@ -122,7 +131,10 @@ def test_handle_iteration_loop_valid_input(
 def test_control_vector_multiple_wells(
     dict_problem_definition, control_vector_items, expected_updates
 ):
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
     control_vector = ControlVector(items=control_vector_items)
     response = service.process_iteration([control_vector])
 
@@ -148,16 +160,21 @@ def test_control_vector_multiple_wells(
 
 def test_invalid_problem_definition_type_raises_validation_error():
     with pytest.raises(ValidationError):
-        ProblemDispatcherService(problem_definition={"well_placement": "not-a-list"})
+        ProblemDispatcherDefinition.model_validate(
+            {"well_placement": "not-a-list", "optimization_parameters": {}}
+        )
 
 
 def test_empty_problem_definition_raises_validation_error():
     with pytest.raises(ValidationError):
-        ProblemDispatcherService(problem_definition={})
+        ProblemDispatcherDefinition.model_validate({})
 
 
 def test_handle_iteration_loop_empty_vector_returns_candidates(dict_problem_definition):
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
     control_vectors = [ControlVector(items={})]
     response = service.process_iteration(control_vectors)
     assert isinstance(response, ProblemDispatcherServiceResponse)
@@ -165,7 +182,10 @@ def test_handle_iteration_loop_empty_vector_returns_candidates(dict_problem_defi
 
 
 def test_handle_iteration_loop_with_invalid_float_value(dict_problem_definition):
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
     control_vectors = [ControlVector(items={"well_placement#W1#md": 75.5})]
     response = service.process_iteration(control_vectors)
     assert isinstance(response, ProblemDispatcherServiceResponse)
@@ -178,8 +198,11 @@ def test_get_linear_inequalities(dict_problem_definition):
         "b": [100],
         "sense": ["<="],
     }
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
-    inequalities = service.get_linear_inequalities()
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
+    inequalities = service.linear_inequalities
     assert inequalities is not None
     assert "A" in inequalities
     assert "b" in inequalities
@@ -191,8 +214,11 @@ def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
         "b": [200],
         "sense": ["<="],
     }
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
-    inequalities = service.get_linear_inequalities()
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
+    inequalities = service.linear_inequalities
     assert inequalities is not None
 
 
@@ -222,6 +248,7 @@ def test_linear_inequalities_missing_well_constraint_raises():
         ],
         "optimization_parameters": {
             "optimization_strategy": "maximize",
+            "population_size": 10,
             "linear_inequalities": {
                 "A": [{"W1.md": 1, "W2.md": 1}],
                 "b": [100],
@@ -230,7 +257,7 @@ def test_linear_inequalities_missing_well_constraint_raises():
     }
 
     with pytest.raises(ValidationError):
-        ProblemDispatcherService(problem_definition=pd)
+        ProblemDispatcherDefinition.model_validate(pd)
 
 
 def test_linear_inequalities_missing_variable_in_constraints_raises():
@@ -250,12 +277,13 @@ def test_linear_inequalities_missing_variable_in_constraints_raises():
         ],
         "optimization_parameters": {
             "optimization_strategy": "maximize",
+            "population_size": 10,
             "linear_inequalities": {"A": [{"W1.md": 1}], "b": [100]},
         },
     }
 
     with pytest.raises(ValidationError):
-        ProblemDispatcherService(problem_definition=pd)
+        ProblemDispatcherDefinition.model_validate(pd)
 
 
 def test_process_iteration_exception_handling(dict_problem_definition, monkeypatch):
@@ -265,7 +293,10 @@ def test_process_iteration_exception_handling(dict_problem_definition, monkeypat
     monkeypatch.setattr(
         "services.problem_dispatcher_service.core.builder.TaskBuilder.build", mock_build
     )
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
     with pytest.raises(ValueError, match="Test Exception"):
         service.process_iteration()
 
@@ -273,14 +304,17 @@ def test_process_iteration_exception_handling(dict_problem_definition, monkeypat
 def test_initialization_failure(dict_problem_definition):
     dict_problem_definition["well_placement"][0]["optimization_constraints"] = "invalid"
     with pytest.raises(ValidationError):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_problem_dispatcher_service_initializes_correct_population(
     dict_problem_definition,
 ):
-    service = ProblemDispatcherService(problem_definition=dict_problem_definition)
-    assert service._constraints
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        dict_problem_definition
+    )
+    service = ProblemDispatcherService(problem_definition=problem_definition)
+    assert service._boundaries
     response = service.process_iteration()
     assert len(response.solution_candidates) > 0
 
@@ -340,6 +374,7 @@ def test_linear_inequalities_unknown_well_raises():
         ],
         "optimization_parameters": {
             "optimization_strategy": "maximize",
+            "population_size": 10,
             "linear_inequalities": {
                 "A": [{"Brent.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0}],
                 "b": [2100.0, 5000.0],
@@ -348,7 +383,7 @@ def test_linear_inequalities_unknown_well_raises():
         },
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=pd)
+        ProblemDispatcherDefinition.model_validate(pd)
 
 
 def test_linear_inequalities_A_b_length_mismatch_raises(dict_problem_definition):
@@ -357,7 +392,7 @@ def test_linear_inequalities_A_b_length_mismatch_raises(dict_problem_definition)
         "b": [100],
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_linear_inequalities_invalid_sense_length_raises(dict_problem_definition):
@@ -367,7 +402,7 @@ def test_linear_inequalities_invalid_sense_length_raises(dict_problem_definition
         "sense": ["<=", ">="],
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition):
@@ -376,7 +411,7 @@ def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition
         "b": [100],
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_linear_inequalities_inconsistent_attribute_suffix_raises(
@@ -387,7 +422,7 @@ def test_linear_inequalities_inconsistent_attribute_suffix_raises(
         "b": [100],
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definition):
@@ -397,7 +432,7 @@ def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definit
         "b": [10],
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_duplicate_well_names_raises():
@@ -424,10 +459,13 @@ def test_duplicate_well_names_raises():
                 "optimization_constraints": {"md": {"lb": 0, "ub": 300}},
             },
         ],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "population_size": 10,
+        },
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=pd)
+        ProblemDispatcherDefinition.model_validate(pd)
 
 
 def test_variable_bounds_lb_gt_ub_raises(dict_problem_definition):
@@ -436,7 +474,7 @@ def test_variable_bounds_lb_gt_ub_raises(dict_problem_definition):
         "ub": 50,
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_linear_inequalities_non_numeric_values_raises(dict_problem_definition):
@@ -445,7 +483,7 @@ def test_linear_inequalities_non_numeric_values_raises(dict_problem_definition):
         "b": ["hundred"],
     }
     with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
 def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition):
@@ -455,4 +493,4 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
         "sense": ["!="],
     }
     with pytest.raises(ValidationError):
-        ProblemDispatcherService(problem_definition=dict_problem_definition)
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)

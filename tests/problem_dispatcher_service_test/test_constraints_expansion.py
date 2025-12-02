@@ -3,6 +3,7 @@ import random
 import pytest
 
 from services.problem_dispatcher_service import ProblemDispatcherService
+from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 
 
 @pytest.fixture
@@ -44,6 +45,7 @@ def md_problem_definition():
         ],
         "optimization_parameters": {
             "optimization_strategy": "minimize",
+            "population_size": 10,
             "linear_inequalities": {
                 "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
                 "b": [5000.0],
@@ -54,14 +56,22 @@ def md_problem_definition():
 
 
 def test_boundaries_include_md(md_problem_definition):
-    svc = ProblemDispatcherService(problem_definition=md_problem_definition, n_size=1)
-    boundaries = svc.get_boundaries()
+    md_problem_definition["optimization_parameters"]["population_size"] = 1
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        md_problem_definition
+    )
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
+    boundaries = svc.boundaries
     assert boundaries["well_placement#INJ#md"] == (2000.0, 2700.0)
     assert boundaries["well_placement#PRO#md"] == (2000.0, 2700.0)
 
 
 def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
-    svc = ProblemDispatcherService(problem_definition=md_problem_definition, n_size=2)
+    md_problem_definition["optimization_parameters"]["population_size"] = 2
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        md_problem_definition
+    )
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
 
     # Monkeypatch random.uniform to midpoint
     def mid(a, b):
@@ -84,11 +94,15 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
 
     from services.solution_updater_service.core.engines.pso import PSOEngine
 
-    svc = ProblemDispatcherService(problem_definition=md_problem_definition, n_size=1)
-    boundaries = svc.get_boundaries()
+    md_problem_definition["optimization_parameters"]["population_size"] = 1
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        md_problem_definition
+    )
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
+    boundaries = svc.boundaries
     lb, ub = boundaries["well_placement#INJ#md"]
 
-    engine = PSOEngine(svc.get_optimization_strategy(), seed=42)
+    engine = PSOEngine(svc.optimization_strategy, seed=42)
 
     parameters = np.array([[2500.0], [2400.0], [2600.0]], dtype=float)
 
@@ -112,7 +126,11 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
 
 def test_initial_generation_respects_linear_inequalities(md_problem_definition):
     """First population should satisfy INJ.md + PRO.md <= 5000 given md bounds [2000, 2700]."""
-    svc = ProblemDispatcherService(problem_definition=md_problem_definition, n_size=50)
+    md_problem_definition["optimization_parameters"]["population_size"] = 50
+    problem_definition = ProblemDispatcherDefinition.model_validate(
+        md_problem_definition
+    )
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
     resp = svc.process_iteration()
     assert len(resp.solution_candidates) == 50
 

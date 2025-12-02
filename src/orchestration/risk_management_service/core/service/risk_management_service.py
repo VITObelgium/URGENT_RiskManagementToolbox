@@ -1,5 +1,4 @@
 import os
-from typing import Any
 
 from logger import get_csv_logger, get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
@@ -7,6 +6,7 @@ from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
 )
+from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 from services.problem_dispatcher_service.core.utils.utils import (
     parse_flat_dict_to_nested,
 )
@@ -26,14 +26,14 @@ logger = get_logger(__name__)
 
 
 def run_risk_management(
-    problem_definition: dict[str, Any],
+    problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
 ):
     """
     Main entry point for running risk management.
 
     Args:
-        problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
+        problem_definition (ProblemDispatcherDefinition): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
     """
     logger.info("Starting risk management process...")
@@ -45,7 +45,7 @@ def run_risk_management(
 
     runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
 
-    worker_count = int(problem_definition["optimization_parameters"]["worker_count"])
+    worker_count = problem_definition.optimization_parameters.worker_count
     cm = (
         simulation_process_context_manager(worker_count=worker_count)
         if runner_mode == "thread"
@@ -57,17 +57,10 @@ def run_risk_management(
             SimulationService.transfer_simulation_model(
                 simulation_model_archive=simulation_model_archive
             )
-            n_size = int(
-                problem_definition["optimization_parameters"]["population_size"]
-            )
-            patience = int(problem_definition["optimization_parameters"]["patience"])
-            max_generations = int(
-                problem_definition["optimization_parameters"]["max_generations"]
-            )
+            patience = problem_definition.optimization_parameters.patience
+            max_generations = problem_definition.optimization_parameters.max_generations
 
-            dispatcher = ProblemDispatcherService(
-                problem_definition=problem_definition, n_size=n_size
-            )
+            dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
 
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,

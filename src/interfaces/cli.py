@@ -34,10 +34,8 @@ def cli():
         help="Flag to indicate whether to use Docker for simulations, or use multi-threading-based local execution. Default is False (i.e., use multi-threading).",
     )
 
-    # Parse the arguments
     args = parser.parse_args()
 
-    # Apply the logging level
     configure_logger()
     logger = get_logger(__name__)
     logger.info("Risk management toolbox started from CLI.")
@@ -52,8 +50,9 @@ def cli():
     # Load the problem_definition from the JSON file
     try:
         with open(args.config_file, "r") as file:
-            problem_definition = json.load(file)
-            ProblemDispatcherDefinition.model_validate(problem_definition)
+            problem_definition = ProblemDispatcherDefinition.model_validate(
+                json.load(file)
+            )
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
         exit(1)

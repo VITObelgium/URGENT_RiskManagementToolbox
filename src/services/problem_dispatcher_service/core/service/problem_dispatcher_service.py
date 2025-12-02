@@ -27,20 +27,21 @@ PROBLEM_TYPE_TO_SERVICE_TYPE: dict[str, ServiceType] = {
 
 
 class ProblemDispatcherService:
-    def __init__(self, problem_definition: dict[str, Any], n_size: int = 10):
+    def __init__(self, problem_definition: ProblemDispatcherDefinition):
         """
         Initialize the ProblemDispatcherService.
 
         Args:
-            problem_definition (dict[str, Any]): The problem definition to process.
-            n_size (int, optional): Number of initial candidates. Defaults to 10.
+            problem_definition (ProblemDispatcherDefinition): The problem definition to process.
         """
         self.logger = get_logger(__name__)
-        self.logger.info("Initializing ProblemDispatcherService with n_size=%d", n_size)
+        self.logger.info("Initializing ProblemDispatcherService")
 
         try:
-            self._problem_definition = ProblemDispatcherDefinition(**problem_definition)
-            self._n_size = n_size
+            self._problem_definition = problem_definition
+            self._n_size = (
+                self._problem_definition.optimization_parameters.population_size
+            )
             self._handlers = PROBLEM_TYPE_HANDLERS
             self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()

@@ -1,6 +1,8 @@
 import asyncio
 import io
+import json
 import os
+import tempfile
 import uuid
 from zipfile import BadZipFile, ZipFile
 
@@ -27,7 +29,10 @@ channel_options = [
 
 def _run_simulator(simulation_job) -> tuple[SimulationStatus, SimulationResults]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
-    return connector.run(simulation_job.simulation.input.wells)
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tf:
+        json.dump(simulation_job.simulation.input.wells, tf)
+        tf_path = tf.name
+    return connector.run(tf_path)
 
 
 async def request_simulation_job(stub, worker_id):

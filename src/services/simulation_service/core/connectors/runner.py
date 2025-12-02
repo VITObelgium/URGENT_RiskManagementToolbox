@@ -14,7 +14,7 @@ from typing import Callable, Protocol, Tuple
 from logger import get_logger, stream_reader
 
 from .common import (
-    SerializedJson,
+    JsonPath,
     SimulationResults,
     SimulationResultType,
     SimulationStatus,
@@ -26,7 +26,7 @@ logger = get_logger("threading-worker", filename=__name__)
 
 class SimulationRunner(Protocol):
     def run(
-        self, config: SerializedJson, stop: threading.Event | None = None
+        self, config: JsonPath, stop: threading.Event | None = None
     ) -> Tuple[SimulationStatus, SimulationResults]: ...
 
 
@@ -47,7 +47,7 @@ class SubprocessRunner:
         self._timeout_duration = get_timeout_value()
 
     def run(
-        self, config: SerializedJson, stop: threading.Event | None = None
+        self, config: JsonPath, stop: threading.Event | None = None
     ) -> Tuple[SimulationStatus, SimulationResults]:
         managed_factory = self._managed_subprocess_factory
         if managed_factory is None:
@@ -222,7 +222,7 @@ class ThreadRunner:
         self._subprocess_runner = subprocess_runner or SubprocessRunner()
 
     def run(
-        self, config: SerializedJson, stop: threading.Event | None = None
+        self, config: JsonPath, stop: threading.Event | None = None
     ) -> Tuple[SimulationStatus, SimulationResults]:
         os.environ.setdefault("OPEN_DARTS_THREAD_MODE", "1")
         return self._subprocess_runner.run(config, stop)

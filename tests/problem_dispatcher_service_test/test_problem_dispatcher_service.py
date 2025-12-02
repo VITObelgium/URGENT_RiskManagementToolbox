@@ -202,7 +202,7 @@ def test_get_linear_inequalities(dict_problem_definition):
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    inequalities = service.get_linear_inequalities()
+    inequalities = service.linear_inequalities
     assert inequalities is not None
     assert "A" in inequalities
     assert "b" in inequalities
@@ -218,7 +218,7 @@ def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    inequalities = service.get_linear_inequalities()
+    inequalities = service.linear_inequalities
     assert inequalities is not None
 
 
@@ -314,7 +314,7 @@ def test_problem_dispatcher_service_initializes_correct_population(
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    assert service._constraints
+    assert service._boundaries
     response = service.process_iteration()
     assert len(response.solution_candidates) > 0
 

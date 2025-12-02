@@ -45,7 +45,7 @@ class ProblemDispatcherService:
             self._handlers = PROBLEM_TYPE_HANDLERS
             self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()
-            self._constraints = self._build_constraints()
+            self._boundaries = self._build_boundaries()
             opt_params = self._problem_definition.optimization_parameters
             self._linear_inequalities: dict[str, list] | None = getattr(
                 opt_params, "linear_inequalities", None
@@ -59,6 +59,26 @@ class ProblemDispatcherService:
                 "Failed to initialize ProblemDispatcherService: %s", str(e)
             )
             raise
+
+    @property
+    def optimization_strategy(self) -> OptimizationStrategy:
+        return self._problem_definition.optimization_parameters.optimization_strategy
+
+    @property
+    def max_generation(self) -> int:
+        return self._problem_definition.optimization_parameters.max_generations
+
+    @property
+    def patience(self) -> int:
+        return self._problem_definition.optimization_parameters.patience
+
+    @property
+    def boundaries(self) -> dict[str, tuple[float, float]]:
+        return self._boundaries
+
+    @property
+    def linear_inequalities(self) -> dict[str, list] | None:
+        return self._linear_inequalities
 
     def process_iteration(
         self, next_iter_solutions: list[ControlVector] | None = None
@@ -81,7 +101,7 @@ class ProblemDispatcherService:
         try:
             if next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
-                    self._constraints,
+                    self._boundaries,
                     self._n_size,
                     random.uniform,
                     self._linear_inequalities,
@@ -101,43 +121,6 @@ class ProblemDispatcherService:
             )
         except Exception as e:
             self.logger.error("Error during process_iteration: %s", str(e))
-            raise
-
-    def get_boundaries(self) -> dict[str, tuple[float, float]]:
-        """
-        Get the computed boundaries of the problem.
-
-        Returns:
-            dict[str, tuple[float, float]]: The constraint boundaries.
-        """
-        self.logger.info("Fetching the problem boundaries.")
-        try:
-            self.logger.debug("Boundaries: %s", self._constraints)
-            return self._constraints
-        except Exception as e:
-            self.logger.error("Error fetching boundaries: %s", str(e))
-            raise
-
-    def get_linear_inequalities(self) -> dict[str, list] | None:
-        """Return sparse linear inequalities definition if provided."""
-        return self._linear_inequalities
-
-    def get_optimization_strategy(self) -> OptimizationStrategy:
-        """
-        Get the optimization strategy for the problem.
-
-        Returns:
-            OptimizationStrategy: The optimization strategy, either 'maximize' or 'minimize'.
-        """
-        self.logger.info("Fetching the optimization strategy.")
-        try:
-            strategy = (
-                self._problem_definition.optimization_parameters.optimization_strategy
-            )
-            self.logger.debug("Optimization strategy: %s", strategy)
-            return strategy
-        except Exception as e:
-            self.logger.error("Error fetching optimization strategy: %s", str(e))
             raise
 
     def _process_problem_items(
@@ -195,15 +178,15 @@ class ProblemDispatcherService:
             merge_results=False,
         )
 
-    def _build_constraints(self) -> dict[str, tuple[float, float]]:
+    def _build_boundaries(self) -> dict[str, tuple[float, float]]:
         """
         Build problem constraints.
 
         Returns:
-            dict[str, tuple[float, float]]: Constraints of the problem.
+            dict[str, tuple[float, float]]: Boundaries of the problem.
         """
         return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_constraints(items),
-            log_message="Building constraints",
+            process_func=lambda handler, items: handler.build_boundaries(items),
+            log_message="Building boundaries",
             merge_results=True,
         )

@@ -57,16 +57,14 @@ def run_risk_management(
             SimulationService.transfer_simulation_model(
                 simulation_model_archive=simulation_model_archive
             )
-            patience = problem_definition.optimization_parameters.patience
-            max_generations = problem_definition.optimization_parameters.max_generations
 
             dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
 
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,
-                max_generations=max_generations,
-                patience=patience,
-                optimization_strategy=dispatcher.get_optimization_strategy(),
+                max_generations=dispatcher.max_generation,
+                patience=dispatcher.patience,
+                optimization_strategy=dispatcher.optimization_strategy,
             )
 
             # Initialize metrics logger
@@ -83,7 +81,7 @@ def run_risk_management(
             )
 
             logger.info("Fetching boundaries from ProblemDispatcherService.")
-            boundaries = dispatcher.get_boundaries()
+            boundaries = dispatcher.boundaries
             logger.debug("Boundaries retrieved: %s", boundaries)
 
             # Initialize solutions

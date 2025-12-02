@@ -43,7 +43,6 @@ def test_run_risk_management_happy_path(
     )
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
-    mock_dispatcher_inst.get_boundaries.return_value = {"b": 3}
     mock_dispatcher_inst.process_iteration.side_effect = [
         MagicMock(
             solution_candidates=[
@@ -91,7 +90,6 @@ def test_run_risk_management_happy_path(
             b"model",
         )
     mock_sim_service.transfer_simulation_model.assert_called_once()
-    mock_dispatcher_inst.get_boundaries.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1
     mock_su_inst.process_request.assert_called()
     mock_csv_logger.return_value.info.assert_called()

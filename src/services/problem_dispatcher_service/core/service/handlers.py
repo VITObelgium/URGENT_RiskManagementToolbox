@@ -25,7 +25,7 @@ class ProblemTypeHandler(Protocol):
 
         ...
 
-    def build_constraints(
+    def build_boundaries(
         self, items: list[Any], *args: Any, **kwargs: Any
     ) -> dict[str, tuple[float, float]]:
         """
@@ -62,7 +62,7 @@ class WellPlacementHandler(ProblemTypeHandler):
     def build_initial_state(self, items: list[WellPlacementItem]) -> dict[str, Any]:
         return {item.well_name: item.initial_state.model_dump() for item in items}
 
-    def build_constraints(
+    def build_boundaries(
         self,
         items: list[WellPlacementItem],
         separator: str = "#",

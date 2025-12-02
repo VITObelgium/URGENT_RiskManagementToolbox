@@ -61,7 +61,7 @@ def test_boundaries_include_md(md_problem_definition):
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
-    boundaries = svc.get_boundaries()
+    boundaries = svc.boundaries
     assert boundaries["well_placement#INJ#md"] == (2000.0, 2700.0)
     assert boundaries["well_placement#PRO#md"] == (2000.0, 2700.0)
 
@@ -99,10 +99,10 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
-    boundaries = svc.get_boundaries()
+    boundaries = svc.boundaries
     lb, ub = boundaries["well_placement#INJ#md"]
 
-    engine = PSOEngine(svc.get_optimization_strategy(), seed=42)
+    engine = PSOEngine(svc.optimization_strategy, seed=42)
 
     parameters = np.array([[2500.0], [2400.0], [2600.0]], dtype=float)
 

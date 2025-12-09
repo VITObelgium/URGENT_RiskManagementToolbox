@@ -459,3 +459,6 @@ orchestration_files/
 .pixi/*
 !.pixi/config.toml
 pixi.lock
+
+# devcontainer dev files
+.vscode/

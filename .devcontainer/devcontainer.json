@@ -16,11 +16,12 @@
                 "charliermarsh.ruff"
             ],
             "settings": {
-                "python.terminal.activateEnvironment": true,
                 "terminal.integrated.defaultProfile.linux": "bash"
             }
         }
     },
     "mounts": ["source=${localWorkspaceFolderBasename}-pixi,target=${containerWorkspaceFolder}/.pixi,type=volume"],
-    "postCreateCommand": "sudo chown -R vscode .pixi && pixi install"
+    "postCreateCommand": "sudo chown -R vscode .pixi",
+    "postCreateCommand": "pixi install -e dev",
+    "postCreateCommand": "pixi run -e dev pre-commit install"
 }

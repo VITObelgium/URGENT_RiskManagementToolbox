@@ -88,16 +88,6 @@ def test_linear_inequalities_variable_no_dot():
         OptimizationParameters(linear_inequalities={"A": [{"INJ": 1.0}], "b": [1]})
 
 
-def test_linear_inequalities_mixed_attributes():
-    with pytest.raises(
-        ValueError,
-        match="All variables in linear_inequalities must refer to the same attribute",
-    ):
-        OptimizationParameters(
-            linear_inequalities={"A": [{"INJ.md": 1, "PRO.x": 1}], "b": [1]}
-        )
-
-
 def test_linear_inequalities_non_numeric_b():
     with pytest.raises(TypeError, match="b\\[0\\] must be numeric"):
         OptimizationParameters(linear_inequalities={"A": [{"X.md": 1}], "b": ["a"]})

@@ -137,8 +137,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
             # As default when not specified, we set all senses to "<="
             self.linear_inequalities["sense"] = ["<="] * len(A)
 
-        # Collect attribute suffixes to ensure same attribute referenced (e.g., all '.md')
-        attr_suffix: str | None = None
         for row_idx, row in enumerate(A):
             if not isinstance(row, dict):
                 raise TypeError(
@@ -154,14 +152,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
                 if "." not in var:
                     raise ValueError(
                         f"Variable '{var}' in linear inequalities must contain a '.' separating well and attribute (e.g., 'INJ.md')"
-                    )
-                suffix = var.split(".", 1)[1]
-                if attr_suffix is None:
-                    attr_suffix = suffix
-                elif suffix != attr_suffix:
-                    raise ValueError(
-                        "All variables in linear_inequalities must refer to the same attribute (e.g., all '.md'). "
-                        f"Found both '{attr_suffix}' and '{suffix}'."
                     )
             if not isinstance(b[row_idx], (int, float)):
                 raise TypeError(f"b[{row_idx}] must be numeric")

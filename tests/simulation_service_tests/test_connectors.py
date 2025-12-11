@@ -1,8 +1,9 @@
 import io
 import subprocess
 import sys
+from collections.abc import Generator
 from subprocess import Popen as OriginalPopen
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
@@ -322,10 +323,11 @@ def test_decorator_with_invalid_json(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main.py", invalid_json])
 
     # Mock sys.exit to prevent the test from stopping
-    with patch("sys.exit") as mock_exit:
+    with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
         decorated_func = open_darts_input_configuration_injector(mock_func)
-        decorated_func()
+        with pytest.raises(SystemExit):
+            decorated_func()
         mock_exit.assert_called_once_with(1)
         mock_func.assert_not_called()
 
@@ -334,10 +336,11 @@ def test_decorator_with_non_dict_json(monkeypatch):
     # Should exit if JSON is not a dict
     monkeypatch.setattr(sys, "argv", ["main.py", "123"])
 
-    with patch("sys.exit") as mock_exit:
+    with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
         decorated_func = open_darts_input_configuration_injector(mock_func)
-        decorated_func()
+        with pytest.raises(SystemExit):
+            decorated_func()
         mock_exit.assert_called_once_with(1)
         mock_func.assert_not_called()
 
@@ -346,10 +349,11 @@ def test_decorator_with_missing_argument(monkeypatch):
     # Mock sys.argv to simulate no arguments provided
     monkeypatch.setattr(sys, "argv", ["main.py"])
 
-    with patch("sys.exit") as mock_exit:
+    with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
         decorated_func = open_darts_input_configuration_injector(mock_func)
-        decorated_func()
+        with pytest.raises(SystemExit):
+            decorated_func()
         mock_exit.assert_called_once_with(1)
         mock_func.assert_not_called()
 
@@ -366,10 +370,11 @@ def test_decorator_with_dict_but_not_str_keys(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main.py", '{"1": "a"}'])
 
     with patch("json.loads", fake_loads):
-        with patch("sys.exit") as mock_exit:
+        with patch("sys.exit", side_effect=SystemExit) as mock_exit:
             mock_func = Mock()
             decorated_func = open_darts_input_configuration_injector(mock_func)
-            decorated_func()
+            with pytest.raises(SystemExit):
+                decorated_func()
             mock_exit.assert_called_once_with(1)
             mock_func.assert_not_called()
 

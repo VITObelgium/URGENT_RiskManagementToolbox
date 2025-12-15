@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import List
 
 from logger.utils import get_file_log_mode
 
@@ -9,7 +8,7 @@ def get_csv_logger(
     filename: str,
     logger_name: str = "csv",
     level: int = logging.INFO,
-    columns: List[str] | None = None,
+    columns: list[str] | None = None,
 ) -> logging.Logger:
     """
     Get a logger for CSV data output.
@@ -18,7 +17,7 @@ def get_csv_logger(
         filename (str): Name of the CSV file (without path)
         logger_name (str, optional): Name of the logger. Defaults to "csv"
         level (int, optional): Logging level. Defaults to logging.INFO
-        columns (Optional[List[str]], optional): List of column names. Defaults to None
+        columns (list[str] | None = None, optional): List of column names. Defaults to None
 
     Returns:
         logging.Logger: Configured logger instance

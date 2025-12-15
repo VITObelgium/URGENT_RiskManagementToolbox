@@ -9,7 +9,7 @@ import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable, Protocol, Tuple
+from typing import Callable, Protocol
 
 from logger import get_logger, stream_reader
 
@@ -27,7 +27,7 @@ logger = get_logger("threading-worker", filename=__name__)
 class SimulationRunner(Protocol):
     def run(
         self, config: JsonPath, stop: threading.Event | None = None
-    ) -> Tuple[SimulationStatus, SimulationResults]: ...
+    ) -> tuple[SimulationStatus, SimulationResults]: ...
 
 
 class SubprocessRunner:
@@ -48,7 +48,7 @@ class SubprocessRunner:
 
     def run(
         self, config: JsonPath, stop: threading.Event | None = None
-    ) -> Tuple[SimulationStatus, SimulationResults]:
+    ) -> tuple[SimulationStatus, SimulationResults]:
         managed_factory = self._managed_subprocess_factory
         if managed_factory is None:
             managed_factory = self._default_managed_subprocess_factory
@@ -186,9 +186,7 @@ class SubprocessRunner:
                                 and "Unable to synchronously create file" in stderr_tail
                             ):
                                 logger.error(
-                                    "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE, "
-                                    "but if the error persists, ensure each worker runs in an isolated directory and no other process "
-                                    "holds the same HDF5 file open."
+                                    "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE,\nbut if the error persists, ensure each worker runs in an isolated directory and no other process\nholds the same HDF5 file open."
                                 )
                         return SimulationStatus.FAILED, default_failed_results
 
@@ -223,6 +221,6 @@ class ThreadRunner:
 
     def run(
         self, config: JsonPath, stop: threading.Event | None = None
-    ) -> Tuple[SimulationStatus, SimulationResults]:
+    ) -> tuple[SimulationStatus, SimulationResults]:
         os.environ.setdefault("OPEN_DARTS_THREAD_MODE", "1")
         return self._subprocess_runner.run(config, stop)

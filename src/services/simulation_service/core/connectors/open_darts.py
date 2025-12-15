@@ -9,9 +9,10 @@ import re
 import sys
 import threading
 from collections import defaultdict
+from collections.abc import Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Protocol, Sequence, TypedDict
+from typing import Any, Callable, Protocol, TypedDict
 
 import numpy as np
 import numpy.typing as npt
@@ -103,7 +104,6 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
         if len(sys.argv) < 2:
             logger.info("Usage: python main.py <path-to-configuration.json>")
             sys.exit(1)
-            return
         json_config_str = sys.argv[1]
         if os.path.isfile(json_config_str):
             try:
@@ -114,7 +114,6 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
             except Exception:
                 logger.error("Failed to read configuration file.")
                 sys.exit(1)
-                return
         else:
             # For legacy reason, allowing passing json string directly
             try:
@@ -122,7 +121,6 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
             except json.JSONDecodeError:
                 logger.error("Invalid JSON input.")
                 sys.exit(1)
-                return
 
             except Exception:
                 pass
@@ -135,7 +133,6 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
             if not all(isinstance(k, str) for k in config.keys()):
                 logger.error(f"Invalid JSON input:{config}")
                 sys.exit(1)
-                return
 
         func(config, *args, **kwargs)
 

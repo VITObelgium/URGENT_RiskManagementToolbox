@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from logger.orchestration_logger import _start_external_log_terminal
-from logger.utils import get_external_console_logging, get_log_config
+from logger.utils import get_external_console_logging, get_file_log_mode, get_log_config
 
 TAIL_LINES = 0
 
@@ -69,8 +69,8 @@ def _add_unique_file_handler(
                 existing = None
             if existing == file_path:
                 return
-
-    handler = logging.FileHandler(file_path, mode="a", encoding="utf-8")
+    logger_mode = get_file_log_mode()
+    handler = logging.FileHandler(file_path, mode=logger_mode, encoding="utf-8")
     handler.setLevel(level)
     handler.setFormatter(_formatter())
     if record_filter is not None:

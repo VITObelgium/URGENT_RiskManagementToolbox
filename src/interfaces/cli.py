@@ -3,6 +3,7 @@ import json
 import os
 
 from logger import configure_logger, get_logger
+from logger.utils import zip_results
 from orchestration.risk_management_service import run_risk_management
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 
@@ -55,6 +56,12 @@ def cli():
             )
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
+        # Always attempt to zip (even on failure)
+        try:
+            zip_path = zip_results()
+            logger.info("Created results archive: %s", zip_path)
+        except Exception as ze:
+            logger.error("Failed to create results archive: %s", ze)
         exit(1)
 
     # Invoke run_risk_management with the required arguments
@@ -66,4 +73,9 @@ def cli():
         logger.info("Risk management process completed successfully.")
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        exit(1)
+    finally:
+        try:
+            zip_path = zip_results()
+            logger.info("Created results archive: %s", zip_path)
+        except Exception as ze:
+            logger.error("Failed to create results archive: %s", ze)

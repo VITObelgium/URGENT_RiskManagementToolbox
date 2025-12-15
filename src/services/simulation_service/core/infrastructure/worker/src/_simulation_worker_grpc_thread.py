@@ -7,7 +7,6 @@ import threading
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Tuple
 from zipfile import BadZipFile, ZipFile
 
 import grpc.aio
@@ -41,7 +40,7 @@ JOB_RETRY_DELAY_SEC = 5
 def _run_simulator(
     simulation_job,
     stop_flag: threading.Event | None = None,
-) -> Tuple[SimulationStatus, SimulationResults]:
+) -> tuple[SimulationStatus, SimulationResults]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tf:
         json.dump(simulation_job.simulation.input.wells, tf)

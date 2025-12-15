@@ -11,7 +11,7 @@ from logging import Logger
 from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import Queue
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 _queue: Queue | None = None
 _listener: QueueListener | None = None
@@ -93,13 +93,13 @@ def log_to_datetime_log_file() -> bool:
     return datetime_log_file
 
 
-def get_logging_output() -> Dict[str, Any]:
+def get_logging_output() -> dict[str, Any]:
     """
     Get the logging output configuration from pyproject.toml.
 
     Returns
     -------
-    Dict[str, Any]
+    dict[str, Any]
         The logging output configuration.
 
     """
@@ -134,7 +134,7 @@ def get_external_console_logging() -> bool:
         return False
 
 
-def get_services(logger: Logger) -> List[str]:
+def get_services(logger: Logger) -> list[str]:
     """Return a list of all docker compose service names, including numbered workers."""
     try:
         compose_services = subprocess.check_output(
@@ -147,7 +147,7 @@ def get_services(logger: Logger) -> List[str]:
         ) from e
 
 
-def get_services_id() -> List[str]:
+def get_services_id() -> list[str]:
     try:
         container_ids = subprocess.check_output(
             ["docker", "ps", "-q"], text=True
@@ -301,13 +301,13 @@ def _stop_listener() -> None:
         _queue = None
 
 
-def get_log_config() -> Dict[str, Any]:
+def get_log_config() -> dict[str, Any]:
     """
     Load the logging.config dictionary from pyproject.toml.
 
     Returns
     -------
-    Dict[str, Any]
+    dict[str, Any]
         The logging configuration compatible with logging.config.dictConfig.
     """
     pyproject_path = find_pyproject_toml()

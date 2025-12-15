@@ -1,6 +1,8 @@
 import logging
 import os
 
+from logger.utils import get_file_log_mode
+
 
 def get_csv_logger(
     filename: str,
@@ -29,6 +31,7 @@ def get_csv_logger(
     # Get the log directory path (same as in u_logger.py)
     log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../log")
     output_path = os.path.join(log_dir, filename)
+    logger_mode = get_file_log_mode()
 
     # Create logger
     logger = logging.getLogger(logger_name)
@@ -39,7 +42,7 @@ def get_csv_logger(
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Create file handler
-    file_handler = logging.FileHandler(output_path, mode="a")
+    file_handler = logging.FileHandler(output_path, mode=logger_mode)
     file_handler.setLevel(level)
 
     # Create formatter (simple CSV format)

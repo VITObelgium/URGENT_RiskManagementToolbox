@@ -4,8 +4,10 @@ import atexit
 import copy
 import logging
 import os
+import shutil
 import subprocess
 import sys
+import zipfile
 from datetime import datetime
 from logging import Logger
 from logging.handlers import QueueHandler, QueueListener
@@ -230,7 +232,8 @@ def _start_queue_listener() -> None:
                     return record.levelno >= logging.ERROR
                 return True
 
-        fh = logging.FileHandler(file_path, mode="a", encoding="utf-8")
+        logger_mode = get_file_log_mode()
+        fh = logging.FileHandler(file_path, mode=logger_mode, encoding="utf-8")
         fh.setLevel(
             logging_config.get("handlers", {})
             .get("file", {})
@@ -365,3 +368,72 @@ def get_log_config_path() -> Path:
     if p is not None:
         return p
     return Path(__file__).resolve().parents[2] / "pyproject.toml"
+
+
+def zip_results(source_path: str | Path | None = None) -> Path:
+    """
+    Create a timestamped ZIP archive from the selected path.
+
+    While compressing, this function deletes ALL `.log` and '.csv' files in the main `log/`
+    directory after they have been successfully added to the ZIP.
+
+    Parameters
+    ----------
+    source_path:
+        File or directory to archive. If None, defaults to the project `log/` folder.
+
+    Returns
+    -------
+    Path
+        Path to the created .zip file.
+    """
+    base_dir = Path(__file__).resolve().parent
+    log_dir = (base_dir / "../../log").resolve()
+
+    src = Path(source_path).expanduser() if source_path is not None else log_dir
+    if not src.is_absolute():
+        project_root = (base_dir / "../..").resolve()
+        src = (project_root / src).resolve()
+
+    if not src.exists():
+        raise FileNotFoundError(f"Selected path does not exist: {src}")
+
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = log_dir / f"results_{ts}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_path = output_dir.with_suffix(".zip")
+
+    # Build zip with paths relative to the source root (or its parent if it's a file)
+    root_for_rel = src if src.is_dir() else src.parent
+
+    def _delete_log_if_needed(p: Path) -> None:
+        # Clean only .log files from the top-level `log/` folder (keeps other locations safe)
+        try:
+            rp = p.resolve()
+        except Exception:
+            return
+
+        if rp.is_file() and rp.suffix in (".log", ".csv") and rp.parent == log_dir:
+            # never delete the zip we're writing (paranoia guard)
+            if rp == zip_path:
+                return
+            try:
+                rp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        if src.is_file():
+            zf.write(src, arcname=str(src.relative_to(root_for_rel)))
+            _delete_log_if_needed(src)
+        else:
+            for p in src.rglob("*"):
+                if not p.is_file():
+                    continue
+                zf.write(p, arcname=str(p.relative_to(root_for_rel)))
+                # delete during compression (after successful write)
+                _delete_log_if_needed(p)
+
+    shutil.rmtree(output_dir, ignore_errors=True)
+    return zip_path

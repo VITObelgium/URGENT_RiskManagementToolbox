@@ -94,7 +94,7 @@ def configure_worker_logger(worker_id: int) -> Path:
         return _pytest_log_path()
 
     log_dir = _ensure_log_dir()
-    file_path = log_dir / f"worker_{worker_id}.log"
+    file_path = log_dir / f"simulation_worker_{worker_id}.log"
 
     thread_filter = _ThreadNameFilter(f"worker-{worker_id}")
     tw_logger = logging.getLogger("threading-worker")
@@ -107,7 +107,7 @@ def configure_worker_logger(worker_id: int) -> Path:
     if get_external_console_logging() and not _is_pytest_env():
         try:
             _start_external_log_terminal(
-                title=f"Worker {worker_id} Logs",
+                title=f"Simulation Worker {worker_id} Logs",
                 command=f"tail -n {TAIL_LINES} -f '{file_path}'",
             )
         except Exception:
@@ -131,7 +131,7 @@ def configure_server_logger() -> Path:
         return _pytest_log_path()
 
     log_dir = _ensure_log_dir()
-    file_path = log_dir / "server.log"
+    file_path = log_dir / "simulation_server.log"
 
     thread_filter = _ThreadNameFilter("server")
     ts_logger = logging.getLogger("threading-server")
@@ -144,7 +144,7 @@ def configure_server_logger() -> Path:
     if get_external_console_logging() and not _is_pytest_env():
         try:
             _start_external_log_terminal(
-                title="Server Logs",
+                title="Simulation Server Logs",
                 command=f"tail -n {TAIL_LINES} -f '{file_path}'",
             )
         except Exception:

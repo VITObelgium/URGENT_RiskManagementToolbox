@@ -94,6 +94,13 @@ def log_to_datetime_log_file() -> bool:
         datetime_log_file = False
     return datetime_log_file
 
+def get_file_log_mode() -> str:
+    try:
+        cfg = get_log_config()
+        mode = cfg.get("handlers", {}).get("file", {}).get("mode", "w")
+        return mode
+    except FileNotFoundError:
+        return "w"
 
 def get_logging_output() -> dict[str, Any]:
     """
@@ -276,9 +283,9 @@ def _start_queue_listener() -> None:
 def _ensure_logfile_path() -> str | None:
     base_dir = os.path.dirname(os.path.abspath(__file__))
     log_dir = os.path.join(base_dir, "../../log")
-    file_name = "pytest_log.log" if "pytest" in sys.modules else "urgent_log.log"
+    file_name = "pytest_log.log" if "pytest" in sys.modules else "main_urgent_log.log"
     if "pytest" not in sys.modules and log_to_datetime_log_file():
-        file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_urgent_log.log"
+        file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
     try:
         os.makedirs(log_dir, exist_ok=True)
         full_path = os.path.join(log_dir, file_name)
@@ -387,6 +394,7 @@ def zip_results(source_path: str | Path | None = None) -> Path:
     Path
         Path to the created .zip file.
     """
+    zip_file_prefix = "run_results_"
     base_dir = Path(__file__).resolve().parent
     log_dir = (base_dir / "../../log").resolve()
 
@@ -399,13 +407,31 @@ def zip_results(source_path: str | Path | None = None) -> Path:
         raise FileNotFoundError(f"Selected path does not exist: {src}")
 
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = log_dir / f"results_{ts}"
+    output_dir = log_dir / f"{zip_file_prefix}{ts}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = output_dir.with_suffix(".zip")
 
     # Build zip with paths relative to the source root (or its parent if it's a file)
     root_for_rel = src if src.is_dir() else src.parent
+
+    def _should_skip_in_zip(p: Path) -> bool:
+        """
+        Skip previous ZIP archives in the top-level `log/` folder (and never include the zip we're writing).
+        """
+        try:
+            rp = p.resolve()
+        except Exception:
+            return True
+
+        if rp == zip_path:
+            return True
+
+        # Skip any existing ZIPs located directly in log_dir (previous results archives, etc.)
+        if rp.is_file() and rp.suffix.lower() == ".zip" and rp.parent == log_dir:
+            return True
+
+        return False
 
     def _delete_log_if_needed(p: Path) -> None:
         # Clean only .log files from the top-level `log/` folder (keeps other locations safe)
@@ -425,11 +451,14 @@ def zip_results(source_path: str | Path | None = None) -> Path:
 
     with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         if src.is_file():
-            zf.write(src, arcname=str(src.relative_to(root_for_rel)))
-            _delete_log_if_needed(src)
+            if not _should_skip_in_zip(src):
+                zf.write(src, arcname=str(src.relative_to(root_for_rel)))
+                _delete_log_if_needed(src)
         else:
             for p in src.rglob("*"):
                 if not p.is_file():
+                    continue
+                if _should_skip_in_zip(p):
                     continue
                 zf.write(p, arcname=str(p.relative_to(root_for_rel)))
                 # delete during compression (after successful write)

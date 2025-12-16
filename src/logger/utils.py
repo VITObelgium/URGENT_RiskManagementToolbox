@@ -94,6 +94,7 @@ def log_to_datetime_log_file() -> bool:
         datetime_log_file = False
     return datetime_log_file
 
+
 def get_file_log_mode() -> str:
     try:
         cfg = get_log_config()
@@ -101,6 +102,7 @@ def get_file_log_mode() -> str:
         return mode
     except FileNotFoundError:
         return "w"
+
 
 def get_logging_output() -> dict[str, Any]:
     """
@@ -285,7 +287,9 @@ def _ensure_logfile_path() -> str | None:
     log_dir = os.path.join(base_dir, "../../log")
     file_name = "pytest_log.log" if "pytest" in sys.modules else "main_urgent_log.log"
     if "pytest" not in sys.modules and log_to_datetime_log_file():
-        file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
+        file_name = (
+            datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
+        )
     try:
         os.makedirs(log_dir, exist_ok=True)
         full_path = os.path.join(log_dir, file_name)

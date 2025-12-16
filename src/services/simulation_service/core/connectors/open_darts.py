@@ -122,13 +122,13 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
                 logger.error("Invalid JSON input.")
                 sys.exit(1)
 
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+                sys.exit(1)
 
         if not isinstance(config, (dict, list)):
             logger.error(f"Invalid JSON input, got:{type(config).__name__}")
             sys.exit(1)
-            return
         if isinstance(config, dict):
             if not all(isinstance(k, str) for k in config.keys()):
                 logger.error(f"Invalid JSON input:{config}")
@@ -217,7 +217,7 @@ class OpenDartsConnector(ConnectorInterface):
         discretization, and perforation coordinates.
 
         Returns:
-            List[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
+            list[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
 
         Raises:
             ValueError: If provided perforation coordinates are invalid or outside the reservoir bounds.

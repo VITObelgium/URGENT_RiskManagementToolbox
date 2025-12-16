@@ -9,7 +9,6 @@ logger = get_logger(__name__)
 
 def _find_pyproject_toml(start: Path | None = None) -> Path | None:
     """
-    #TODO: refactor
     Locate pyproject.toml by checking:
     1) Current working directory
     2) Walking up from the provided start path (or this file) to filesystem root
@@ -37,7 +36,6 @@ def _find_pyproject_toml(start: Path | None = None) -> Path | None:
 
 def get_timeout_value() -> int:
     """
-    #TODO: refactor
     Get the timeout value in seconds."""
     pyproject_path = _find_pyproject_toml()
     if pyproject_path is None:

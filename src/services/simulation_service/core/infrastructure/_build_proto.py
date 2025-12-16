@@ -1,7 +1,7 @@
 import os
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 
 def find_proto_file_names(
@@ -19,7 +19,7 @@ def find_proto_file_names(
     """
     proto_files = []
     directory = os.fspath(directory)  # Convert Path to str if needed
-    for root, dirs, files in os.walk(directory):
+    for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(".proto"):
                 proto_files.append(os.path.join(root, file) if full_path else file)

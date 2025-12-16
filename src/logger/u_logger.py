@@ -4,7 +4,6 @@ import logging
 import logging.config
 import os
 from logging import Logger
-from typing import Optional
 
 from logger.utils import (
     configure_default_profile,
@@ -50,7 +49,7 @@ def configure_logger() -> None:
     _logger_configured = True
 
 
-def get_logger(name: Optional[str] = "", filename: Optional[str] = None) -> Logger:
+def get_logger(name: str | None = "", filename: str | None = None) -> Logger:
     """Return a named logger; config is applied on first use.
 
     - Names like "threading-worker" and "threading-server" are preserved.

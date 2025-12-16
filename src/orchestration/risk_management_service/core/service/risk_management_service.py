@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 from logger import get_csv_logger, get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
@@ -6,7 +7,10 @@ from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
 )
-from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
+from services.problem_dispatcher_service.core.models import (
+    ProblemDispatcherDefinition,
+    ProblemDispatcherServiceResponse,
+)
 from services.problem_dispatcher_service.core.utils.utils import (
     parse_flat_dict_to_nested,
 )
@@ -176,7 +180,9 @@ def run_risk_management(
     )
 
 
-def _prepare_simulation_cases(solutions):
+def _prepare_simulation_cases(
+    solutions: ProblemDispatcherServiceResponse,
+) -> list[dict[(str, Any)]]:
     """
     Prepare simulation cases from generated candidates.
 

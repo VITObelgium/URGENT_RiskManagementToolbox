@@ -33,7 +33,7 @@ class = "logging.FileHandler"
 level = "INFO"
 formatter = "detailed"
 encoding = "utf-8"
-mode = "a"
+mode = "w"
 
 ["logging.config".loggers."aux"]
 level = "INFO"

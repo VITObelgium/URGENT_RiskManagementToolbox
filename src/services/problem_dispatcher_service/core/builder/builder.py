@@ -42,9 +42,9 @@ class TaskBuilder:
             service_type_map (dict[str, ServiceType]): A dictionary mapping problem type strings
                 to their corresponding service types.
         """
-        self.initial_state = initial_state
-        self.handlers = handlers
-        self.service_type_map = service_type_map
+        self.initial_state: dict[str, Any] = initial_state
+        self.handlers: dict[str, ProblemTypeHandler] = handlers
+        self.service_type_map: dict[str, ServiceType] = service_type_map
 
     def build(
         self, control_vectors: list[dict[str, float]]

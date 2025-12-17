@@ -7,6 +7,7 @@ from logger.utils import get_external_console_logging, get_services, get_service
 TAIL_LINES = 100
 WORKER_PREFIX = "simulation-worker"
 SIM_SERVICE_NAME = "simulation-server"
+TERMINAL_WINDOW_ID = 999  # big number to avoid conflicts with user terminals
 
 
 def _start_external_xterm_log_terminal(title: str, command: str) -> None:
@@ -20,14 +21,15 @@ def _start_external_log_terminal(title: str, command: str) -> None:
     try:
         escaped_command = command.replace('"', '\\"')
         wt_command = (
-            f'wt.exe new-tab --title "{title}" wsl.exe bash -c "{escaped_command}"'
+            f"wt.exe -w {TERMINAL_WINDOW_ID} "
+            f'--title "{title}" '
+            f'wsl.exe bash -c "{escaped_command}"'
         )
-        subprocess.run(wt_command, shell=True)
+        subprocess.run(wt_command, shell=True, check=True)
+
     except (OSError, subprocess.SubprocessError):
-        _start_external_xterm_log_terminal(
-            title,
-            command,
-        )
+        _start_external_xterm_log_terminal(title, command)
+
     except Exception as e:
         raise RuntimeError(f"Failed to open external terminal for logging: {e}") from e
 

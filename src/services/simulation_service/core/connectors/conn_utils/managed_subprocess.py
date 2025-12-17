@@ -1,6 +1,7 @@
 import subprocess
 import threading
-from typing import Callable, Mapping, Optional
+from collections.abc import Mapping
+from typing import Callable
 
 
 class ManagedSubprocess:
@@ -11,8 +12,8 @@ class ManagedSubprocess:
         logger_info_func: Callable,
         logger_error_func: Callable,
         text: bool = True,
-        env: Optional[Mapping[str, str]] = None,
-        thread_name_prefix: Optional[str] = None,
+        env: Mapping[str, str] | None = None,
+        thread_name_prefix: str | None = None,
     ):
         self.command_args = command_args
         self.text = text

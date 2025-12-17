@@ -459,3 +459,5 @@ orchestration_files/
 .pixi/*
 !.pixi/config.toml
 pixi.lock
+# lsp pyright custom config
+pyrightconfig.json

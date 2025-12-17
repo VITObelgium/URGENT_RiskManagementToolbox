@@ -1,5 +1,6 @@
 import copy
-from typing import Any, Callable, MutableMapping
+from collections.abc import MutableMapping
+from typing import Any, Callable
 
 import numpy as np
 

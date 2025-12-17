@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import itertools
-from typing import Annotated, Literal, Sequence, Union
+from collections.abc import Sequence
+from typing import Annotated, Literal
 
 import numpy as np
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
@@ -67,13 +68,13 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
 
     @model_validator(mode="after")
     def accept_only_one_perforation(self):
-        if len(self.perforations) > 1:
+        if self.perforations and len(self.perforations) > 1:
             raise ValueError("Only single perforation is supported")
         return self
 
 
 WellModel = Annotated[
-    Union[IWellModel],
+    IWellModel,
     Field(discriminator="well_type"),
 ]
 

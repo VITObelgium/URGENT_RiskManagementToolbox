@@ -5,9 +5,9 @@ import signal
 import socket
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 from logger import (
     configure_server_logger,
@@ -21,6 +21,7 @@ from services.simulation_service.core.infrastructure.server.src._simulation_serv
 from services.simulation_service.core.infrastructure.worker.src._simulation_worker_grpc import (
     main as worker_main,
 )
+from services.simulation_service.core.service.cluster_manager import ClusterManager
 
 logger = get_logger(__name__)
 
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 class ServerStartupError(Exception): ...
 
 
-class ProcessClusterManager:
+class ProcessClusterManager(ClusterManager):
     """Process-based cluster manager that launches worker scripts.
 
     Each worker is started as a separate Python process that runs the
@@ -123,11 +124,11 @@ class ProcessClusterManager:
 
         return t
 
-    def start(self, worker_count: int = 3) -> None:
+    def start(self, worker_count: int) -> None:
         """Start worker processes."""
 
         # Install signal handlers for graceful shutdown
-        def _handle_signal(signum, frame):
+        def _handle_signal(signum, _frame):
             logger.info("Received signal %s, initiating graceful shutdown...", signum)
             self.stop()
 
@@ -227,7 +228,7 @@ class ProcessClusterManager:
 
 @contextmanager
 def simulation_process_context_manager(
-    worker_count: int = 3,
+    worker_count: int,
 ) -> Generator[None, None, None]:
     """Context manager to start/stop local worker processes."""
     logger.info("Entering local process cluster context.")

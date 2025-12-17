@@ -1,14 +1,15 @@
-import math
 import os
 from typing import Any
-
-import psutil
 
 from logger import get_csv_logger, get_logger
 from orchestration.risk_management_service.core.mappers import ControlVectorMapper
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
+)
+from services.problem_dispatcher_service.core.models import (
+    ProblemDispatcherDefinition,
+    ProblemDispatcherServiceResponse,
 )
 from services.problem_dispatcher_service.core.utils.utils import (
     parse_flat_dict_to_nested,
@@ -29,34 +30,26 @@ logger = get_logger(__name__)
 
 
 def run_risk_management(
-    problem_definition: dict[str, Any],
+    problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
-    n_size: int = 10,
-    patience: int = 10,
-    max_generations: int = 10,
 ):
     """
     Main entry point for running risk management.
 
     Args:
-        problem_definition (dict[str, Any]): The problem definition used by the dispatcher.
+        problem_definition (ProblemDispatcherDefinition): The problem definition used by the dispatcher.
         simulation_model_archive (bytes | str): The simulation model archive to transfer.
-        n_size (int, optional): Number of samples for the dispatcher. Defaults to 10.
-        patience: Patience limit for the optimization process.
-        max_generations: Maximum number of generations for the optimization process.
     """
     logger.info("Starting risk management process...")
     logger.debug(
-        "Input problem definition: %s, simulation_model_archive: %s, n_size: %d",
+        "Input problem definition: %s, simulation_model_archive: %s",
         problem_definition,
         type(simulation_model_archive),
-        n_size,
     )
 
-    physical_cores = psutil.cpu_count(logical=False)
-    worker_count = max(1, math.floor(physical_cores / 2))
     runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
 
+    worker_count = problem_definition.optimization_parameters.worker_count
     cm = (
         simulation_process_context_manager(worker_count=worker_count)
         if runner_mode == "thread"
@@ -69,15 +62,13 @@ def run_risk_management(
                 simulation_model_archive=simulation_model_archive
             )
 
-            dispatcher = ProblemDispatcherService(
-                problem_definition=problem_definition, n_size=n_size
-            )
+            dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
 
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,
-                max_generations=max_generations,
-                patience=patience,
-                optimization_strategy=dispatcher.get_optimization_strategy(),
+                max_generations=dispatcher.max_generation,
+                patience=dispatcher.patience,
+                optimization_strategy=dispatcher.optimization_strategy,
             )
 
             # Initialize metrics logger
@@ -94,7 +85,7 @@ def run_risk_management(
             )
 
             logger.info("Fetching boundaries from ProblemDispatcherService.")
-            boundaries = dispatcher.get_boundaries()
+            boundaries = dispatcher.boundaries
             logger.debug("Boundaries retrieved: %s", boundaries)
 
             # Initialize solutions
@@ -189,7 +180,9 @@ def run_risk_management(
     )
 
 
-def _prepare_simulation_cases(solutions):
+def _prepare_simulation_cases(
+    solutions: ProblemDispatcherServiceResponse,
+) -> list[dict[(str, Any)]]:
     """
     Prepare simulation cases from generated candidates.
 

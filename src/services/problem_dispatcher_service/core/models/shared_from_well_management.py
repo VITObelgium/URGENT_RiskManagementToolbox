@@ -67,7 +67,7 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
 
     @model_validator(mode="after")
     def accept_only_one_perforation(self):
-        if len(self.perforations) > 1:
+        if self.perforations and len(self.perforations) > 1:
             raise ValueError("Only single perforation is supported")
         return self
 

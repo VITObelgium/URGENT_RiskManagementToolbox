@@ -9,25 +9,25 @@ import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable, Protocol, Tuple
+from typing import Callable, Protocol
 
 from logger import get_logger, stream_reader
 
 from .common import (
-    SerializedJson,
+    JsonPath,
     SimulationResults,
     SimulationResultType,
     SimulationStatus,
 )
-from .conn_utils.managed_subprocess import ManagedSubprocess
+from .conn_utils import ManagedSubprocess, get_timeout_value
 
 logger = get_logger("threading-worker", filename=__name__)
 
 
 class SimulationRunner(Protocol):
     def run(
-        self, config: SerializedJson, stop: threading.Event | None = None
-    ) -> Tuple[SimulationStatus, SimulationResults]: ...
+        self, config: JsonPath, stop: threading.Event | None = None
+    ) -> tuple[SimulationStatus, SimulationResults]: ...
 
 
 class SubprocessRunner:
@@ -44,10 +44,11 @@ class SubprocessRunner:
         self._broadcast_results_parser = broadcast_results_parser
         self._repo_root_getter = repo_root_getter
         self._worker_id_getter = worker_id_getter
+        self._timeout_duration = get_timeout_value()
 
     def run(
-        self, config: SerializedJson, stop: threading.Event | None = None
-    ) -> Tuple[SimulationStatus, SimulationResults]:
+        self, config: JsonPath, stop: threading.Event | None = None
+    ) -> tuple[SimulationStatus, SimulationResults]:
         managed_factory = self._managed_subprocess_factory
         if managed_factory is None:
             managed_factory = self._default_managed_subprocess_factory
@@ -116,7 +117,6 @@ class SubprocessRunner:
 
             try:
                 with manager as process:
-                    timeout_duration = 15 * 60
                     try:
                         waited = 0.0
                         poll_step = 0.25
@@ -138,13 +138,13 @@ class SubprocessRunner:
                                 break
                             except subprocess.TimeoutExpired:
                                 waited += poll_step
-                                if waited >= timeout_duration:
+                                if waited >= self._timeout_duration:
                                     raise subprocess.TimeoutExpired(
-                                        process.args, timeout_duration
+                                        process.args, self._timeout_duration
                                     )
                     except subprocess.TimeoutExpired:
                         logger.warning(
-                            f"Subprocess timed out after {timeout_duration} seconds. Terminating."
+                            f"Subprocess timed out after {self._timeout_duration} seconds. Terminating."
                         )
                         if process.poll() is None:
                             process.terminate()
@@ -186,9 +186,7 @@ class SubprocessRunner:
                                 and "Unable to synchronously create file" in stderr_tail
                             ):
                                 logger.error(
-                                    "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE, "
-                                    "but if the error persists, ensure each worker runs in an isolated directory and no other process "
-                                    "holds the same HDF5 file open."
+                                    "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE,\nbut if the error persists, ensure each worker runs in an isolated directory and no other process\nholds the same HDF5 file open."
                                 )
                         return SimulationStatus.FAILED, default_failed_results
 
@@ -222,7 +220,7 @@ class ThreadRunner:
         self._subprocess_runner = subprocess_runner or SubprocessRunner()
 
     def run(
-        self, config: SerializedJson, stop: threading.Event | None = None
-    ) -> Tuple[SimulationStatus, SimulationResults]:
+        self, config: JsonPath, stop: threading.Event | None = None
+    ) -> tuple[SimulationStatus, SimulationResults]:
         os.environ.setdefault("OPEN_DARTS_THREAD_MODE", "1")
         return self._subprocess_runner.run(config, stop)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import math
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+import psutil
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.functional_validators import AfterValidator
 from typing_extensions import Annotated
 
@@ -54,6 +56,10 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Represents the optimization parameters for the problem dispatcher service.
 
     Attributes:
+        max_generations (int): The maximum number of generations for the optimization algorithm.
+        population_size (int): The size of the population in each generation.
+        patience (int): The number of generations to wait for improvement before stopping.
+        worker_count (int): The number of parallel workers to use for simulations.
         optimization_strategy (str): The direction of the optimization objective,
             either 'maximize' or 'minimize'.
         linear_inequalities (dict[str, list] | None): The linear inequality constraints
@@ -68,10 +74,38 @@ class OptimizationParameters(BaseModel, extra="forbid"):
 
     """
 
+    max_generations: int = Field(default=10)
+    population_size: int = Field(default=10)
+    patience: int = Field(default=10)
+    worker_count: int = Field(default=4)
     optimization_strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.MAXIMIZE,
     )
     linear_inequalities: dict[str, list] | None = Field(default=None)
+
+    @field_validator(
+        "max_generations",
+        "population_size",
+        "patience",
+        "worker_count",
+        mode="before",
+    )
+    @classmethod
+    def check_positive_ints(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Value must be a positive integer")
+        return value
+
+    @field_validator("worker_count", mode="before")
+    @classmethod
+    def validate_worker_count(cls, value: int) -> int:
+        physical_cores = psutil.cpu_count(logical=False)
+        worker_count = max(1, math.floor(physical_cores / 2))
+        if value > worker_count:
+            raise ValueError(
+                f"worker_count {value} exceeds available physical cores {physical_cores}"
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_linear_inequalities(self) -> OptimizationParameters:

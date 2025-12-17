@@ -5,13 +5,14 @@ This module must be aligned with python 3.10 syntax, as open-darts whl requires 
 
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from enum import Enum
-from typing import Sequence, TypeAlias, TypedDict
+from typing import TypeAlias, TypedDict
 
 WellName: TypeAlias = str
 GridCell: TypeAlias = tuple[int, int, int]
 Point: TypeAlias = tuple[float, float, float]
-SerializedJson: TypeAlias = str
+JsonPath: TypeAlias = str
 
 
 class PerforationSchema(TypedDict):
@@ -76,5 +77,5 @@ class ConnectorInterface(ABC):
     @staticmethod
     @abstractmethod
     def run(
-        config: SerializedJson, stop: threading.Event | None = None
+        config_path: JsonPath, stop: threading.Event | None = None
     ) -> tuple[SimulationStatus, SimulationResults]: ...

@@ -43,7 +43,6 @@ def test_run_risk_management_happy_path(
     )
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
-    mock_dispatcher_inst.get_boundaries.return_value = {"b": 3}
     mock_dispatcher_inst.process_iteration.side_effect = [
         MagicMock(
             solution_candidates=[
@@ -80,11 +79,17 @@ def test_run_risk_management_happy_path(
         "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
         return_value={"x": 5},
     ):
+        mock_problem_def = MagicMock()
+        mock_problem_def.optimization_parameters.worker_count = 1
+        mock_problem_def.optimization_parameters.population_size = 1
+        mock_problem_def.optimization_parameters.patience = 1
+        mock_problem_def.optimization_parameters.max_generations = 1
+
         rms.run_risk_management(
-            {"foo": "bar"}, b"model", n_size=1, patience=1, max_generations=1
+            mock_problem_def,
+            b"model",
         )
     mock_sim_service.transfer_simulation_model.assert_called_once()
-    mock_dispatcher_inst.get_boundaries.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1
     mock_su_inst.process_request.assert_called()
     mock_csv_logger.return_value.info.assert_called()
@@ -149,5 +154,9 @@ def test_run_risk_management_exception(
     mock_ctx = MagicMock()
     mock_sim_cluster_ctx.return_value.__enter__.return_value = mock_ctx
     mock_sim_service.transfer_simulation_model.side_effect = Exception("fail")
+
+    mock_problem_def = MagicMock()
+    mock_problem_def.optimization_parameters.worker_count = 1
+
     with pytest.raises(Exception):
-        rms.run_risk_management({"foo": "bar"}, b"model")
+        rms.run_risk_management(mock_problem_def, b"model")

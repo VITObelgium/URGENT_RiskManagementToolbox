@@ -3,6 +3,7 @@ import json
 import os
 
 from logger import configure_logger, get_logger
+from logger.utils import zip_results
 from orchestration.risk_management_service import run_risk_management
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 
@@ -29,33 +30,13 @@ def cli():
         help="Path to the simulation model archive file.",
     )
     parser.add_argument(
-        "--population-size",
-        type=int,
-        default=10,
-        help="Population size. Default is 10",
-    )
-    parser.add_argument(
-        "--patience",
-        type=int,
-        default=10,
-        help="Iterations limit without better result. Default is 10.",
-    )
-    parser.add_argument(
-        "--max-generations",
-        type=int,
-        default=10,
-        help="Maximum number of generations. Default is 10.",
-    )
-    parser.add_argument(
         "--use-docker",
         action="store_true",
         help="Flag to indicate whether to use Docker for simulations, or use multi-threading-based local execution. Default is False (i.e., use multi-threading).",
     )
 
-    # Parse the arguments
     args = parser.parse_args()
 
-    # Apply the logging level
     configure_logger()
     logger = get_logger(__name__)
     logger.info("Risk management toolbox started from CLI.")
@@ -70,10 +51,17 @@ def cli():
     # Load the problem_definition from the JSON file
     try:
         with open(args.config_file, "r") as file:
-            problem_definition = json.load(file)
-            ProblemDispatcherDefinition.model_validate(problem_definition)
+            problem_definition = ProblemDispatcherDefinition.model_validate(
+                json.load(file)
+            )
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
+        # Always attempt to zip (even on failure)
+        try:
+            zip_path = zip_results()
+            logger.info("Created results archive: %s", zip_path)
+        except Exception as ze:
+            logger.error("Failed to create results archive: %s", ze)
         exit(1)
 
     # Invoke run_risk_management with the required arguments
@@ -81,11 +69,13 @@ def cli():
         run_risk_management(
             problem_definition=problem_definition,
             simulation_model_archive=args.model_file,
-            n_size=args.population_size,
-            patience=args.patience,
-            max_generations=args.max_generations,
         )
         logger.info("Risk management process completed successfully.")
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        exit(1)
+    finally:
+        try:
+            zip_path = zip_results()
+            logger.info("Created results archive: %s", zip_path)
+        except Exception as ze:
+            logger.error("Failed to create results archive: %s", ze)

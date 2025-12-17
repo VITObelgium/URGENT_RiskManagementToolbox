@@ -9,9 +9,10 @@ import re
 import sys
 import threading
 from collections import defaultdict
+from collections.abc import Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Protocol, Sequence, TypedDict
+from typing import Any, Callable, Protocol, TypedDict
 
 import numpy as np
 import numpy.typing as npt
@@ -22,8 +23,8 @@ from logger import get_logger
 from .common import (
     ConnectorInterface,
     GridCell,
+    JsonPath,
     Point,
-    SerializedJson,
     SimulationResults,
     SimulationResultType,
     SimulationStatus,
@@ -88,7 +89,7 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
     The decorator should be used on top of the main function which trigger Open-Darts simulation
     Decorator allow to inject configuration json directly from the command line
 
-    Usage: python3 main.py (or other file name with open-darts simulation) 'configuration.json'
+    Usage: python3 main.py (or other file name with open-darts simulation) <path-to-configuration.json>
 
     example:
 
@@ -101,25 +102,37 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> None:
         if len(sys.argv) < 2:
-            logger.info("Usage: python main.py 'configuration.json (TBD)'")
+            logger.info("Usage: python main.py <path-to-configuration.json>")
             sys.exit(1)
-            return
         json_config_str = sys.argv[1]
-        try:
-            config = json.loads(json_config_str)
-        except json.JSONDecodeError:
-            logger.error("Invalid JSON input.")
-            sys.exit(1)
-            return
+        if os.path.isfile(json_config_str):
+            try:
+                with open(json_config_str, "r") as f:
+                    config = json.load(f)
+                if isinstance(config, str):
+                    config = json.loads(config)
+            except Exception:
+                logger.error("Failed to read configuration file.")
+                sys.exit(1)
+        else:
+            # For legacy reason, allowing passing json string directly
+            try:
+                config = json.loads(json_config_str)
+            except json.JSONDecodeError:
+                logger.error("Invalid JSON input.")
+                sys.exit(1)
 
-        if not isinstance(config, dict):
-            logger.error("Invalid JSON input.")
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+                sys.exit(1)
+
+        if not isinstance(config, (dict, list)):
+            logger.error(f"Invalid JSON input, got:{type(config).__name__}")
             sys.exit(1)
-            return
-        if not all(isinstance(k, str) for k in config.keys()):
-            logger.error("Invalid JSON input.")
-            sys.exit(1)
-            return
+        if isinstance(config, dict):
+            if not all(isinstance(k, str) for k in config.keys()):
+                logger.error(f"Invalid JSON input:{config}")
+                sys.exit(1)
 
         func(config, *args, **kwargs)
 
@@ -135,7 +148,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def run(
-        config: SerializedJson,
+        config_path: JsonPath,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         # Choose runner implementation via environment. Default uses subprocess runner.
@@ -150,9 +163,9 @@ class OpenDartsConnector(ConnectorInterface):
 
         if runner_mode == "thread":
             thread_runner = ThreadRunner(subprocess_runner)
-            return thread_runner.run(config, stop)
+            return thread_runner.run(config_path, stop)
 
-        return subprocess_runner.run(config, stop)
+        return subprocess_runner.run(config_path, stop)
 
     @staticmethod
     def _get_broadcast_results(
@@ -204,7 +217,7 @@ class OpenDartsConnector(ConnectorInterface):
         discretization, and perforation coordinates.
 
         Returns:
-            List[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
+            list[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
 
         Raises:
             ValueError: If provided perforation coordinates are invalid or outside the reservoir bounds.

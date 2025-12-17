@@ -1,4 +1,4 @@
-from typing import Any, List, Type
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -20,15 +20,15 @@ from tests.well_management_service_tests.tools import (
 valid_position: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}
 valid_perforation: dict[str, float] = {"start_md": 100.0, "end_md": 200.0}
 invalid_perforation: dict[str, float] = {"start_md": 300.0, "end_md": 200.0}
-unsorted_perforations: List[dict[str, float]] = [
+unsorted_perforations: list[dict[str, float]] = [
     {"start_md": 300.0, "end_md": 400.0},
     {"start_md": 100.0, "end_md": 200.0},
 ]
-sorted_perforations: List[dict[str, float]] = [
+sorted_perforations: list[dict[str, float]] = [
     {"start_md": 100.0, "end_md": 200.0},
     {"start_md": 300.0, "end_md": 400.0},
 ]
-overlapping_perforations: List[dict[str, float]] = [
+overlapping_perforations: list[dict[str, float]] = [
     {"start_md": 100.0, "end_md": 200.0},
     {"start_md": 150.0, "end_md": 250.0},
 ]
@@ -348,8 +348,8 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
 def test_well_models(
     model_class: Any,
     input_data: dict[str, Any],
-    expected_exception: Type[BaseException] | None,
-    expected_sorted_perforations: List[dict[str, float]] | None,
+    expected_exception: type[BaseException] | None,
+    expected_sorted_perforations: list[dict[str, float]] | None,
 ) -> None:
     if expected_exception:
         with pytest.raises(expected_exception):
@@ -368,7 +368,7 @@ def test_well_models(
     "start_md, end_md, expected_exception", [(1, 5, None), (5, 1, ValidationError)]
 )
 def test_perforation_range(
-    start_md: float, end_md: float, expected_exception: Type[BaseException] | None
+    start_md: float, end_md: float, expected_exception: type[BaseException] | None
 ) -> None:
     if expected_exception:
         with pytest.raises(expected_exception):
@@ -602,7 +602,7 @@ def test_perforation_range(
 def test_well_management_service(
     input_data: dict[str, Any],
     expected_output: dict[str, Any],
-    expected_exception: Type[BaseException] | None,
+    expected_exception: type[BaseException] | None,
 ) -> None:
     if expected_exception:
         with pytest.raises(expected_exception):

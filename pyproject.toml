@@ -33,7 +33,7 @@ class = "logging.FileHandler"
 level = "INFO"
 formatter = "detailed"
 encoding = "utf-8"
-mode = "a"
+mode = "w"
 
 ["logging.config".loggers."aux"]
 level = "INFO"
@@ -110,20 +110,19 @@ plugins = [
 ]
 
 [tool.pytest.ini_options]
+retries = 2
+retry_delay = 0.5
 pythonpath = "src"
 log_file = "log/pytest_log.log"
 log_file_format = "%(process)d %(thread)d %(asctime)s %(module)s:%(lineno)d %(levelname)s - %(message)s"
 log_level = "INFO"
 
-retries = 2
-retry_delay = 0.5
-cumulative_timing = false
+[toolbox-config]
+simulation_timeout_seconds = 900
 
 [build-system]
 requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
-
-
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]

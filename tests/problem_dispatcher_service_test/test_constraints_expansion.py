@@ -168,10 +168,13 @@ def test_jwell_constraints_respected():
                 },
             }
         ],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "population_size": 10,
+        },
     }
-
-    svc = ProblemDispatcherService(problem_definition=problem_definition, n_size=10)
+    problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
     resp = svc.process_iteration()
 
     for sc in resp.solution_candidates:
@@ -205,10 +208,14 @@ def test_hwell_constraints_respected():
                 },
             }
         ],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+        "optimization_parameters": {
+            "optimization_strategy": "maximize",
+            "population_size": 10,
+        },
     }
+    problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
 
-    svc = ProblemDispatcherService(problem_definition=problem_definition, n_size=10)
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
     resp = svc.process_iteration()
 
     for sc in resp.solution_candidates:
@@ -265,8 +272,8 @@ def test_linear_inequalities_mixed_wells():
             },
         },
     }
-
-    svc = ProblemDispatcherService(problem_definition=problem_definition, n_size=20)
+    problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
+    svc = ProblemDispatcherService(problem_definition=problem_definition)
     resp = svc.process_iteration()
 
     for sc in resp.solution_candidates:

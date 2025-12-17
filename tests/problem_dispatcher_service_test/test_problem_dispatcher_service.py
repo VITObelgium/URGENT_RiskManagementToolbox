@@ -564,6 +564,7 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
         "well_placement": [well_config],
         "optimization_parameters": {"optimization_strategy": "maximize"},
     }
+    problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     service = ProblemDispatcherService(problem_definition=problem_definition)
     response = service.process_iteration()
 
@@ -605,6 +606,9 @@ def test_hwell_validation_failure_invalid_geometry():
     }
 
     with pytest.raises(ValidationError) as excinfo:
+        problem_definition = ProblemDispatcherDefinition.model_validate(
+            problem_definition
+        )
         ProblemDispatcherService(problem_definition=problem_definition)
 
     # The ValueError from HWellModel is wrapped in Pydantic's ValidationError

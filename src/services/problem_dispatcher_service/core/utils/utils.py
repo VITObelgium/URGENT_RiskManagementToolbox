@@ -75,6 +75,16 @@ class CandidateGenerator:
             A list of candidate solutions, each represented as a dictionary of variable assignments.
         """
 
+        for key, (lb, ub) in constraints.items():
+            if lb > ub:
+                raise ValueError(
+                    f"Invalid boundary for {key}: lower bound ({lb}) > upper bound ({ub})"
+                )
+            if not (np.isfinite(lb) and np.isfinite(ub)):
+                raise ValueError(
+                    f"Invalid boundary for {key}: bounds must be finite. Got lb={lb}, ub={ub}"
+                )
+
         # No linear constraints scenario
         if not linear_inequalities:
             return [

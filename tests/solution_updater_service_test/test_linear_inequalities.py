@@ -92,7 +92,7 @@ def test_penalty_applied_when_violating_constraint():
     }
 
     service.process_request(request)
-    best = service.global_best_controll_vector.items
+    best = service.global_best_control_vector.items
     assert (
         best["well_placement#INJ#md"] + best["well_placement#PRO#md"] <= 3000.0 + 1e-6
     )

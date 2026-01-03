@@ -160,6 +160,8 @@ def run_risk_management(
                     f"{loop_controller.current_generation},{metrics.global_best:.9f},{metrics.last_population_min:.9f},{metrics.last_population_max:.9f},{metrics.last_population_avg:.9f},{metrics.last_population_std:.9f}"
                 )
 
+                loop_controller.increment_generation()
+
             logger.info(
                 "Loop controller stopped at generation %d. Info: %s",
                 loop_controller.current_generation,
@@ -176,7 +178,7 @@ def run_risk_management(
     logger.info(
         "Optimization results: Fitness value = %f Control vector = %s",
         solution_updater.global_best_result,
-        parse_flat_dict_to_nested(solution_updater.global_best_controll_vector.items),
+        parse_flat_dict_to_nested(solution_updater.global_best_control_vector.items),
     )
 
 

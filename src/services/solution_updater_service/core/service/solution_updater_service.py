@@ -361,8 +361,6 @@ class _SolutionUpdaterServiceLoopController:
         Returns:
             bool: True if the loop controller is running, False otherwise.
         """
-        self._update_generation()
-        self._update_patience()
 
         running = True
 
@@ -378,16 +376,15 @@ class _SolutionUpdaterServiceLoopController:
 
         return running
 
+    def increment_generation(self) -> None:
+        self._current_generation += 1
+        self._update_patience()
+
     def _update_generation(self) -> None:
         self._current_generation += 1
 
     def _update_patience(self) -> None:
         if self._current_generation < 1:
-            raise ValueError(
-                f"Generation cant be lower than 0. Current generation: {self._current_generation}"
-            )
-
-        if self._current_generation == 1:
             return
 
         last_best = self._last_run_global_best_result
@@ -401,10 +398,10 @@ class _SolutionUpdaterServiceLoopController:
         self._last_run_global_best_result = current_best
 
     def _max_generation_reached(self) -> bool:
-        return self._current_generation > self._max_generations
+        return self._current_generation >= self._max_generations
 
     def _patience_reached(self) -> bool:
-        return self._patience_left < 0
+        return self._patience_left <= 0
 
 
 class SolutionUpdaterService:
@@ -445,9 +442,9 @@ class SolutionUpdaterService:
         return self._engine.global_best_result
 
     @property
-    def global_best_controll_vector(self) -> ControlVector:
+    def global_best_control_vector(self) -> ControlVector:
         # cast to array
-        control_vector_array = np.array([self._engine.global_best_controll_vector])
+        control_vector_array = np.array([self._engine.global_best_control_vector])
         first_index = 0
         return self._mapper.to_control_vectors(control_vector_array)[first_index]
 

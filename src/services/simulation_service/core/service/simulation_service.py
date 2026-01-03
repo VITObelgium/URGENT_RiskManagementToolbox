@@ -5,6 +5,7 @@ from typing import Any
 import grpc
 
 from logger import get_logger
+from services.simulation_service.core.config import get_simulation_config
 from services.simulation_service.core.infrastructure.generated import (
     simulation_messaging_pb2 as sm,
 )
@@ -22,9 +23,6 @@ logger = get_logger(__name__)
 
 
 class SimulationService:
-    _SERVER_HOST = "localhost"
-    _SERVER_PORT = 50051
-
     @staticmethod
     def process_request(request_dict: dict[str, Any]) -> SimulationServiceResponse:
         """
@@ -79,9 +77,11 @@ class SimulationService:
         Args:
             simulation_model_archive (bytes): The archive content as bytes.
         """
+        _config = get_simulation_config()
+
         with GrpcStubManager.get_stub(
-            SimulationService._SERVER_HOST,
-            SimulationService._SERVER_PORT,
+            _config.server_host,
+            _config.server_port,
         ) as stub:
             try:
                 logger.info("Sending simulation model archive to the cluster...")
@@ -128,10 +128,11 @@ class SimulationService:
             Sequence[SimulationCase]: The processed simulation cases.
         """
         logger.info("Processing %d simulation cases on the cluster...", len(cases))
+        _config = get_simulation_config()
 
         with GrpcStubManager.get_stub(
-            SimulationService._SERVER_HOST,
-            SimulationService._SERVER_PORT,
+            _config.server_host,
+            _config.server_port,
         ) as stub:
             simulations_inputs = [SimulationService._to_grpc(case) for case in cases]
             simulations_request = sm.Simulations(simulations=simulations_inputs)

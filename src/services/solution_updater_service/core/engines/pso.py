@@ -59,7 +59,7 @@ class PSOEngine(OptimizationEngineInterface):
         self._strategy = strategy
 
     @property
-    def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+    def global_best_control_vector(self) -> npt.NDArray[np.float64]:
         return ensure_not_none(self._state).global_best_position
 
     def update_solution_to_next_iter(
@@ -197,6 +197,16 @@ class PSOEngine(OptimizationEngineInterface):
             else np.argmax(results)
         )
         best_result = float(results[best_index].item())
+
+        # Check if current global best is infinite and new result is finite
+        is_global_infinite = not np.isfinite(state.global_best_result)
+        is_new_finite = np.isfinite(best_result)
+
+        if is_global_infinite and is_new_finite:
+            # Replace infinite global best with first finite value
+            state.global_best_position = positions[best_index]
+            state.global_best_result = best_result
+            return
 
         if self._strategy == OptimizationStrategy.MINIMIZE:
             is_better = best_result < state.global_best_result

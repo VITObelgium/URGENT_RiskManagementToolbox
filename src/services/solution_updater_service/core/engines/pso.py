@@ -2,6 +2,7 @@ import numpy as np
 from numpy import typing as npt
 
 from common import OptimizationStrategy
+from logger import get_logger
 from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
@@ -53,6 +54,7 @@ class PSOEngine(OptimizationEngineInterface):
                 solution.
         """
         super().__init__()
+        self._logger = get_logger(__name__)
         self.w, self.c1, self.c2 = w, c1, c2
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
@@ -203,6 +205,9 @@ class PSOEngine(OptimizationEngineInterface):
         is_new_finite = np.isfinite(best_result)
 
         if is_global_infinite and is_new_finite:
+            self._logger.warning(
+                "Best result is infinite! Replacing infinite value with first best finite result"
+            )
             # Replace infinite global best with first finite value
             state.global_best_position = positions[best_index]
             state.global_best_result = best_result

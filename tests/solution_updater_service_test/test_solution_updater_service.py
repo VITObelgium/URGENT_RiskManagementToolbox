@@ -122,7 +122,7 @@ def mocked_engine_with_metrics():  # type: ignore
             return self.metrics.global_best
 
         @property
-        def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+        def global_best_control_vector(self) -> npt.NDArray[np.float64]:
             return np.array([0.0])  # Mock value
 
     return MockedOptimizationEngine()
@@ -485,6 +485,7 @@ def test_optimization_service_full_round(test_case):
         config["solution_candidates"] = create_candidates(
             positions, results, param_names
         )
+        loop_controller.increment_generation()
 
     best_particle = positions[np.argmin(results)]
     best_result = np.min(results)
@@ -522,12 +523,11 @@ def test_optimization_service_full_round(test_case):
             "mocked_engine",
             [
                 {"generation": 1, "running": True, "patience_left": 1},
-                {"generation": 2, "running": True, "patience_left": 0},
                 {
-                    "generation": 3,
+                    "generation": 2,
                     "running": False,
-                    "patience_left": -1,
-                },  # Should stop here
+                    "patience_left": 0,
+                },  # Should stop here (patience <= 0)
             ],
         ),
     ],
@@ -564,6 +564,7 @@ def test_patience_handling(
     # Run through the patience checks
     for i, check in enumerate(patience_checks, 1):
         service.process_request(config_json)
+        loop_controller.increment_generation()
 
         expected_generation = check["generation"]
         expected_running = check["running"]
@@ -767,6 +768,7 @@ def test_maximization_service_full_round(test_case):
         config["solution_candidates"] = create_candidates(
             positions, results, param_names
         )
+        loop_controller.increment_generation()
 
     best_particle = positions[np.argmax(results)]
     best_result = np.max(results)

@@ -77,7 +77,7 @@ class JwellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     name: str
     md_linear1: float = Field(gt=0.0)
     md_curved: float = Field(gt=0.0)
-    dls: float = Field(gt=0.0)
+    dls: float = Field(gt=-45.00, le=45.00)
     md_linear2: float = Field(gt=0.0)
     wellhead: PositionModel
     azimuth: float
@@ -126,10 +126,10 @@ class SWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     name: str
     md_linear1: float = Field(gt=0.0)
     md_curved1: float = Field(gt=0.0)
-    dls1: float = Field(gt=0.0)
+    dls1: float = Field(gt=-45.00, le=45.00)
     md_linear2: float = Field(gt=0.0)
     md_curved2: float = Field(gt=0.0)
-    dls2: float = Field(gt=0.0)
+    dls2: float = Field(gt=-45.00, le=45.00)
     md_linear3: float = Field(gt=0.0)
     wellhead: PositionModel
     azimuth: float

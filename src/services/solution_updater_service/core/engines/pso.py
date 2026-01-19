@@ -59,7 +59,7 @@ class PSOEngine(OptimizationEngineInterface):
         self._strategy = strategy
 
     @property
-    def global_best_controll_vector(self) -> npt.NDArray[np.float64]:
+    def global_best_control_vector(self) -> npt.NDArray[np.float64]:
         return ensure_not_none(self._state).global_best_position
 
     def update_solution_to_next_iter(

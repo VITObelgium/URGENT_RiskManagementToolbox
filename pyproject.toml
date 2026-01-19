@@ -140,6 +140,7 @@ psutil = ">=7.0.0"
 pydantic = "==2.10.4"
 scipy = "==1.15.2"
 tomli = "==2.2.1"
+pydantic-settings = ">=2.12.0,<3"
 
 [tool.pixi.feature.dev.dependencies]
 coverage = "==7.6.10"

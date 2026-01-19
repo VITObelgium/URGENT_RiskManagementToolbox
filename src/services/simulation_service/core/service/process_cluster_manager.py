@@ -14,6 +14,7 @@ from logger import (
     configure_worker_logger,
     get_logger,
 )
+from services.simulation_service.core.config import get_simulation_config
 from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
     driver,
     request_server_shutdown,
@@ -46,11 +47,13 @@ class ProcessClusterManager(ClusterManager):
         self._worker_stops: list[threading.Event] = []
         self._stopping = threading.Event()
 
-        # TODO: Change this static host/port
-        self.host = "127.0.0.1"
-        self.port = 50051
+        config = get_simulation_config()
+        self.host = config.server_host
+        self.port = config.server_port
 
-    def _wait_for_server_readiness(self, timeout=25.0, interval=0.25):
+    def _wait_for_server_readiness(self, timeout=None, interval=0.25):
+        if timeout is None:
+            timeout = get_simulation_config().server_startup_timeout
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self._server_thread is not None and not self._server_thread.is_alive():
@@ -177,6 +180,8 @@ class ProcessClusterManager(ClusterManager):
         self._worker_threads.clear()
         self._worker_stops.clear()
 
+        self._cleanup_worker_directories()
+
         try:
             request_server_shutdown(timeout=1.0)
         except Exception:
@@ -224,6 +229,27 @@ class ProcessClusterManager(ClusterManager):
 
         for src, dst_name in ((connectors_dir, "connectors"), (logger_dir, "logger")):
             _replace_tree(src, target_dir / dst_name)
+
+    def _cleanup_worker_directories(self):
+        scripts_path = Path(__file__).parent
+        orchestration_files = (
+            scripts_path.parent.parent.parent.parent.parent / "orchestration_files"
+        )
+
+        if not orchestration_files.exists():
+            return
+
+        logger.info("Cleaning up worker temp directories...")
+        for worker_dir in orchestration_files.glob(".worker_*_temp"):
+            try:
+                if worker_dir.is_dir():
+                    logger.debug("Removing worker directory: %s", worker_dir)
+                    shutil.rmtree(worker_dir)
+            except Exception as e:
+                logger.warning(
+                    "Failed to remove worker directory %s: %s", worker_dir, e
+                )
+        logger.info("Worker temp directory cleanup complete.")
 
 
 @contextmanager

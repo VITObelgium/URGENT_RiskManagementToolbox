@@ -14,6 +14,7 @@ import grpc.aio
 import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2 as sm
 import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2_grpc as sm_grpc
 from logger import get_logger
+from services.simulation_service.core.config import get_simulation_config
 from services.simulation_service.core.connectors.common import (
     SimulationResults,
     SimulationStatus,
@@ -26,11 +27,6 @@ from services.simulation_service.core.infrastructure.worker.src.utils import (
 from services.simulation_service.core.utils.converters import json_to_str
 
 logger = get_logger("threading-worker", filename=__name__)
-
-channel_options = [
-    ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
-    ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
-]
 
 # TODO: refactor or store in config
 MODEL_RETRY_DELAY_SEC = 5
@@ -330,11 +326,8 @@ async def run_simulation_loop(
 
 def _create_channel():
     """Create and return a gRPC channel to the server."""
-    server_host = os.environ.get("SERVER_HOST", "localhost")
-    server_port = os.environ.get("SERVER_PORT", "50051")
-    grpc_target = f"{server_host}:{server_port}"
-
-    return grpc.aio.insecure_channel(grpc_target, options=channel_options)
+    config = get_simulation_config()
+    return grpc.aio.insecure_channel(config.grpc_target, options=config.channel_options)
 
 
 async def main(stop_flag: threading.Event | None = None, worker_id: str | None = None):

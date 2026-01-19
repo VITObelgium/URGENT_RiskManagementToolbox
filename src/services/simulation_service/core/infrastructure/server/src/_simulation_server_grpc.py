@@ -9,13 +9,9 @@ from grpc import aio
 import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2 as sm
 import services.simulation_service.core.infrastructure.generated.simulation_messaging_pb2_grpc as sm_grpc
 from logger import get_logger
+from services.simulation_service.core.config import get_simulation_config
 
 logger = get_logger("threading-server", filename=__name__)
-
-SERVER_OPTIONS = [
-    ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
-    ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
-]
 
 _SERVER_LOOP: asyncio.AbstractEventLoop | None = None
 _SERVER: aio.Server | None = None
@@ -27,11 +23,13 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._running_jobs: dict[
             int, asyncio.Task
         ] = {}  # Dictionary to track running jobs
+        self._job_start_times: dict[int, float] = {}  # Track when jobs started
         self._completed_jobs: dict[
             int, sm.SimulationResult
         ] = {}  # Dictionary to store results
         self._job_event = asyncio.Event()  # Event to signal job completion
         self._simulation_model_archive: bytes | None = None
+        self._job_timeout_seconds = get_simulation_config().job_timeout_seconds
 
     async def TransferSimulationModel(self, request, context):
         archive_size_bytes = len(getattr(request, "package_archive", b""))
@@ -56,6 +54,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         # Store the total number of simulations for progress tracking
         self._jobs = SimpleQueue()
         self._running_jobs.clear()
+        self._job_start_times.clear()
         self._completed_jobs.clear()
 
         for i, sim in enumerate(request.simulations, start=1):
@@ -75,6 +74,32 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         while self._running_jobs:
             current_time = time.time()
             time_since_last_log = current_time - last_log_time
+
+            # Check for timed-out jobs
+            timed_out_jobs = []
+            for job_id, start_t in list(self._job_start_times.items()):
+                if (
+                    job_id in self._running_jobs
+                    and (current_time - start_t) > self._job_timeout_seconds
+                ):
+                    timed_out_jobs.append(job_id)
+
+            if timed_out_jobs:
+                logger.warning(
+                    f"Jobs timed out after {self._job_timeout_seconds}s: {timed_out_jobs}"
+                )
+                for job_id in timed_out_jobs:
+                    # Create a failed result for timed-out job
+                    timeout_result = sm.SimulationResult(
+                        simulation=sm.Simulation(),
+                        status=sm.JobStatus.TIMEOUT,
+                        worker_id="server-timeout",
+                        job_id=job_id,
+                    )
+                    self._completed_jobs[job_id] = timeout_result
+                    del self._running_jobs[job_id]
+                    del self._job_start_times[job_id]
+                self._job_event.set()
 
             # Calculate timeout for wait_for
             # If we're due for a log, timeout immediately (0)
@@ -178,6 +203,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         logger.info(f"Worker {worker_id}: Assigned job {job_id}")
 
         self._running_jobs[job_id] = simulation  # Mark job as running
+        self._job_start_times[job_id] = time.time()  # Track start time
 
         return sm.SimulationJob(
             simulation=simulation,
@@ -227,6 +253,8 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
         self._completed_jobs[job_id] = request
         del self._running_jobs[job_id]
+        if job_id in self._job_start_times:
+            del self._job_start_times[job_id]
 
         if not self._running_jobs:
             self._job_event.set()
@@ -284,9 +312,11 @@ async def serve() -> None:
 
         loop.set_exception_handler(_ignore_poller_eagain)
 
-        logger.debug(f"gRPC server options: {SERVER_OPTIONS}")
+        config = get_simulation_config()
+        server_options = config.channel_options
+        logger.debug(f"gRPC server options: {server_options}")
 
-        server = aio.server(options=SERVER_OPTIONS)
+        server = aio.server(options=server_options)
         logger.debug("gRPC aio server instance created.")
 
         sm_grpc.add_SimulationMessagingServicer_to_server(

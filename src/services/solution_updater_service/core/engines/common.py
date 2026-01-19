@@ -46,7 +46,7 @@ class OptimizationEngineInterface(ABC):
 
     @property
     @abstractmethod
-    def global_best_controll_vector(self) -> npt.NDArray[np.float64]: ...
+    def global_best_control_vector(self) -> npt.NDArray[np.float64]: ...
 
     def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
         """Updates metrics based on optimization strategy."""

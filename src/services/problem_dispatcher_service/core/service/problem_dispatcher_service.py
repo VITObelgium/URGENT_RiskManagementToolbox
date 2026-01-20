@@ -1,4 +1,3 @@
-# dispatcher.py
 import random
 from typing import Any, Callable
 

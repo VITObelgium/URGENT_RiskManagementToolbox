@@ -494,3 +494,125 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
     }
     with pytest.raises(ValidationError):
         ProblemDispatcherDefinition.model_validate(dict_problem_definition)
+
+
+@pytest.mark.parametrize(
+    "well_config",
+    [
+        # JWell
+        {
+            "well_name": "J1",
+            "initial_state": {
+                "well_type": "JWell",
+                "wellhead": {"x": 0, "y": 0, "z": 0},
+                "md_linear1": 500.0,
+                "md_curved": 300.0,
+                "dls": 15.0,
+                "md_linear2": 700.0,
+                "azimuth": 90.0,
+                "md_step": 20.0,
+                "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+            },
+            "optimization_constraints": {
+                "md_linear1": {"lb": 400, "ub": 600},
+                "azimuth": {"lb": 0, "ub": 360},
+            },
+        },
+        # SWell
+        {
+            "well_name": "S1",
+            "initial_state": {
+                "well_type": "SWell",
+                "wellhead": {"x": 0, "y": 0, "z": 0},
+                "md_linear1": 400.0,
+                "md_curved1": 200.0,
+                "dls1": 10.0,
+                "md_linear2": 500.0,
+                "md_curved2": 300.0,
+                "dls2": 20.0,
+                "md_linear3": 600.0,
+                "azimuth": 180.0,
+                "md_step": 30.0,
+                "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+            },
+            "optimization_constraints": {
+                "md_linear1": {"lb": 300, "ub": 500},
+                "dls1": {"lb": 5, "ub": 15},
+            },
+        },
+        # HWell
+        {
+            "well_name": "H1",
+            "initial_state": {
+                "well_type": "HWell",
+                "wellhead": {"x": 0, "y": 0, "z": 0},
+                "TVD": 1000.0,
+                "md_lateral": 1500.0,
+                "azimuth": 45.0,
+                "md_step": 10.0,
+                "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+            },
+            "optimization_constraints": {
+                "TVD": {"lb": 800, "ub": 1200},
+                "md_lateral": {"lb": 1000, "ub": 2000},
+            },
+        },
+    ],
+)
+def test_problem_dispatcher_supports_extended_well_types(well_config):
+    problem_definition = {
+        "well_placement": [well_config],
+        "optimization_parameters": {"optimization_strategy": "maximize"},
+    }
+    problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
+    service = ProblemDispatcherService(problem_definition=problem_definition)
+    response = service.process_iteration()
+
+    assert isinstance(response, ProblemDispatcherServiceResponse)
+    assert len(response.solution_candidates) > 0
+
+    candidate = response.solution_candidates[0]
+    assert ServiceType.WellManagementService in candidate.tasks
+
+    # Verify control vector keys match constraints
+    task = candidate.tasks[ServiceType.WellManagementService]
+    control_items = task.control_vector.items
+
+    well_name = well_config["well_name"]
+    for param in well_config["optimization_constraints"]:
+        key = f"well_placement#{well_name}#{param}"
+        assert key in control_items
+
+
+def test_hwell_validation_failure_invalid_geometry():
+    # HWell with invalid dimensions (TVD too small for curvature)
+    # _CURVATURE_RADIUS approx 430m for default params
+    well_config = {
+        "well_name": "H1_Invalid",
+        "initial_state": {
+            "well_type": "HWell",
+            "wellhead": {"x": 0, "y": 0, "z": 0},
+            "TVD": 100.0,  # Too shallow
+            "md_lateral": 1500.0,
+            "azimuth": 45.0,
+            "md_step": 10.0,
+            "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+        },
+        "optimization_constraints": {"TVD": {"lb": 50, "ub": 150}},
+    }
+    problem_definition = {
+        "well_placement": [well_config],
+        "optimization_parameters": {"optimization_strategy": "maximize"},
+    }
+
+    with pytest.raises(ValidationError) as excinfo:
+        problem_definition = ProblemDispatcherDefinition.model_validate(
+            problem_definition
+        )
+        ProblemDispatcherService(problem_definition=problem_definition)
+
+    # The ValueError from HWellModel is wrapped in Pydantic's ValidationError
+    assert (
+        "Horizontal well true total depth is less than curved well section radius"
+        in str(excinfo.value)
+    )

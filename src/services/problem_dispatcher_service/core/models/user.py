@@ -158,7 +158,9 @@ class OptimizationParameters(BaseModel, extra="forbid"):
                 suffix = var.split(".", 1)[1]
                 if attr_suffix is None:
                     attr_suffix = suffix
-                elif suffix != attr_suffix:
+                elif not attr_suffix.startswith(suffix) and not suffix.startswith(
+                    attr_suffix
+                ):
                     raise ValueError(
                         "All variables in linear_inequalities must refer to the same attribute (e.g., all '.md'). "
                         f"Found both '{attr_suffix}' and '{suffix}'."

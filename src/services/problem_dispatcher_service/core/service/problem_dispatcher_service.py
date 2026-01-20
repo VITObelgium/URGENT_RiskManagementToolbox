@@ -1,4 +1,3 @@
-# dispatcher.py
 import random
 from typing import Any, Callable
 
@@ -104,6 +103,7 @@ class ProblemDispatcherService:
                     self._boundaries,
                     self._n_size,
                     random.uniform,
+                    self._initial_state,
                     self._linear_inequalities,
                 )
                 self.logger.debug("Generated control vectors: %s", control_vectors)

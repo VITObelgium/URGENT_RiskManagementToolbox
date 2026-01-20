@@ -21,7 +21,7 @@ def dict_problem_definition():
                 "well_name": "W1",
                 "initial_state": {
                     "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "wellhead": {"x": 0, "y": 50, "z": 0},
                     "md": 200,
                     "perforations": [{"start_md": 100.0, "end_md": 200.0}],
                 },
@@ -30,7 +30,7 @@ def dict_problem_definition():
                         "x": {"lb": 0, "ub": 100},
                         "y": {"lb": 10, "ub": 200},
                     },
-                    "md": {"lb": 0, "ub": 100},
+                    "md": {"lb": 0, "ub": 300},
                 },
             },
             {

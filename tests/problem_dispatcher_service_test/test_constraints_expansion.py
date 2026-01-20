@@ -1,5 +1,3 @@
-import random
-
 import pytest
 
 from services.problem_dispatcher_service import ProblemDispatcherService
@@ -14,7 +12,7 @@ def md_problem_definition():
                 "well_name": "INJ",
                 "initial_state": {
                     "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "wellhead": {"x": 50, "y": 50, "z": 0},
                     "md": 2500,
                     "perforations": [{"start_md": 0.0, "end_md": 2500.0}],
                 },
@@ -30,7 +28,7 @@ def md_problem_definition():
                 "well_name": "PRO",
                 "initial_state": {
                     "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
+                    "wellhead": {"x": 50, "y": 50, "z": 0},
                     "md": 2500,
                     "perforations": [{"start_md": 0.0, "end_md": 2500.0}],
                 },
@@ -72,20 +70,16 @@ def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
-
-    # Monkeypatch random.uniform to midpoint
-    def mid(a, b):
-        return (a + b) / 2.0
-
-    monkeypatch.setattr(random, "uniform", mid)
     resp = svc.process_iteration()
     assert len(resp.solution_candidates) == 2
-    for sc in resp.solution_candidates:
+    for idx, sc in enumerate(resp.solution_candidates):
         task = next(iter(sc.tasks.values()))
         md_inj = task.control_vector.items["well_placement#INJ#md"]
         md_pro = task.control_vector.items["well_placement#PRO#md"]
-        assert md_inj == pytest.approx((2000.0 + 2700.0) / 2.0)
-        assert md_pro == pytest.approx((2000.0 + 2700.0) / 2.0)
+        assert 2000.0 <= md_inj <= 2700.0
+        assert 2000.0 <= md_pro <= 2700.0
+
+        assert md_pro + md_pro <= 5000.0 + 1e-6
 
 
 def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition):

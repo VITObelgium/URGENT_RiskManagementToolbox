@@ -71,17 +71,18 @@ def run_risk_management(
                 optimization_strategy=dispatcher.optimization_strategy,
             )
 
-            # Initialize metrics logger
-            metrics_logger = get_csv_logger(
-                "optimization_metrics.csv",
+            # Initialize generation summary logger
+            generation_summary_logger = get_csv_logger(
+                "generation_summary.csv",
                 columns=[
                     "generation",
                     "global_best",
-                    "population_min",
-                    "population_max",
-                    "population_avg",
-                    "population_std",
-                ],
+                    "min",
+                    "max",
+                    "avg",
+                    "std",
+                ]
+                + ["ind_" + str(idx) for idx in range(dispatcher.population_size)],
             )
 
             logger.info("Fetching boundaries from ProblemDispatcherService.")
@@ -145,19 +146,9 @@ def run_risk_management(
                     "Generation %d successfully completed for risk management.",
                     loop_controller.current_generation,
                 )
-                metrics = solution_updater.get_optimization_metrics()
-                logger.info(
-                    "Generation statistics: global_best=%.6f, population_min=%.6f, population_max=%.6f, population_avg=%.6f, population_std=%.6f",
-                    metrics.global_best,
-                    metrics.last_population_min,
-                    metrics.last_population_max,
-                    metrics.last_population_avg,
-                    metrics.last_population_std,
-                )
 
-                # Log metrics to CSV
-                metrics_logger.info(
-                    f"{loop_controller.current_generation},{metrics.global_best:.9f},{metrics.last_population_min:.9f},{metrics.last_population_max:.9f},{metrics.last_population_avg:.9f},{metrics.last_population_std:.9f}"
+                _log_generation_summary(
+                    solution_updater, generation_summary_logger, loop_controller
                 )
 
                 loop_controller.increment_generation()
@@ -227,3 +218,34 @@ def _prepare_simulation_cases(
 
     logger.info("All simulation cases prepared. Total count: %d", len(sim_cases))
     return sim_cases
+
+
+def _configure_generation_summary_logger(generation_summary_logger) -> None:
+    generation_summary_logger.info("generation,global_best,min,max,avg,std,population")
+
+
+def _log_generation_summary(
+    solution_updater, generation_summary_logger, loop_controller
+) -> None:
+    generation_summary = solution_updater.get_generation_summary()
+
+    logger.info(
+        "Generation statistics: global_best=%.6f, min=%.6f, max=%.6f, avg=%.6f, std=%.6f",
+        generation_summary.global_best,
+        generation_summary.min,
+        generation_summary.max,
+        generation_summary.avg,
+        generation_summary.std,
+    )
+
+    population_str = ",".join(f"{val:.9f}" for val in generation_summary.population)
+
+    generation_summary_logger.info(
+        f"{loop_controller.current_generation},"
+        f"{generation_summary.global_best:.9f},"
+        f"{generation_summary.min:.9f},"
+        f"{generation_summary.max:.9f},"
+        f"{generation_summary.avg:.9f},"
+        f"{generation_summary.std:.9f},"
+        f"{population_str}"
+    )

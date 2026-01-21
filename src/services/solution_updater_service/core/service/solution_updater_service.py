@@ -8,9 +8,9 @@ import numpy.typing as npt
 from common import OptimizationStrategy
 from logger import get_logger
 from services.solution_updater_service.core.engines import (
+    GenerationSummary,
     OptimizationEngineFactory,
     OptimizationEngineInterface,
-    SolutionMetrics,
 )
 from services.solution_updater_service.core.models import (
     ControlVector,
@@ -434,8 +434,8 @@ class SolutionUpdaterService:
             solution_updater_service=self,
         )
 
-    def get_optimization_metrics(self) -> SolutionMetrics:
-        return self._engine.metrics
+    def get_generation_summary(self) -> GenerationSummary:
+        return self._engine.generation_summary
 
     @property
     def global_best_result(self) -> float:

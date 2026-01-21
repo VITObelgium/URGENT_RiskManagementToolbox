@@ -104,7 +104,7 @@ class PSOEngine(OptimizationEngineInterface):
         new_velocities = self._calculate_new_velocity(parameters)
         self._update_state_velocities(new_velocities)
         new_positions = self._calculate_new_position(parameters, new_velocities)
-        self._update_metrics(penalized_results)
+        self._update_generation_summary(penalized_results)
         new_positions = self._reflect_and_clip_positions(new_positions, lb, ub)
 
         if A is not None and b is not None:

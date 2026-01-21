@@ -61,12 +61,12 @@ def test_run_risk_management_happy_path(
     mock_su.return_value = mock_su_inst
     mock_su_inst.loop_controller.running.side_effect = [True, False]
     mock_su_inst.loop_controller.current_generation = 1
-    mock_su_inst.get_optimization_metrics.return_value = MagicMock(
+    mock_su_inst.get_generation_summary.return_value = MagicMock(
         global_best=1.0,
-        last_population_min=1.0,
-        last_population_max=2.0,
-        last_population_avg=1.5,
-        last_population_std=0.5,
+        min=1.0,
+        max=2.0,
+        avg=1.5,
+        std=0.5,
     )
     mock_su_inst.process_request.return_value = MagicMock(
         next_iter_solutions=[{"a": 1}]
@@ -74,7 +74,7 @@ def test_run_risk_management_happy_path(
     mock_cvm.convert_su_to_pd.return_value = None
     mock_csv_logger.return_value = MagicMock(info=MagicMock())
     mock_su_inst.global_best_result = 1.23
-    mock_su_inst.global_best_controll_vector = MagicMock(items={"x": 5})
+    mock_su_inst.global_best_control_vector = MagicMock(items={"x": 5})
     with patch(
         "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
         return_value={"x": 5},

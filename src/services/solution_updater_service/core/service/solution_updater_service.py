@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 from common import OptimizationStrategy
-from logger import get_logger
+from logger import get_csv_logger, get_logger
 from services.solution_updater_service.core.engines import (
+    GenerationSummary,
     OptimizationEngineFactory,
     OptimizationEngineInterface,
-    SolutionMetrics,
 )
 from services.solution_updater_service.core.models import (
     ControlVector,
@@ -90,6 +91,18 @@ class _Mapper:
     parameters and results for a population of candidates, particularly when dealing
     with large datasets or computational optimizations.
     """
+
+    @property
+    def parameters_name(self) -> list[str]:
+        if not self._state:
+            raise RuntimeError("Mapper state is not initialized.")
+        return list(self._state.control_vector_mapping.keys())
+
+    @property
+    def results_name(self) -> list[str]:
+        if not self._state:
+            raise RuntimeError("Mapper state is not initialized.")
+        return list(self._state.results_mapping.keys())
 
     def __init__(self) -> None:
         self._state: _MapperState | None = None
@@ -434,8 +447,7 @@ class SolutionUpdaterService:
             solution_updater_service=self,
         )
 
-    def get_optimization_metrics(self) -> SolutionMetrics:
-        return self._engine.metrics
+        self._control_vector_logger: logging.Logger | None = None
 
     @property
     def global_best_result(self) -> float:
@@ -447,6 +459,17 @@ class SolutionUpdaterService:
         control_vector_array = np.array([self._engine.global_best_control_vector])
         first_index = 0
         return self._mapper.to_control_vectors(control_vector_array)[first_index]
+
+    @property
+    def parameters_name(self) -> list[str]:
+        return self._mapper.results_name
+
+    @property
+    def results_name(self) -> list[str]:
+        return self._mapper.results_name
+
+    def get_generation_summary(self) -> GenerationSummary:
+        return self._engine.generation_summary
 
     def process_request(
         self, request_dict: dict[str, Any]
@@ -509,6 +532,8 @@ class SolutionUpdaterService:
         control_vector, cost_function_values = self._mapper.to_numpy(
             config.solution_candidates
         )
+
+        self._log_control_vector_and_values(control_vector, cost_function_values)
 
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints
@@ -576,3 +601,21 @@ class SolutionUpdaterService:
         self._logger.info("Control vectors update request processed successfully.")
 
         return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
+
+    def _log_control_vector_and_values(
+        self, control_vector, cost_function_values
+    ) -> None:
+        if self._control_vector_logger is None:
+            self._control_vector_logger = get_csv_logger(
+                "control_vector_logger.csv",
+                logger_name="control_vector_logger",
+                columns=["generation", "individual"]
+                + [p for p in self._mapper.parameters_name]
+                + [r for r in self._mapper.results_name],
+            )
+
+        for idx, val in enumerate(np.hstack((control_vector, cost_function_values))):
+            v_str = ",".join(f"{v:.9f}" for v in val)
+            self._control_vector_logger.info(
+                f"{self.loop_controller.current_generation},{idx},{v_str}"
+            )

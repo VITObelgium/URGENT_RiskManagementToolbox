@@ -68,6 +68,10 @@ class ProblemDispatcherService:
         return self._problem_definition.optimization_parameters.max_generations
 
     @property
+    def population_size(self) -> int:
+        return self._n_size
+
+    @property
     def patience(self) -> int:
         return self._problem_definition.optimization_parameters.patience
 

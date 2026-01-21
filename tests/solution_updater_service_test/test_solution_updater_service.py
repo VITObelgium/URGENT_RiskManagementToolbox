@@ -3,7 +3,7 @@ import numpy.typing as npt
 import pytest
 
 from common import OptimizationStrategy
-from services.solution_updater_service.core.engines import SolutionMetrics
+from services.solution_updater_service.core.engines import GenerationSummary
 from services.solution_updater_service.core.models import (
     OptimizationEngine,
     SolutionUpdaterServiceResponse,
@@ -80,7 +80,7 @@ def mocked_engine_with_metrics():  # type: ignore
 
     class MockedOptimizationEngine:
         def __init__(self) -> None:
-            self._metrics: SolutionMetrics | None = None
+            self._generation_summary: GenerationSummary | None = None
             self._results_history: list[npt.NDArray[np.float64]] = []
 
         def update_solution_to_next_iter(
@@ -100,26 +100,27 @@ def mocked_engine_with_metrics():  # type: ignore
             population_avg = float(np.average(new_results))
             population_std = float(np.std(new_results))
 
-            if self._metrics is None:  # first run
+            if self._generation_summary is None:  # first run
                 global_min = population_min
             else:
-                global_min = min(population_min, self._metrics.global_best)
+                global_min = min(population_min, self._generation_summary.global_best)
 
-            self._metrics = SolutionMetrics(
+            self._generation_summary = GenerationSummary(
                 global_best=global_min,
-                last_population_min=population_min,
-                last_population_max=population_max,
-                last_population_avg=population_avg,
-                last_population_std=population_std,
+                min=population_min,
+                max=population_max,
+                avg=population_avg,
+                std=population_std,
+                population=new_results.flatten().tolist(),
             )
 
         @property
-        def metrics(self) -> SolutionMetrics:
-            return ensure_not_none(self._metrics)
+        def generation_summary(self) -> GenerationSummary:
+            return ensure_not_none(self._generation_summary)
 
         @property
         def global_best_result(self) -> float:
-            return self.metrics.global_best
+            return self.generation_summary.global_best
 
         @property
         def global_best_control_vector(self) -> npt.NDArray[np.float64]:
@@ -619,10 +620,11 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
             },
             "expected_metrics": {
                 "global_min": 1.0,
-                "last_population_min": 1.0,
-                "last_population_max": 3.0,
-                "last_population_avg": 2.0,
-                "last_population_std": 0.816496580927726,  # sqrt(2/3)
+                "min": 1.0,
+                "max": 3.0,
+                "avg": 2.0,
+                "std": 0.816496580927726,  # sqrt(2/3)
+                "population": [1.0, 2.0, 3.0],
             },
         },
         # Second population: [0.5, 1.5, 2.5] - new global min
@@ -645,10 +647,11 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
             },
             "expected_metrics": {
                 "global_min": 0.5,  # Updated global min
-                "last_population_min": 0.5,
-                "last_population_max": 2.5,
-                "last_population_avg": 1.5,
-                "last_population_std": 0.816496580927726,  # sqrt(2/3)
+                "min": 0.5,
+                "max": 2.5,
+                "avg": 1.5,
+                "std": 0.816496580927726,  # sqrt(2/3),
+                "population": [0.5, 1.5, 2.5],
             },
         },
         # Third population: [2.0, 3.0, 4.0] - no new global min
@@ -671,10 +674,11 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
             },
             "expected_metrics": {
                 "global_min": 0.5,  # Keeps previous global min
-                "last_population_min": 2.0,
-                "last_population_max": 4.0,
-                "last_population_avg": 3.0,
-                "last_population_std": 0.816496580927726,  # sqrt(2/3)
+                "min": 2.0,
+                "max": 4.0,
+                "avg": 3.0,
+                "std": 0.816496580927726,  # sqrt(2/3)
+                "population": [2.0, 3.0, 4.0],
             },
         },
     ]
@@ -685,25 +689,28 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
         service.process_request(test_case["request"])
 
         # Get the current metrics
-        metrics = service.get_optimization_metrics()
+        metrics = service.get_generation_summary()
         expected = test_case["expected_metrics"]
 
         # Verify all metric values
         assert metrics.global_best == expected["global_min"], (
             f"Population {i}: Wrong global minimum"
         )
-        assert metrics.last_population_min == expected["last_population_min"], (
+        assert metrics.min == expected["min"], (
             f"Population {i}: Wrong population minimum"
         )
-        assert metrics.last_population_max == expected["last_population_max"], (
+        assert metrics.max == expected["max"], (
             f"Population {i}: Wrong population maximum"
         )
-        assert np.isclose(
-            metrics.last_population_avg, expected["last_population_avg"]
-        ), f"Population {i}: Wrong population average"
-        assert np.isclose(
-            metrics.last_population_std, expected["last_population_std"]
-        ), f"Population {i}: Wrong population standard deviation"
+        assert np.isclose(metrics.avg, expected["avg"]), (
+            f"Population {i}: Wrong population average"
+        )
+        assert np.isclose(metrics.std, expected["std"]), (
+            f"Population {i}: Wrong population standard deviation"
+        )
+        assert metrics.population == expected["population"], (
+            f"Population {i}: Wrong population values"
+        )
 
 
 def inverted_sphere_function(x: np.ndarray) -> float:

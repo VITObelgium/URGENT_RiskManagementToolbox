@@ -10,19 +10,21 @@ from common import OptimizationStrategy
 from services.solution_updater_service.core.utils import ensure_not_none
 
 
-@dataclass(frozen=True)
-class SolutionMetrics:
+@dataclass(frozen=True, slots=True)
+class GenerationSummary:
     global_best: float
 
-    last_population_min: float
-    last_population_max: float
-    last_population_avg: float
-    last_population_std: float
+    min: float
+    max: float
+    avg: float
+    std: float
+
+    population: list[float]
 
 
 class OptimizationEngineInterface(ABC):
     def __init__(self) -> None:
-        self._metrics: SolutionMetrics | None = None
+        self._generation_summary: GenerationSummary | None = None
         self._strategy: OptimizationStrategy | None = None
 
     @abstractmethod
@@ -37,18 +39,18 @@ class OptimizationEngineInterface(ABC):
     ) -> npt.NDArray[np.float64]: ...
 
     @property
-    def metrics(self) -> SolutionMetrics:
-        return ensure_not_none(self._metrics)
+    def generation_summary(self) -> GenerationSummary:
+        return ensure_not_none(self._generation_summary)
 
     @property
     def global_best_result(self) -> float:
-        return self.metrics.global_best
+        return self.generation_summary.global_best
 
     @property
     @abstractmethod
     def global_best_control_vector(self) -> npt.NDArray[np.float64]: ...
 
-    def _update_metrics(self, new_results: npt.NDArray[np.float64]) -> None:
+    def _update_generation_summary(self, new_results: npt.NDArray[np.float64]) -> None:
         """Updates metrics based on optimization strategy."""
         # Filter out infinite values for statistics calculation
         finite_mask = np.isfinite(new_results)
@@ -72,21 +74,22 @@ class OptimizationEngineInterface(ABC):
             population_avg = np.nan  # No meaningful average
             population_std = np.nan  # No meaningful std deviation
 
-        if self._metrics is None:  # first run
+        if self._generation_summary is None:  # first run
             if self._strategy == OptimizationStrategy.MINIMIZE:
                 global_best = population_min
             else:
                 global_best = population_max
         else:
             if self._strategy == OptimizationStrategy.MINIMIZE:
-                global_best = min(population_min, self._metrics.global_best)
+                global_best = min(population_min, self._generation_summary.global_best)
             else:
-                global_best = max(population_max, self._metrics.global_best)
+                global_best = max(population_max, self._generation_summary.global_best)
 
-        self._metrics = SolutionMetrics(
+        self._generation_summary = GenerationSummary(
             global_best=global_best,
-            last_population_min=population_min,
-            last_population_max=population_max,
-            last_population_avg=population_avg,
-            last_population_std=population_std,
+            min=population_min,
+            max=population_max,
+            avg=population_avg,
+            std=population_std,
+            population=new_results.flatten().tolist(),
         )

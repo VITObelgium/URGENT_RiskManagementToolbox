@@ -10,7 +10,10 @@ from pydantic.functional_validators import AfterValidator
 from typing_extensions import Annotated
 
 from common import OptimizationStrategy
+from logger import get_logger
 from services.problem_dispatcher_service.core.models import ControlVector, WellModel
+
+logger = get_logger(__name__)
 
 
 class VariableBnd(BaseModel, extra="forbid"):
@@ -106,6 +109,17 @@ class OptimizationParameters(BaseModel, extra="forbid"):
                 f"worker_count {value} exceeds available physical cores {physical_cores}"
             )
         return value
+
+    @model_validator(mode="after")
+    def validate_worker_count_not_greater_than_population_size(
+        self,
+    ) -> OptimizationParameters:
+        if self.worker_count > self.population_size:
+            self.worker_count = self.population_size
+            logger.warning(
+                f"Worker_count {self.worker_count} exceeds population_size {self.population_size}. Setting worker_count to population_size."
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_linear_inequalities(self) -> OptimizationParameters:

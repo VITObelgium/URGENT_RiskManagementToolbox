@@ -74,6 +74,7 @@ def run_risk_management(
             # Initialize generation summary logger
             generation_summary_logger = get_csv_logger(
                 "generation_summary.csv",
+                logger_name="generation_summary_logger",
                 columns=[
                     "generation",
                     "global_best",

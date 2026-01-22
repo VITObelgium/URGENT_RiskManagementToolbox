@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 def run_risk_management(
     problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
-):
+) -> tuple[float, Any] | None:
     """
     Main entry point for running risk management.
 
@@ -161,7 +161,7 @@ def run_risk_management(
 
         except KeyboardInterrupt:
             logger.warning("Risk management process interrupted by user.")
-            return
+            return None
         except Exception as e:
             logger.error("Error in risk management process: %s", str(e), exc_info=True)
             raise
@@ -170,6 +170,9 @@ def run_risk_management(
         "Optimization results: Fitness value = %f Control vector = %s",
         solution_updater.global_best_result,
         parse_flat_dict_to_nested(solution_updater.global_best_control_vector.items),
+    )
+    return solution_updater.global_best_result, parse_flat_dict_to_nested(
+        solution_updater.global_best_control_vector.items
     )
 
 

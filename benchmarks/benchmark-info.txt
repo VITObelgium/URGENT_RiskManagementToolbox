@@ -1,0 +1,15 @@
+ =============== rastrigin_benchmark.json / rastrigin_benchmark.zip / ==================================================
+This benchmark uses the 4-dimensional Rastrigin function as a benchmark for evaluating optimization algorithms.
+The Rastrigin function is a standard non-convex test function with many regularly distributed local minima,
+making it suitable for assessing global optimization performance.
+
+The function is defined on four continuous variables with typical bounds of [-5.12, 5.12].
+It has a known global minimum at x = (0, 0, 0, 0), where the function value is zero.
+
+Toolbox using well placement module to solve the problem:
+ x[0] = well X1 wellhead x
+ x[1] = well X1 wellhead y
+ x[2] = well X2 wellhead x
+ x[3] = well X2 wellhead y
+
+========================================================================================================================

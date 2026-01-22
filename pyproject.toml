@@ -80,11 +80,14 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "src/logger/*",
+    "src/interfaces/*",
+    "benchmarks/*",
     "*_pb2.py",
     "*_pb2_grpc.py",
     "_build_proto.py",
     "_test_.py",
-    "*/worker/src/*"
+    "*/worker/src/*",
+    "*/server/src/*",
 ]
 exclude_lines = [
     "if __name__ == '__main__':"

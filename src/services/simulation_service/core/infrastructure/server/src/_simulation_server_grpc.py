@@ -141,7 +141,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                     )
 
                     # Format for better readability
-                    logger.info(
+                    logger.debug(
                         f"Processing rate: {rate_per_minute:.1f} jobs/min, estimated time remaining: {est_remaining_minutes:.1f} minutes"
                     )
 
@@ -157,7 +157,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
         if total_minutes > 0:
             jobs_per_minute = total_simulations / total_minutes
-            logger.info(f"Average processing rate: {jobs_per_minute:.1f} jobs/minute")
+            logger.debug(f"Average processing rate: {jobs_per_minute:.1f} jobs/minute")
 
         # Count successes and failures
         simulations_jobs = self._completed_jobs.values()
@@ -171,16 +171,24 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             for job in simulations_jobs
             if getattr(job, "status", None) == sm.JobStatus.FAILED
         )
+        timeout_count = sum(
+            1
+            for job in simulations_jobs
+            if getattr(job, "status", None) == sm.JobStatus.TIMEOUT
+        )
 
         # Log summary with appropriate level based on failures
         if failed_count > 0:
             logger.warning(
-                f"Completed with {success_count} successful and {failed_count} failed simulation(s)"
+                f"Completed with {success_count} successful, {failed_count} failed and {timeout_count} timeout simulation(s)"
             )
         else:
             logger.info(f"All {success_count} simulation(s) completed successfully")
 
-        simulations = [j.simulation for j in simulations_jobs]
+        # Sort completed jobs by job_id to maintain order
+        sorted_jobs = sorted(self._completed_jobs.items(), key=lambda x: x[0])
+        simulations = [job.simulation for _, job in sorted_jobs]
+
         logger.info(f"Returning {len(simulations)} completed simulation(s).")
         return sm.Simulations(simulations=simulations)
 

@@ -86,7 +86,7 @@ def run_risk_management(
                 + ["ind_" + str(idx) for idx in range(dispatcher.population_size)],
             )
 
-            logger.info("Fetching boundaries from ProblemDispatcherService.")
+            logger.debug("Fetching boundaries from ProblemDispatcherService.")
             boundaries = dispatcher.boundaries
             logger.debug("Boundaries retrieved: %s", boundaries)
 
@@ -97,8 +97,7 @@ def run_risk_management(
 
             while loop_controller.running():
                 logger.info(
-                    "Starting generation %d for risk management.",
-                    loop_controller.current_generation,
+                    f"Starting generation {loop_controller.current_generation}",
                 )
                 # Generate or update solutions
                 solutions = dispatcher.process_iteration(next_solutions)
@@ -143,13 +142,13 @@ def run_risk_management(
                     response.next_iter_solutions
                 )
 
-                logger.info(
-                    "Generation %d successfully completed for risk management.",
-                    loop_controller.current_generation,
-                )
-
                 _log_generation_summary(
                     solution_updater, generation_summary_logger, loop_controller
+                )
+
+                logger.info(
+                    "Generation %d successfully completed.",
+                    loop_controller.current_generation,
                 )
 
                 loop_controller.increment_generation()
@@ -186,7 +185,7 @@ def _prepare_simulation_cases(
     Returns:
         list: Simulation cases ready for processing by the simulation service.
     """
-    logger.info("Preparing simulation cases.")
+    logger.debug("Preparing simulation cases.")
     sim_cases = []
 
     for index, solution in enumerate(solutions.solution_candidates):

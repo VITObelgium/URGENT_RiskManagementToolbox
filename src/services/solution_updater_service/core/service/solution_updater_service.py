@@ -538,7 +538,6 @@ class SolutionUpdaterService:
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints
         )
-        self._logger.info("Optimization boundaries set")
         A_np = None
         b_np = None
 

@@ -34,7 +34,7 @@ class ProblemDispatcherService:
             problem_definition (ProblemDispatcherDefinition): The problem definition to process.
         """
         self.logger = get_logger(__name__)
-        self.logger.info("Initializing ProblemDispatcherService")
+        self.logger.debug("Initializing ProblemDispatcherService")
 
         try:
             self._problem_definition = problem_definition
@@ -52,7 +52,7 @@ class ProblemDispatcherService:
             self._task_builder = TaskBuilder(
                 self._initial_state, self._handlers, self._service_type_map
             )
-            self.logger.info("ProblemDispatcherService initialized successfully.")
+            self.logger.debug("ProblemDispatcherService initialized successfully.")
         except Exception as e:
             self.logger.error(
                 "Failed to initialize ProblemDispatcherService: %s", str(e)
@@ -95,7 +95,7 @@ class ProblemDispatcherService:
         Returns:
             ProblemDispatcherServiceResponse: Response containing solution candidates.
         """
-        self.logger.info("Processing iteration.")
+        self.logger.debug("Processing iteration.")
         self.logger.debug(
             "Processing iteration. next_iter_solutions: %s",
             next_iter_solutions if next_iter_solutions else "None",
@@ -141,7 +141,7 @@ class ProblemDispatcherService:
             log_message (str): Log message indicating the operation.
             merge_results (bool): If True, merge the processed results into one dictionary.
         """
-        self.logger.info(f"processing problem items: {log_message}")
+        self.logger.debug(f"Processing problem items: {log_message}")
         try:
             # Add type annotation for the result variable
             result: dict[str, Any] | None = {} if merge_results else None

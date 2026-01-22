@@ -257,7 +257,7 @@ def simulation_process_context_manager(
     worker_count: int,
 ) -> Generator[None, None, None]:
     """Context manager to start/stop local worker processes."""
-    logger.info("Entering local process cluster context.")
+    logger.debug("Entering local process cluster context.")
     manager = ProcessClusterManager()
     try:
         manager.start(worker_count=worker_count)

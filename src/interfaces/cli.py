@@ -1,6 +1,6 @@
 import argparse
 
-from interfaces.common import risk_management
+from interfaces import risk_management
 
 
 def cli():
@@ -32,7 +32,6 @@ def cli():
 
     args = parser.parse_args()
 
-    # Use the new function with parsed arguments
     try:
         _ = risk_management(
             config_file=args.config_file,

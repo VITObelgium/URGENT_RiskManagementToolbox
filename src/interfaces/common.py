@@ -63,3 +63,4 @@ def risk_management(
             logger.info("Created results archive: %s", zip_path)
         except Exception as ze:
             logger.error("Failed to create results archive: %s", ze)
+            raise

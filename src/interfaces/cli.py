@@ -1,11 +1,6 @@
 import argparse
-import json
-import os
 
-from logger import configure_logger, get_logger
-from logger.utils import zip_results
-from orchestration.risk_management_service import run_risk_management
-from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
+from interfaces import risk_management
 
 
 def cli():
@@ -37,45 +32,11 @@ def cli():
 
     args = parser.parse_args()
 
-    configure_logger()
-    logger = get_logger(__name__)
-    logger.info("Risk management toolbox started from CLI.")
-
-    if args.use_docker:
-        logger.info("Using Docker for simulations.")
-        os.environ["OPEN_DARTS_RUNNER"] = "docker"
-    else:
-        logger.info("Using multi-threading for simulations.")
-        os.environ["OPEN_DARTS_RUNNER"] = "thread"
-
-    # Load the problem_definition from the JSON file
     try:
-        with open(args.config_file, "r") as file:
-            problem_definition = ProblemDispatcherDefinition.model_validate(
-                json.load(file)
-            )
-    except Exception as e:
-        logger.error(f"Failed to load configuration file: {e}")
-        # Always attempt to zip (even on failure)
-        try:
-            zip_path = zip_results()
-            logger.info("Created results archive: %s", zip_path)
-        except Exception as ze:
-            logger.error("Failed to create results archive: %s", ze)
-        exit(1)
-
-    # Invoke run_risk_management with the required arguments
-    try:
-        run_risk_management(
-            problem_definition=problem_definition,
-            simulation_model_archive=args.model_file,
+        _ = risk_management(
+            config_file=args.config_file,
+            model_file=args.model_file,
+            use_docker=args.use_docker,
         )
-        logger.info("Risk management process completed successfully.")
-    except Exception as e:
-        logger.error(f"An error occurred: {e}")
-    finally:
-        try:
-            zip_path = zip_results()
-            logger.info("Created results archive: %s", zip_path)
-        except Exception as ze:
-            logger.error("Failed to create results archive: %s", ze)
+    except Exception:
+        exit(1)

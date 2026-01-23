@@ -1,0 +1,60 @@
+{
+  "well_placement": [
+    {
+      "well_name": "X1",
+      "initial_state": {
+        "well_type": "IWell",
+        "md": 10,
+        "md_step": 5.0,
+        "wellhead": {
+          "x": 2.0,
+          "y": -2.0,
+          "z": 0
+        }
+      },
+      "optimization_constraints": {
+        "wellhead": {
+          "x": {
+            "lb": -5.12,
+            "ub": 5.12
+          },
+          "y": {
+            "lb": -5.12,
+            "ub": 5.12
+          }
+        }
+      }
+    },
+    {
+      "well_name": "X2",
+      "initial_state": {
+        "well_type": "IWell",
+        "md": 10,
+        "md_step": 5.0,
+        "wellhead": {
+          "x": -4.0,
+          "y": 3.1,
+          "z": 0
+        }
+      },
+      "optimization_constraints": {
+        "wellhead": {
+          "x": {
+            "lb": -5.12,
+            "ub": 5.12
+          },
+          "y": {
+            "lb": -5.12,
+            "ub": 5.12
+          }
+        }
+      }
+    }
+  ],
+  "optimization_parameters": {
+    "optimization_strategy": "minimize",
+    "population_size" : 100,
+    "max_generations" : 500,
+    "patience" : 501
+  }
+}

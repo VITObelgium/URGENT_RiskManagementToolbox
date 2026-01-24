@@ -285,19 +285,24 @@ def _start_queue_listener() -> None:
 
 
 def _ensure_logfile_path() -> str | None:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    log_dir = os.path.join(base_dir, "../../log")
+    pyproject_path = find_pyproject_toml()
+    if pyproject_path is not None:
+        log_dir = (pyproject_path.parent / "log").resolve()
+    else:
+        base_dir = Path(__file__).resolve().parent
+        log_dir = (base_dir / "../../log").resolve()
+
     file_name = "pytest_log.log" if "pytest" in sys.modules else "main_urgent_log.log"
     if "pytest" not in sys.modules and log_to_datetime_log_file():
         file_name = (
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
         )
     try:
-        os.makedirs(log_dir, exist_ok=True)
-        full_path = os.path.join(log_dir, file_name)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        full_path = log_dir / file_name
         with open(full_path, "a", encoding="utf-8"):
             pass
-        return full_path
+        return str(full_path)
     except OSError as e:
         sys.stderr.write(
             f"Warning: Could not create/access log directory/file in {log_dir}: {e}\n"

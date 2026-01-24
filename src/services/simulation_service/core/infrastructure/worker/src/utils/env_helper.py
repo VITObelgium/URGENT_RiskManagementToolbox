@@ -1,8 +1,10 @@
 import asyncio
 import threading
+from functools import lru_cache
 from pathlib import Path
 
 
+@lru_cache(maxsize=1)
 def _find_repo_root(marker_file: str = "pyproject.toml") -> Path:
     """Dynamically find the repository root by searching for a marker file (e.g., pyproject.toml).
 
@@ -15,6 +17,7 @@ def _find_repo_root(marker_file: str = "pyproject.toml") -> Path:
     raise RuntimeError(f"Repository root with {marker_file} not found from {__file__}")
 
 
+@lru_cache(maxsize=32)
 def compute_worker_temp_dir(worker_id: str | int) -> Path:
     """Compute the absolute temp directory path for a given worker."""
     repo_root = _find_repo_root()
@@ -22,11 +25,11 @@ def compute_worker_temp_dir(worker_id: str | int) -> Path:
 
 
 async def sleep_with_stop(
-    delay: float, stop_flag: threading.Event | None = None, granularity: float = 0.1
+    delay: float, stop_flag: threading.Event | None = None, granularity: float = 0.5
 ) -> None:
     """Sleep up to `delay` seconds but return early if `stop_flag` is set.
 
-    Uses small async sleep slices to remain responsive during shutdown.
+    Uses async sleep slices to remain responsive during shutdown.
     """
     if delay <= 0:
         return
@@ -34,7 +37,7 @@ async def sleep_with_stop(
         await asyncio.sleep(delay)
         return
     remaining = float(delay)
-    step = max(0.01, float(granularity))
+    step = max(0.05, float(granularity))
     while remaining > 0:
         if stop_flag.is_set():
             return

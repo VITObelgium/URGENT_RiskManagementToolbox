@@ -461,3 +461,6 @@ orchestration_files/
 pixi.lock
 # lsp pyright custom config
 pyrightconfig.json
+# Local development files
+log/
+data/

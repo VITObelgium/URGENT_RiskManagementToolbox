@@ -10,7 +10,7 @@ import sys
 import threading
 from collections import defaultdict
 from collections.abc import Sequence
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Callable, Protocol, TypedDict
 
@@ -296,6 +296,7 @@ class OpenDartsConnector(ConnectorInterface):
         return tuple(filtered_perforations_points)
 
     @staticmethod
+    @lru_cache(maxsize=1)
     def _repo_root() -> Path:
         here = Path(__file__).resolve()
         for parent in here.parents:

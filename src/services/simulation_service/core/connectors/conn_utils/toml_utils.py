@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 
 import tomli
@@ -7,6 +8,7 @@ from logger import get_logger
 logger = get_logger(__name__)
 
 
+@lru_cache(maxsize=1)
 def _find_pyproject_toml(start: Path | None = None) -> Path | None:
     """
     Locate pyproject.toml by checking:
@@ -34,6 +36,7 @@ def _find_pyproject_toml(start: Path | None = None) -> Path | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def get_timeout_value() -> int:
     """
     Get the timeout value in seconds."""

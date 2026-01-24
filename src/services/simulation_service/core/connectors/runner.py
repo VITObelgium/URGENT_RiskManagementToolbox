@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import subprocess
 import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Protocol
 
@@ -22,6 +23,15 @@ from .common import (
 from .conn_utils import ManagedSubprocess, get_timeout_value
 
 logger = get_logger("threading-worker", filename=__name__)
+
+
+@lru_cache(maxsize=1)
+def _get_base_environ() -> dict[str, str]:
+    """Cache the base environment dict to avoid repeated copies.
+
+    Callers should copy() this if they need to modify it.
+    """
+    return dict(os.environ)
 
 
 class SimulationRunner(Protocol):
@@ -101,16 +111,18 @@ class SubprocessRunner:
                 config,
             ]
 
-            env = os.environ.copy()
+            base_env = _get_base_environ()
             if work_dir is not None:
-                env.update({"PWD": str(work_dir)})
+                env = dict(base_env)
+                env["PWD"] = str(work_dir)
+            else:
+                env = base_env
 
-            _tw_logger = get_logger("threading-worker")
             manager = managed_factory(
                 command_args=command,
                 stream_reader_func=stream_reader,
-                logger_info_func=_tw_logger.info,
-                logger_error_func=_tw_logger.error,
+                logger_info_func=logger.info,
+                logger_error_func=logger.error,
                 env=env,
                 thread_name_prefix=f"worker-{wid}" if wid else None,
             )
@@ -144,7 +156,8 @@ class SubprocessRunner:
                                     )
                     except subprocess.TimeoutExpired:
                         logger.warning(
-                            f"Subprocess timed out after {self._timeout_duration} seconds. Terminating."
+                            "Subprocess timed out after %s seconds. Terminating.",
+                            self._timeout_duration,
                         )
                         if process.poll() is None:
                             process.terminate()
@@ -190,18 +203,24 @@ class SubprocessRunner:
                                 )
                         return SimulationStatus.FAILED, default_failed_results
 
+                    if manager.stdout_thread and manager.stdout_thread.is_alive():
+                        manager.stdout_thread.join(timeout=5)
+                    if manager.stderr_thread and manager.stderr_thread.is_alive():
+                        manager.stderr_thread.join(timeout=5)
+
                     full_stdout = "\n".join(manager.stdout_lines)
                     broadcast_results = self._broadcast_results_parser(full_stdout)
                     return SimulationStatus.SUCCESS, broadcast_results
 
             except FileNotFoundError:
                 logger.exception(
-                    f"Failed to start subprocess. Command '{' '.join(command)}' not found."
+                    "Failed to start subprocess. Command '%s' not found.",
+                    " ".join(command),
                 )
                 return SimulationStatus.FAILED, default_failed_results
             except Exception as e:
                 logger.exception(
-                    f"An error occurred while running the simulation subprocess: {e}"
+                    "An error occurred while running the simulation subprocess: %s", e
                 )
                 return SimulationStatus.FAILED, default_failed_results
 

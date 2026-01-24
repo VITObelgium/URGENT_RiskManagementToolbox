@@ -1,5 +1,7 @@
 import logging
 import sys
+from functools import lru_cache
+from logging.handlers import MemoryHandler
 from pathlib import Path
 
 from logger.orchestration_logger import _start_external_log_terminal
@@ -21,10 +23,12 @@ class _ThreadNameFilter(logging.Filter):
         return name == self._thread_name or name.startswith(self._thread_name + ":")
 
 
+@lru_cache(maxsize=1)
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+@lru_cache(maxsize=1)
 def _ensure_log_dir() -> Path:
     log_dir = _project_root() / "log"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -53,13 +57,22 @@ def _formatter() -> logging.Formatter:
     return logging.Formatter(fmt=fmt, datefmt=datefmt)
 
 
+# Buffer size for MemoryHandler - flushes after this many records
+_MEMORY_HANDLER_CAPACITY = 100
+
+
 def _add_unique_file_handler(
     target_logger: logging.Logger,
     file_path: Path,
     level: int = logging.INFO,
     record_filter: logging.Filter | None = None,
+    use_buffering: bool = True,
 ) -> None:
-    """Attach a FileHandler to logger if an identical one isn't present."""
+    """Attach a FileHandler to logger if an identical one isn't present.
+
+    If use_buffering is True, wraps the FileHandler in a MemoryHandler that
+    buffers records and flushes them in batches, reducing I/O overhead.
+    """
     file_path = file_path.resolve()
     for h in target_logger.handlers:
         if isinstance(h, logging.FileHandler):
@@ -69,13 +82,36 @@ def _add_unique_file_handler(
                 existing = None
             if existing == file_path:
                 return
+        elif isinstance(h, MemoryHandler) and hasattr(h, "target"):
+            if isinstance(h.target, logging.FileHandler):
+                try:
+                    existing = Path(getattr(h.target, "baseFilename", "")).resolve()
+                except Exception:
+                    existing = None
+                if existing == file_path:
+                    return
+
     logger_mode = get_file_log_mode()
-    handler = logging.FileHandler(file_path, mode=logger_mode, encoding="utf-8")
-    handler.setLevel(level)
-    handler.setFormatter(_formatter())
+    file_handler = logging.FileHandler(file_path, mode=logger_mode, encoding="utf-8")
+    file_handler.setLevel(level)
+    file_handler.setFormatter(_formatter())
     if record_filter is not None:
-        handler.addFilter(record_filter)
-    target_logger.addHandler(handler)
+        file_handler.addFilter(record_filter)
+
+    if use_buffering:
+        memory_handler = MemoryHandler(
+            capacity=_MEMORY_HANDLER_CAPACITY,
+            flushLevel=logging.ERROR,
+            target=file_handler,
+            flushOnClose=True,
+        )
+        memory_handler.setLevel(level)
+        if record_filter is not None:
+            memory_handler.addFilter(record_filter)
+        target_logger.addHandler(memory_handler)
+    else:
+        target_logger.addHandler(file_handler)
+
     try:
         target_logger.propagate = True
     except Exception:

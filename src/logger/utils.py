@@ -9,6 +9,7 @@ import subprocess
 import sys
 import zipfile
 from datetime import datetime
+from functools import lru_cache
 from logging import Logger
 from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import Queue
@@ -20,6 +21,7 @@ _listener: QueueListener | None = None
 _shutdown_registered: bool = False
 
 
+@lru_cache(maxsize=1)
 def find_pyproject_toml(start: Path | None = None) -> Path | None:
     """
     Locate pyproject.toml by checking:
@@ -315,6 +317,9 @@ def _stop_listener() -> None:
         _queue = None
 
 
+_log_config_cache: dict[str, Any] | None = None
+
+
 def get_log_config() -> dict[str, Any]:
     """
     Load the logging.config dictionary from pyproject.toml.
@@ -324,6 +329,10 @@ def get_log_config() -> dict[str, Any]:
     dict[str, Any]
         The logging configuration compatible with logging.config.dictConfig.
     """
+    global _log_config_cache
+    if _log_config_cache is not None:
+        return _log_config_cache
+
     pyproject_path = find_pyproject_toml()
     import tomli
 
@@ -333,6 +342,7 @@ def get_log_config() -> dict[str, Any]:
                 pyproject_toml = tomli.load(f)
             config = pyproject_toml.get("logging", {}).get("config")
             if isinstance(config, dict):
+                _log_config_cache = config
                 return config
         except Exception as e:
             sys.stderr.write(
@@ -340,7 +350,7 @@ def get_log_config() -> dict[str, Any]:
             )
 
     # Fallback
-    return {
+    _log_config_cache = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
@@ -364,6 +374,7 @@ def get_log_config() -> dict[str, Any]:
         "loggers": {},
         "root": {"level": "INFO", "handlers": ["console"]},
     }
+    return _log_config_cache
 
 
 def get_log_config_path() -> Path:

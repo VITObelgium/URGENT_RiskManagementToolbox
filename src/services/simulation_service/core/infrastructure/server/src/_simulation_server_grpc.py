@@ -89,11 +89,18 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                     f"Jobs timed out after {self._job_timeout_seconds}s: {timed_out_jobs}"
                 )
                 for job_id in timed_out_jobs:
-                    # Create a failed result for timed-out job
-                    timeout_result = sm.SimulationResult(
-                        simulation=sm.Simulation(),
+                    # Create a timeout result with the original simulation and empty result
+                    original_simulation = self._running_jobs[job_id]
+                    timeout_simulation = sm.Simulation(
+                        input=original_simulation.input,
+                        control_vector=original_simulation.control_vector,
+                        result=sm.SimulationResult(result="{}"),
+                    )
+                    timeout_result = sm.SimulationJob(
+                        simulation=timeout_simulation,
                         status=sm.JobStatus.TIMEOUT,
                         worker_id="server-timeout",
+                        simulator=sm.Simulator.OPENDARTS,
                         job_id=job_id,
                     )
                     self._completed_jobs[job_id] = timeout_result

@@ -79,8 +79,8 @@ async def handle_simulation_job(
     """
     job_id = simulation_job.job_id
 
-    logger.info(f"Worker {worker_id}: Starting simulation {job_id}...")
-    logger.debug(f"Worker {worker_id}: Simulation job: {simulation_job}")
+    logger.debug("Worker %s: Starting simulation %s...", worker_id, job_id)
+    logger.debug("Worker %s: Simulation job: %s", worker_id, simulation_job)
 
     def _run_simulator_with_logging(sim_job, wid, stop):
         """Wrapper to ensure logs emitted inside to_thread map to worker file.
@@ -112,24 +112,32 @@ async def handle_simulation_job(
 
     if simulation_status == SimulationStatus.SUCCESS:
         status = sm.JobStatus.SUCCESS
-        logger.info(f"Worker {worker_id}: Simulation {job_id} completed successfully")
+        logger.debug(
+            "Worker %s: Simulation %s completed successfully", worker_id, job_id
+        )
     elif simulation_status == SimulationStatus.TIMEOUT:
         status = sm.JobStatus.TIMEOUT
-        logger.warning(f"Worker {worker_id}: Simulation {job_id} timed out")
+        logger.warning("Worker %s: Simulation %s timed out", worker_id, job_id)
     elif simulation_status == SimulationStatus.FAILED:
         status = sm.JobStatus.FAILED
-        logger.error(f"Worker {worker_id}: Simulation {job_id} failed")
+        logger.error("Worker %s: Simulation %s failed", worker_id, job_id)
     else:
         status = sm.JobStatus.ERROR
         logger.error(
-            f"Worker {worker_id}: Simulation {job_id} encountered an unknown status: {simulation_status}"
+            "Worker %s: Simulation %s encountered an unknown status: %s",
+            worker_id,
+            job_id,
+            simulation_status,
         )
 
     response = await submit_simulation_job(
         stub, simulation_job, simulation_result, status
     )
     logger.debug(
-        f"Worker {worker_id}: Job {job_id} result submitted. Server response: {response.message}"
+        "Worker %s: Job %s result submitted. Server response: %s",
+        worker_id,
+        job_id,
+        response.message,
     )
 
 
@@ -198,15 +206,19 @@ async def ask_for_simulation_model(
     """
     while True:
         if stop_flag is not None and stop_flag.is_set():
-            logger.info(f"Worker {worker_id}: Stop requested during model acquisition.")
+            logger.debug(
+                "Worker %s: Stop requested during model acquisition.", worker_id
+            )
             return
         try:
-            logger.info(f"Worker {worker_id}: Requesting simulation model archive...")
+            logger.debug("Worker %s: Requesting simulation model archive...", worker_id)
             simulation_model = await request_simulation_model(stub, worker_id)
 
             if simulation_model.status == sm.ModelStatus.NO_MODEL_AVAILABLE:
-                logger.info(
-                    f"Worker {worker_id}: No simulation model available. Retrying in {MODEL_RETRY_DELAY_SEC} seconds..."
+                logger.debug(
+                    "Worker %s: No simulation model available. Retrying in %s seconds...",
+                    worker_id,
+                    MODEL_RETRY_DELAY_SEC,
                 )
                 await sleep_with_stop(MODEL_RETRY_DELAY_SEC, stop_flag)
                 if stop_flag is not None and stop_flag.is_set():
@@ -215,25 +227,31 @@ async def ask_for_simulation_model(
 
             if simulation_model.status != sm.ModelStatus.ON_SERVER:
                 logger.warning(
-                    f"Worker {worker_id}: Received unexpected model status: {simulation_model.status}. Retrying in {MODEL_RETRY_DELAY_SEC} seconds..."
+                    "Worker %s: Received unexpected model status: %s. Retrying in %s seconds...",
+                    worker_id,
+                    simulation_model.status,
+                    MODEL_RETRY_DELAY_SEC,
                 )
                 await sleep_with_stop(MODEL_RETRY_DELAY_SEC, stop_flag)
                 if stop_flag is not None and stop_flag.is_set():
                     return
                 continue
 
-            logger.info(f"Worker {worker_id}: Received simulation model archive.")
+            logger.debug("Worker %s: Received simulation model archive.", worker_id)
 
             if await try_unpacking_model_archive(
                 simulation_model.package_archive, worker_id
             ):
                 logger.info(
-                    f"Worker {worker_id}: Unpacking simulation model archive successful."
+                    "Worker %s: Unpacking simulation model archive successful.",
+                    worker_id,
                 )
                 return  # Successfully retrieved and unpacked model
             else:
                 logger.warning(
-                    f"Worker {worker_id}: Corrupted simulation model archive. Retrying in {MODEL_RETRY_DELAY_SEC} seconds..."
+                    "Worker %s: Corrupted simulation model archive. Retrying in %s seconds...",
+                    worker_id,
+                    MODEL_RETRY_DELAY_SEC,
                 )
                 await sleep_with_stop(MODEL_RETRY_DELAY_SEC, stop_flag)
                 if stop_flag is not None and stop_flag.is_set():
@@ -241,14 +259,20 @@ async def ask_for_simulation_model(
 
         except grpc.RpcError as e:
             logger.error(
-                f"Worker {worker_id}: Unable to connect to server due to {e}. Retrying in {MODEL_RETRY_DELAY_SEC} seconds..."
+                "Worker %s: Unable to connect to server due to %s. Retrying in %s seconds...",
+                worker_id,
+                e,
+                MODEL_RETRY_DELAY_SEC,
             )
             await sleep_with_stop(MODEL_RETRY_DELAY_SEC, stop_flag)
             if stop_flag is not None and stop_flag.is_set():
                 return
         except Exception as e:
             logger.warning(
-                f"Worker {worker_id}: Unexpected error while requesting model: {str(e)}. Retrying in {MODEL_RETRY_DELAY_SEC} seconds..."
+                "Worker %s: Unexpected error while requesting model: %s. Retrying in %s seconds...",
+                worker_id,
+                e,
+                MODEL_RETRY_DELAY_SEC,
             )
             await sleep_with_stop(MODEL_RETRY_DELAY_SEC, stop_flag)
             if stop_flag is not None and stop_flag.is_set():
@@ -269,16 +293,18 @@ async def run_simulation_loop(
 
     while True:
         if stop_flag is not None and stop_flag.is_set():
-            logger.info(f"Worker {worker_id}: Stop requested, exiting loop.")
+            logger.debug("Worker %s: Stop requested, exiting loop.", worker_id)
             break
         try:
-            logger.info(f"Worker {worker_id}: Requesting a job...")
+            logger.debug("Worker %s: Requesting a job...", worker_id)
             simulation_job = await request_simulation_job(stub, worker_id)
 
             # Handle different job statuses
             if simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
-                logger.info(
-                    f"Worker {worker_id}: No simulation jobs available. Retrying in {retry_delay} seconds..."
+                logger.debug(
+                    "Worker %s: No simulation jobs available. Retrying in %s seconds...",
+                    worker_id,
+                    retry_delay,
                 )
                 await sleep_with_stop(retry_delay, stop_flag)
                 if stop_flag is not None and stop_flag.is_set():
@@ -287,7 +313,8 @@ async def run_simulation_loop(
 
             elif simulation_job.status == sm.JobStatus.ERROR:
                 logger.error(
-                    f"Worker {worker_id}: Server returned an error for the job request. Retrying..."
+                    "Worker %s: Server returned an error for the job request. Retrying...",
+                    worker_id,
                 )
                 await sleep_with_stop(retry_delay, stop_flag)
                 if stop_flag is not None and stop_flag.is_set():
@@ -296,7 +323,7 @@ async def run_simulation_loop(
 
             elif simulation_job.status == sm.JobStatus.JOBSTATUS_UNSPECIFIED:
                 logger.warning(
-                    f"Worker {worker_id}: Received unspecified status. Retrying..."
+                    "Worker %s: Received unspecified status. Retrying...", worker_id
                 )
                 await sleep_with_stop(retry_delay, stop_flag)
                 if stop_flag is not None and stop_flag.is_set():
@@ -304,21 +331,24 @@ async def run_simulation_loop(
                 continue
 
             # Process the job if a valid one is received
-            logger.info(
-                f"Worker {worker_id}: Processing job {simulation_job.job_id}..."
+            logger.debug(
+                "Worker %s: Processing job %s...", worker_id, simulation_job.job_id
             )
             await handle_simulation_job(stub, simulation_job, worker_id, stop_flag)
 
         except grpc.RpcError as e:
             logger.error(
-                f"Worker {worker_id}: gRPC error: {str(e)}. Retrying in {retry_delay} seconds..."
+                "Worker %s: gRPC error: %s. Retrying in %s seconds...",
+                worker_id,
+                e,
+                retry_delay,
             )
             await sleep_with_stop(retry_delay, stop_flag)
             if stop_flag is not None and stop_flag.is_set():
                 break
 
         except Exception as e:
-            logger.exception(f"Worker {worker_id}: Unexpected error: {str(e)}")
+            logger.exception("Worker %s: Unexpected error: %s", worker_id, e)
             await sleep_with_stop(retry_delay, stop_flag)
             if stop_flag is not None and stop_flag.is_set():
                 break
@@ -389,7 +419,7 @@ def worker_file_context(worker_id: str | int):
     try:
         temp_dir.mkdir(parents=True, exist_ok=True)
         os.chdir(temp_dir)
-        logger.info(f"Worker {worker_id}: Changed working directory to {temp_dir}")
+        logger.debug("Worker %s: Changed working directory to %s", worker_id, temp_dir)
         yield
     finally:
         os.chdir(prev_cwd)

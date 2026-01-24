@@ -149,15 +149,19 @@ def test__to_grpc(mock_json_to_str, mock_control_vec, mock_input, mock_sim):
 def test__from_grpc(mock_str_to_json):
     from services.simulation_service.core.models import SimulationCase
 
+    # Order of str_to_json calls:
+    # 1. Parse result.result -> {"Heat": 0.0}
+    # 2. Parse input.wells -> {"wells": []}
+    # 3. Parse control_vector.content -> {"x": 1}
     mock_str_to_json.side_effect = [
-        {"wells": []},
         {"Heat": 0.0},
+        {"wells": []},
         {"x": 1},
     ]
 
     sim = MagicMock()
     sim.input.wells = "{}"
-    sim.result.result = "{}"
+    sim.result.result = '{"Heat": 0.0}'
     sim.control_vector.content = "{}"
     result = SimulationService._from_grpc(sim)
     assert isinstance(result, SimulationCase)

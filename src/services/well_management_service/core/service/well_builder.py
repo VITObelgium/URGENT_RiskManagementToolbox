@@ -156,7 +156,9 @@ def _build_completion(
             p_range.start_md, p_range.end_md
         )
         if perforation_points:
-            completion_perforations.append(Perforation(p_range, perforation_points))
+            completion_perforations.append(
+                Perforation(p_name, p_range, perforation_points)
+            )
 
     if not completion_perforations:
         return None

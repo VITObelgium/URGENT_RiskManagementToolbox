@@ -30,10 +30,8 @@ class PositionModel(BaseModel, extra="forbid"):
     z: FiniteFloat
 
 
-class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
-    well_type: Literal["IWell"] = Field(default="IWell")
+class _BaseWellModel(BaseModel, extra="forbid"):
     name: str
-    md: float = Field(gt=0.0)
     wellhead: PositionModel
     md_step: float = Field(ge=0.1)
     perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
@@ -41,16 +39,21 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     )
 
     @model_validator(mode="after")
-    def sort_perforations(self) -> IWellModel:
+    def sort_perforations(self) -> _BaseWellModel:
         if self.perforations:
             self.perforations = _sort_perforations(self.perforations)
         return self
 
     @model_validator(mode="after")
-    def validate_perforations_not_overlap(self) -> IWellModel:
+    def validate_perforations_not_overlap(self) -> _BaseWellModel:
         if not _are_perforations_non_overlapping(self.perforations):
             raise ValueError("Perforations can't overlap")
         return self
+
+
+class IWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
+    well_type: Literal["IWell"] = Field(default="IWell")
+    md: float = Field(gt=0.0)
 
     @model_validator(mode="after")
     def adjust_perforations_to_well_md(self) -> IWellModel:
@@ -59,31 +62,13 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
         return self
 
 
-class JWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
+class JWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     well_type: Literal["JWell"] = Field(default="JWell")
-    name: str
     md_linear1: float = Field(gt=0.0)
     md_curved: float = Field(gt=0.0)
     dls: float = Field(gt=-45.00, le=45.00)
     md_linear2: float = Field(gt=0.0)
-    wellhead: PositionModel
     azimuth: float = Field(ge=0.0, lt=360.0)
-    md_step: float = Field(ge=0.1)
-    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
-        default=None
-    )
-
-    @model_validator(mode="after")
-    def sort_perforations(self) -> JWellModel:
-        if self.perforations:
-            self.perforations = _sort_perforations(self.perforations)
-        return self
-
-    @model_validator(mode="after")
-    def validate_perforations_not_overlap(self) -> JWellModel:
-        if not _are_perforations_non_overlapping(self.perforations):
-            raise ValueError("Perforations can't overlap")
-        return self
 
     @model_validator(mode="after")
     def adjust_perforations_to_well_md(self) -> JWellModel:
@@ -92,9 +77,8 @@ class JWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
         return self
 
 
-class SWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
+class SWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     well_type: Literal["SWell"] = Field(default="SWell")
-    name: str
     md_linear1: float = Field(gt=0.0)
     md_curved1: float = Field(gt=0.0)
     dls1: float = Field(gt=-45.00, le=45.00)
@@ -102,62 +86,26 @@ class SWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     md_curved2: float = Field(gt=0.0)
     dls2: float = Field(gt=-45.00, le=45.00)
     md_linear3: float = Field(gt=0.0)
-    wellhead: PositionModel
     azimuth: float = Field(ge=0.0, lt=360.0)
-    md_step: float = Field(ge=0.1)
-    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
-        default=None
-    )
-
-    @model_validator(mode="after")
-    def sort_perforations(self) -> SWellModel:
-        if self.perforations:
-            self.perforations = _sort_perforations(self.perforations)
-        return self
-
-    @model_validator(mode="after")
-    def check_perforations_not_overlap(self) -> SWellModel:
-        if not _are_perforations_non_overlapping(self.perforations):
-            raise ValueError("Perforations can't overlap")
-        return self
 
     @model_validator(mode="after")
     def adjust_perforations_to_well_md(self) -> SWellModel:
         total_md = (
-                self.md_linear1
-                + self.md_curved1
-                + self.md_linear2
-                + self.md_curved2
-                + self.md_linear3
+            self.md_linear1
+            + self.md_curved1
+            + self.md_linear2
+            + self.md_curved2
+            + self.md_linear3
         )
         self.perforations = _adjust_perforations(total_md, self.perforations)
         return self
 
 
-class HWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
+class HWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     well_type: Literal["HWell"] = Field(default="HWell")
-    name: str
     TVD: float = Field(gt=0.0)
     md_lateral: float = Field(gt=0.0)
-    wellhead: PositionModel
     azimuth: float = Field(ge=0.0, lt=360.0)
-    md_step: float = Field(ge=0.1)
-    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
-        default=None
-    )
-
-    @model_validator(mode="after")
-    def sort_perforations(self) -> HWellModel:
-        if self.perforations:
-            self.perforations = _sort_perforations(self.perforations)
-        return self
-
-    #
-    @model_validator(mode="after")
-    def check_perforations_not_overlap(self) -> HWellModel:
-        if not _are_perforations_non_overlapping(self.perforations):
-            raise ValueError("Perforations can't overlap")
-        return self
 
     @model_validator(mode="after")
     def adjust_perforations_to_well_md(self) -> HWellModel:
@@ -195,6 +143,7 @@ class WellManagementServiceResponse(BaseModel, extra="forbid"):
 
 
 class SimulationWellPerforationModel(BaseModel, extra="forbid"):
+    name: str
     range: tuple[float, float]
     points: tuple[tuple[float, float, float], ...]
 
@@ -212,17 +161,18 @@ class SimulationWellModel(BaseModel, extra="forbid"):
     def from_well(cls, well: models.Well) -> SimulationWellModel:
         return cls(
             name=well.name,
-            trajectory=tuple([(t.x, t.y, t.z) for t in well.trajectory]),
+            trajectory=tuple(((t.x, t.y, t.z) for t in well.trajectory)),
             completion=(
                 SimulationWellCompletionModel(
                     perforations=tuple(
-                        [
+                        (
                             SimulationWellPerforationModel(
+                                name=p.name,
                                 points=tuple([(p.x, p.y, p.z) for p in p.points]),
                                 range=(p.range.start_md, p.range.end_md),
                             )
                             for p in well.completion.perforations
-                        ]
+                        )
                     )
                 )
                 if well.completion
@@ -232,7 +182,7 @@ class SimulationWellModel(BaseModel, extra="forbid"):
 
 
 def _adjust_perforations(
-        total_md: float, perforations: dict[PerforationName, PerforationRangeModel] | None
+    total_md: float, perforations: dict[PerforationName, PerforationRangeModel] | None
 ) -> dict[PerforationName, PerforationRangeModel] | None:
     """
     Adjusts perforations to ensure they are within the well's total MD.
@@ -261,8 +211,17 @@ def _adjust_perforations(
 
 
 def _are_perforations_non_overlapping(
-        perforations: dict[PerforationName, PerforationRangeModel] | None,
+    perforations: dict[PerforationName, PerforationRangeModel] | None,
 ) -> bool:
+    """
+    Checks if perforations are non-overlapping.
+
+    Args:
+        perforations: A dictionary of perforation names to their ranges.
+
+    Returns:
+        True if perforations are non-overlapping, False otherwise.
+    """
     if not perforations or len(perforations) < 2:
         return True
 
@@ -275,6 +234,15 @@ def _are_perforations_non_overlapping(
 
 
 def _sort_perforations(
-        perforations: dict[PerforationName, PerforationRangeModel],
+    perforations: dict[PerforationName, PerforationRangeModel],
 ) -> dict[PerforationName, PerforationRangeModel]:
+    """
+    Sorts perforations by their start MD.
+
+    Args:
+        perforations: A dictionary of perforation names to their ranges.
+
+    Returns:
+        A dictionary of perforation names to their ranges, sorted by start MD.
+    """
     return dict(sorted(perforations.items(), key=lambda item: item[1].start_md))

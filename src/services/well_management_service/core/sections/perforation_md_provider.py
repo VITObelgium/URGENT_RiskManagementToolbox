@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import MutableMapping
 
 import numpy as np
 
@@ -8,7 +8,7 @@ from services.well_management_service.core.models import PerforationRange
 class PerforationMdProvider:
     def __init__(
         self,
-        perforations: Sequence[PerforationRange] | None,
+        perforations: MutableMapping[str, PerforationRange] | None,
         section_start_md: float,
         section_end_md: float,
     ) -> None:
@@ -23,7 +23,7 @@ class PerforationMdProvider:
 
     @staticmethod
     def _get_perforations_boundary_points_inside_md_range(
-        perforations: Sequence[PerforationRange] | None,
+        perforations: MutableMapping[str, PerforationRange] | None,
         section_start_md: float,
         section_end_md: float,
     ) -> list[float]:
@@ -32,7 +32,7 @@ class PerforationMdProvider:
 
         return [
             p_md
-            for perforation in perforations
+            for perforation in perforations.values()
             for p_md in perforation
             if section_start_md <= p_md <= section_end_md
         ]

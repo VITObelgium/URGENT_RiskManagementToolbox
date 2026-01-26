@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import itertools
-from typing import Literal, Sequence, Union
+from typing import Literal, Union
 
-import numpy as np
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
 from typing_extensions import Annotated
 
 from services.well_management_service.core import models
+
+type PerforationName = str
 
 
 class PerforationRangeModel(BaseModel, extra="forbid"):
@@ -35,12 +36,14 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     md: float = Field(gt=0.0)
     wellhead: PositionModel
     md_step: float = Field(ge=0.1)
-    perforations: Sequence[PerforationRangeModel] | None = Field(default=None)
+    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
+        default=None
+    )
 
     @model_validator(mode="after")
     def sort_perforations(self) -> IWellModel:
         if self.perforations:
-            self.perforations = sorted(self.perforations, key=lambda p: p.start_md)
+            self.perforations = _sort_perforations(self.perforations)
         return self
 
     @model_validator(mode="after")
@@ -51,28 +54,8 @@ class IWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
 
     @model_validator(mode="after")
     def adjust_perforations_to_well_md(self) -> IWellModel:
-        """
-        Adjusts perforations to ensure they are within the well's total MD.
-        If a perforation's start is beyond the MD, it's removed.
-        If a perforation's end is beyond the MD, it's truncated to the MD.
-        """
-        if not self.perforations:
-            return self
-
-        adjusted_perforations = []
-        for perf in self.perforations:
-            # If the perforation starts after the well ends, discard it.
-            if perf.start_md >= self.md:
-                continue
-
-            new_end_md = min(perf.end_md, self.md)
-
-            if perf.start_md < new_end_md:
-                adjusted_perforations.append(
-                    PerforationRangeModel(start_md=perf.start_md, end_md=new_end_md)
-                )
-
-        self.perforations = adjusted_perforations if adjusted_perforations else None
+        total_md = self.md
+        self.perforations = _adjust_perforations(total_md, self.perforations)
         return self
 
 
@@ -86,12 +69,14 @@ class JWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     wellhead: PositionModel
     azimuth: float = Field(ge=0.0, lt=360.0)
     md_step: float = Field(ge=0.1)
-    perforations: Sequence[PerforationRangeModel] | None = Field(default=None)
+    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
+        default=None
+    )
 
     @model_validator(mode="after")
     def sort_perforations(self) -> JWellModel:
         if self.perforations:
-            self.perforations = sorted(self.perforations, key=lambda p: p.start_md)
+            self.perforations = _sort_perforations(self.perforations)
         return self
 
     @model_validator(mode="after")
@@ -120,12 +105,14 @@ class SWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     wellhead: PositionModel
     azimuth: float = Field(ge=0.0, lt=360.0)
     md_step: float = Field(ge=0.1)
-    perforations: Sequence[PerforationRangeModel] | None = Field(default=None)
+    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
+        default=None
+    )
 
     @model_validator(mode="after")
     def sort_perforations(self) -> SWellModel:
         if self.perforations:
-            self.perforations = sorted(self.perforations, key=lambda p: p.start_md)
+            self.perforations = _sort_perforations(self.perforations)
         return self
 
     @model_validator(mode="after")
@@ -137,11 +124,11 @@ class SWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     @model_validator(mode="after")
     def adjust_perforations_to_well_md(self) -> SWellModel:
         total_md = (
-            self.md_linear1
-            + self.md_curved1
-            + self.md_linear2
-            + self.md_curved2
-            + self.md_linear3
+                self.md_linear1
+                + self.md_curved1
+                + self.md_linear2
+                + self.md_curved2
+                + self.md_linear3
         )
         self.perforations = _adjust_perforations(total_md, self.perforations)
         return self
@@ -155,14 +142,17 @@ class HWellModel(BaseModel, extra="forbid", str_strip_whitespace=True):
     wellhead: PositionModel
     azimuth: float = Field(ge=0.0, lt=360.0)
     md_step: float = Field(ge=0.1)
-    perforations: Sequence[PerforationRangeModel] | None = Field(default=None)
+    perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
+        default=None
+    )
 
     @model_validator(mode="after")
     def sort_perforations(self) -> HWellModel:
         if self.perforations:
-            self.perforations = sorted(self.perforations, key=lambda p: p.start_md)
+            self.perforations = _sort_perforations(self.perforations)
         return self
 
+    #
     @model_validator(mode="after")
     def check_perforations_not_overlap(self) -> HWellModel:
         if not _are_perforations_non_overlapping(self.perforations):
@@ -242,8 +232,8 @@ class SimulationWellModel(BaseModel, extra="forbid"):
 
 
 def _adjust_perforations(
-    total_md: float, perforations: Sequence[PerforationRangeModel] | None
-) -> Sequence[PerforationRangeModel] | None:
+        total_md: float, perforations: dict[PerforationName, PerforationRangeModel] | None
+) -> dict[PerforationName, PerforationRangeModel] | None:
     """
     Adjusts perforations to ensure they are within the well's total MD.
     If a perforation's start is beyond the MD, it's removed.
@@ -252,41 +242,39 @@ def _adjust_perforations(
     if not perforations:
         return None
 
-    adjusted_perforations = []
-    for perf in perforations:
+    adjusted_perforations: dict[str, PerforationRangeModel] = {}
+
+    for name, perf in perforations.items():
+        # If the perforation starts after the well ends, discard it.
         if perf.start_md >= total_md:
             continue
 
         new_end_md = min(perf.end_md, total_md)
 
         if perf.start_md < new_end_md:
-            adjusted_perforations.append(
-                PerforationRangeModel(start_md=perf.start_md, end_md=new_end_md)
+            adjusted_perforations[name] = PerforationRangeModel(
+                start_md=perf.start_md,
+                end_md=new_end_md,
             )
 
     return adjusted_perforations if adjusted_perforations else None
 
 
-def _is_perforation_within_total_well_md(
-    well_mds: Sequence[float], perforations: Sequence[PerforationRangeModel] | None
-) -> bool:
-    if not perforations:
-        return True
-
-    total_measured_depth = np.sum(well_mds)
-    return all(
-        perf.start_md <= total_measured_depth and perf.end_md <= total_measured_depth
-        for perf in perforations
-    )
-
-
 def _are_perforations_non_overlapping(
-    perforations: Sequence[PerforationRangeModel] | None,
+        perforations: dict[PerforationName, PerforationRangeModel] | None,
 ) -> bool:
     if not perforations or len(perforations) < 2:
         return True
 
+    ordered = sorted(perforations.values(), key=lambda p: p.start_md)
+
     return all(
         current_p.end_md <= next_p.start_md
-        for current_p, next_p in itertools.pairwise(perforations)
+        for current_p, next_p in itertools.pairwise(ordered)
     )
+
+
+def _sort_perforations(
+        perforations: dict[PerforationName, PerforationRangeModel],
+) -> dict[PerforationName, PerforationRangeModel]:
+    return dict(sorted(perforations.items(), key=lambda item: item[1].start_md))

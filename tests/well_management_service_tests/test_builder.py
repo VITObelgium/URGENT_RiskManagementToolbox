@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import MutableMapping, Sequence
 
 import numpy as np
 import pytest
@@ -54,7 +54,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             Point(0, 0, 0),
             100,
             [LinearWellSection(200)],
-            [],
+            {},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 100, 100),
@@ -68,7 +68,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             Point(0, 0, 0),
             100,
             [LinearWellSection(200)],
-            [PerforationRange(300, 500)],
+            {"p1": PerforationRange(300, 500)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 100, 100),
@@ -82,7 +82,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             Point(0, 0, 0),
             100,
             [LinearWellSection(200)],
-            [PerforationRange(10, 20)],
+            {"p1": PerforationRange(10, 20)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -115,7 +115,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             Point(0, 0, 0),
             100,
             [LinearWellSection(200), CurvedWellSection(md, dls)],
-            [PerforationRange(10, 350)],
+            {"p1": PerforationRange(10, 350)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -145,7 +145,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             Point(0, 100, -10),
             100,
             [LinearWellSection(200), CurvedWellSection(md, dls)],
-            [PerforationRange(10, 350)],
+            {"p1": PerforationRange(10, 350)},
             (
                 TrajectoryPoint(0, 100, -10, 0),
                 TrajectoryPoint(0, 100, 0, 10),
@@ -175,7 +175,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             Point(0, 0, 0),
             100,
             [LinearWellSection(200), CurvedWellSection(md, dls)],
-            [PerforationRange(10, 350)],
+            {"p1": PerforationRange(10, 350)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -208,7 +208,9 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             None,
             None,
             None,
-            marks=pytest.mark.xfail(raises=EmptySectionConfigurationException),
+            marks=pytest.mark.xfail(
+                strict=True, raises=EmptySectionConfigurationException
+            ),
         ),
     ],
 )
@@ -218,7 +220,7 @@ def test_well_builder(
     translation: Point,
     discretize: float,
     sections: Sequence[SectionInterface],
-    perforations: Sequence[PerforationRange] | None,
+    perforations: MutableMapping[str, PerforationRange] | None,
     expected_trajectory_points_in_order: tuple[TrajectoryPoint, ...],
     expected_perforations: tuple[PerforationAlias, ...] | None,
 ) -> None:

@@ -5,12 +5,12 @@ from pydantic import ValidationError
 
 from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import (
-    ControlVector,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
     SolutionCandidateServicesTasks,
 )
+from services.solution_updater_service import ControlVector
 
 
 @pytest.fixture

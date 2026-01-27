@@ -1,7 +1,6 @@
 from typing import Any
 
 from services.problem_dispatcher_service.core.models import (
-    ControlVector,
     RequestPayload,
     ServiceType,
     SolutionCandidateServicesTasks,
@@ -11,6 +10,7 @@ from services.problem_dispatcher_service.core.utils import (
     parse_flat_dict_to_nested,
     update_initial_state,
 )
+from services.solution_updater_service import ControlVector
 
 
 class TaskBuilder:

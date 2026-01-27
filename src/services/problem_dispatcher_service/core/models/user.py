@@ -11,8 +11,8 @@ from typing_extensions import Annotated
 
 from common import OptimizationStrategy
 from logger import get_logger
-from services.problem_dispatcher_service.core.models import ControlVector
-from services.well_management_service.core.models import WellModel
+from services.solution_updater_service import ControlVector
+from services.well_management_service import WellModel
 
 logger = get_logger(__name__)
 

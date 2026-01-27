@@ -1,6 +1,3 @@
-from services.problem_dispatcher_service.core.models.shared_from_solution_updater_service import (
-    ControlVector,
-)
 from services.problem_dispatcher_service.core.models.user import (
     OptimizationConstrains,
     OptimizationParameters,
@@ -21,7 +18,6 @@ __all__ = [
     "VariableBnd",
     "ServiceType",
     "SolutionCandidateServicesTasks",
-    "ControlVector",
     "RequestPayload",
     "OptimizationParameters",
 ]

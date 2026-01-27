@@ -20,11 +20,7 @@ import orchestration.risk_management_service.core.service.risk_management_servic
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.get_csv_logger"
 )
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.ControlVectorMapper"
-)
 def test_run_risk_management_happy_path(
-    mock_cvm,
     mock_csv_logger,
     mock_dispatcher,
     mock_su,
@@ -71,7 +67,6 @@ def test_run_risk_management_happy_path(
     mock_su_inst.process_request.return_value = MagicMock(
         next_iter_solutions=[{"a": 1}]
     )
-    mock_cvm.convert_su_to_pd.return_value = None
     mock_csv_logger.return_value = MagicMock(info=MagicMock())
     mock_su_inst.global_best_result = 1.23
     mock_su_inst.global_best_control_vector = MagicMock(items={"x": 5})
@@ -138,11 +133,7 @@ def test_prepare_simulation_cases_unhandled_service():
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.get_csv_logger"
 )
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.ControlVectorMapper"
-)
 def test_run_risk_management_exception(
-    _mock_cvm,
     _mock_csv_logger,
     _mock_dispatcher,
     _mock_su,

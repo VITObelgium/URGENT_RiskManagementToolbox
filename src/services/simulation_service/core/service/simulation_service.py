@@ -14,10 +14,10 @@ from services.simulation_service.core.models import (
     SimulationResults,
     SimulationServiceRequest,
     SimulationServiceResponse,
-    WellManagementServiceResult,
 )
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
 from services.simulation_service.core.utils.converters import json_to_str, str_to_json
+from services.well_management_service.core.models import WellManagementServiceResponse
 
 logger = get_logger(__name__)
 
@@ -185,7 +185,7 @@ class SimulationService:
             SimulationCase: The simulation case object.
         """
         return SimulationCase(
-            wells=WellManagementServiceResult(**str_to_json(simulation.input.wells)),
+            wells=WellManagementServiceResponse(**str_to_json(simulation.input.wells)),
             results=SimulationResults(**str_to_json(simulation.result.result)),
             control_vector=str_to_json(simulation.control_vector.content),
         )

@@ -1,9 +1,6 @@
 from services.problem_dispatcher_service.core.models.shared_from_solution_updater_service import (
     ControlVector,
 )
-from services.problem_dispatcher_service.core.models.shared_from_well_management import (
-    WellModel,
-)
 from services.problem_dispatcher_service.core.models.user import (
     OptimizationConstrains,
     OptimizationParameters,
@@ -26,6 +23,5 @@ __all__ = [
     "SolutionCandidateServicesTasks",
     "ControlVector",
     "RequestPayload",
-    "WellModel",
     "OptimizationParameters",
 ]

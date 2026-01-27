@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import copy
 import logging
+import logging.config
 import os
 import shutil
 import subprocess

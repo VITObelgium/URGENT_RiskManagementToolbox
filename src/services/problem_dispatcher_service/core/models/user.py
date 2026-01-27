@@ -11,7 +11,8 @@ from typing_extensions import Annotated
 
 from common import OptimizationStrategy
 from logger import get_logger
-from services.problem_dispatcher_service.core.models import ControlVector, WellModel
+from services.problem_dispatcher_service.core.models import ControlVector
+from services.well_management_service.core.models import WellModel
 
 logger = get_logger(__name__)
 
@@ -52,6 +53,17 @@ class WellPlacementItem(BaseModel, extra="forbid"):
     def set_initial_state_well_name(cls, values):
         values["initial_state"]["name"] = values["well_name"]
         return values
+
+    @model_validator(mode="after")
+    def rename_perf_keys_dot_to_hash(self) -> WellPlacementItem:
+        perf = self.optimization_constraints.get("perforations")
+        if not isinstance(perf, dict):
+            return self
+
+        self.optimization_constraints["perforations"] = {
+            k.replace(".", "#"): v for k, v in perf.items()
+        }
+        return self
 
 
 class OptimizationParameters(BaseModel, extra="forbid"):

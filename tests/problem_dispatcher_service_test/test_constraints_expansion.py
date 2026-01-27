@@ -14,7 +14,7 @@ def md_problem_definition():
                     "well_type": "IWell",
                     "wellhead": {"x": 50, "y": 50, "z": 0},
                     "md": 2500,
-                    "perforations": [{"start_md": 0.0, "end_md": 2500.0}],
+                    "perforations": {"p1": {"start_md": 2100, "end_md": 2400.0}},
                 },
                 "optimization_constraints": {
                     "wellhead": {
@@ -22,6 +22,10 @@ def md_problem_definition():
                         "y": {"lb": 10, "ub": 3190},
                     },
                     "md": {"lb": 2000, "ub": 2700},
+                    "perforations": {
+                        "p1.start_md": {"lb": 2100, "ub": 2500},
+                        "p1.end_md": {"lb": 2200, "ub": 2400},
+                    },
                 },
             },
             {
@@ -30,7 +34,7 @@ def md_problem_definition():
                     "well_type": "IWell",
                     "wellhead": {"x": 50, "y": 50, "z": 0},
                     "md": 2500,
-                    "perforations": [{"start_md": 0.0, "end_md": 2500.0}],
+                    "perforations": {"p1": {"start_md": 0.0, "end_md": 2500.0}},
                 },
                 "optimization_constraints": {
                     "wellhead": {
@@ -62,6 +66,7 @@ def test_boundaries_include_md(md_problem_definition):
     boundaries = svc.boundaries
     assert boundaries["well_placement#INJ#md"] == (2000.0, 2700.0)
     assert boundaries["well_placement#PRO#md"] == (2000.0, 2700.0)
+    assert boundaries["well_placement#INJ#perforations#p1#start_md"] == (2100.0, 2500.0)
 
 
 def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
@@ -154,7 +159,7 @@ def test_jwell_constraints_respected():
                     "md_linear2": 700.0,
                     "azimuth": 90.0,
                     "md_step": 20.0,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "md_linear1": {"lb": 400, "ub": 600},
@@ -194,7 +199,7 @@ def test_hwell_constraints_respected():
                     "md_lateral": 1500.0,
                     "azimuth": 45.0,
                     "md_step": 10.0,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "TVD": {"lb": 900, "ub": 1100},
@@ -238,7 +243,7 @@ def test_linear_inequalities_mixed_wells():
                     "md_linear2": 700.0,
                     "azimuth": 90.0,
                     "md_step": 20.0,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "md_linear1": {"lb": 400, "ub": 600},
@@ -250,7 +255,7 @@ def test_linear_inequalities_mixed_wells():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 0, "z": 0},
                     "md": 500.0,
-                    "perforations": [{"start_md": 0.0, "end_md": 500.0}],
+                    "perforations": {"p1": {"start_md": 0.0, "end_md": 500.0}},
                 },
                 "optimization_constraints": {
                     "md": {"lb": 400, "ub": 600},

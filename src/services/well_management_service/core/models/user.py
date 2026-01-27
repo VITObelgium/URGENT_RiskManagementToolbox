@@ -17,7 +17,7 @@ class PerforationRangeModel(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_perforation_start_and_end(self) -> PerforationRangeModel:
-        if self.start_md >= self.end_md:
+        if not _has_valid_range(self.start_md, self.end_md):
             raise ValueError(
                 f"Invalid range: start ({self.start_md}) must be less than end ({self.end_md})"
             )
@@ -33,7 +33,7 @@ class PositionModel(BaseModel, extra="forbid"):
 class _BaseWellModel(BaseModel, extra="forbid"):
     name: str
     wellhead: PositionModel
-    md_step: float = Field(ge=0.1)
+    md_step: float = Field(ge=0.1, default=0.5)
     perforations: dict[PerforationName, PerforationRangeModel] | None = Field(
         default=None
     )
@@ -129,23 +129,37 @@ class WellManagementServiceRequest(BaseModel, extra="forbid"):
     models: list[WellModel]
 
     @model_validator(mode="after")
-    def ensure_unique_names(self) -> WellManagementServiceRequest:
-        seen_names = set()
-        for model in self.models:
-            if model.name in seen_names:
-                raise ValueError("Wells names must be unique.")
-            seen_names.add(model.name)
+    def validate_wells_name(self) -> WellManagementServiceRequest:
+        wells_name = [n.name for n in self.models]
+        if duplicates := _duplicate_well_names(wells_name):
+            raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")
         return self
 
 
 class WellManagementServiceResponse(BaseModel, extra="forbid"):
     wells: list[SimulationWellModel]
 
+    @model_validator(mode="after")
+    def validate_wells_name(self) -> WellManagementServiceResponse:
+        wells_name = [n.name for n in self.wells]
+        if duplicates := _duplicate_well_names(wells_name):
+            raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")
+        return self
+
 
 class SimulationWellPerforationModel(BaseModel, extra="forbid"):
     name: str
     range: tuple[float, float]
     points: tuple[tuple[float, float, float], ...]
+
+    @model_validator(mode="after")
+    def validate_perforation_start_and_end(self) -> SimulationWellPerforationModel:
+        start_md, end_md = self.range
+        if not _has_valid_range(start_md, end_md):
+            raise ValueError(
+                f"Invalid range: start ({start_md}) must be less than end ({end_md})"
+            )
+        return self
 
 
 class SimulationWellCompletionModel(BaseModel, extra="forbid"):
@@ -246,3 +260,26 @@ def _sort_perforations(
         A dictionary of perforation names to their ranges, sorted by start MD.
     """
     return dict(sorted(perforations.items(), key=lambda item: item[1].start_md))
+
+
+def _duplicate_well_names(wells_name: list[str]) -> list[str]:
+    """
+    Returns duplicate well names (each duplicate appears once), preserving first-duplicate order.
+    Example: [A, B, A, A, B] -> ["A", "B"]
+    """
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    result: list[str] = []
+
+    for name in wells_name:
+        if name in seen and name not in duplicates:
+            duplicates.add(name)
+            result.append(name)
+        else:
+            seen.add(name)
+
+    return result
+
+
+def _has_valid_range(start_md: float, end_md: float) -> bool:
+    return end_md > start_md

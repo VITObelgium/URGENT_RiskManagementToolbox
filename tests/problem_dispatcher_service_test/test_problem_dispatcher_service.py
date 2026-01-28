@@ -32,7 +32,7 @@ def dict_problem_definition():
                     },
                     "md": {"lb": 0, "ub": 300},
                     "perforations": {
-                        "p1.start_md": {"lb": 50.0, "ub": 150.0},
+                        "p1": {"start_md": {"lb": 50.0, "ub": 150.0}},
                     },
                 },
             },
@@ -418,17 +418,6 @@ def test_linear_inequalities_invalid_sense_length_raises(dict_problem_definition
 def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
         "A": [{"W1md": 1}],
-        "b": [100],
-    }
-    with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
-
-
-def test_linear_inequalities_inconsistent_attribute_suffix_raises(
-    dict_problem_definition,
-):
-    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": 1, "W2.wellhead.x": 1}],
         "b": [100],
     }
     with pytest.raises((ValidationError, TypeError)):

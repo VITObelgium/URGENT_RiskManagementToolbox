@@ -28,17 +28,6 @@ class VariableBnd(BaseModel, extra="forbid"):
         return self
 
 
-class MDBnd(BaseModel, extra="forbid"):
-    lb: float = Field(default=0.0)
-    ub: float = Field(default=float("inf"))
-
-    @model_validator(mode="after")
-    def check_bounds(self) -> "MDBnd":
-        if self.lb > self.ub:
-            raise ValueError("MD bounds invalid: lb must be <= ub")
-        return self
-
-
 type VariableName = str
 type OptimizationConstrains = dict[VariableName, VariableBnd | OptimizationConstrains]
 
@@ -53,17 +42,6 @@ class WellPlacementItem(BaseModel, extra="forbid"):
     def set_initial_state_well_name(cls, values):
         values["initial_state"]["name"] = values["well_name"]
         return values
-
-    @model_validator(mode="after")
-    def rename_perf_keys_dot_to_hash(self) -> WellPlacementItem:
-        perf = self.optimization_constraints.get("perforations")
-        if not isinstance(perf, dict):
-            return self
-
-        self.optimization_constraints["perforations"] = {
-            k.replace(".", "#"): v for k, v in perf.items()
-        }
-        return self
 
 
 class OptimizationParameters(BaseModel, extra="forbid"):
@@ -164,7 +142,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
             self.linear_inequalities["sense"] = ["<="] * len(A)
 
         # Collect attribute suffixes to ensure same attribute referenced (e.g., all '.md')
-        attr_suffix: str | None = None
         for row_idx, row in enumerate(A):
             if not isinstance(row, dict):
                 raise TypeError(
@@ -180,16 +157,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
                 if "." not in var:
                     raise ValueError(
                         f"Variable '{var}' in linear inequalities must contain a '.' separating well and attribute (e.g., 'INJ.md')"
-                    )
-                suffix = var.split(".", 1)[1]
-                if attr_suffix is None:
-                    attr_suffix = suffix
-                elif not attr_suffix.startswith(suffix) and not suffix.startswith(
-                    attr_suffix
-                ):
-                    raise ValueError(
-                        "All variables in linear_inequalities must refer to the same attribute (e.g., all '.md'). "
-                        f"Found both '{attr_suffix}' and '{suffix}'."
                     )
             if not isinstance(b[row_idx], (int, float)):
                 raise TypeError(f"b[{row_idx}] must be numeric")

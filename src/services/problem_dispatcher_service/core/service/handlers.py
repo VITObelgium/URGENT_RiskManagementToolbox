@@ -101,10 +101,6 @@ def _flatten_optimization_parameters(
         if isinstance(value, VariableBnd):
             flat[full_key] = (value.lb, value.ub)
         elif isinstance(value, dict):
-            if not all(isinstance(v, VariableBnd) for v in value.values()):
-                raise TypeError(
-                    f"Invalid nested structure under key '{key}': expected VariableBnd values."
-                )
             nested_flat = _flatten_optimization_parameters(value, full_key, separator)
             flat.update(nested_flat)
         else:

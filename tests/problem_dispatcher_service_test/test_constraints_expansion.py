@@ -23,8 +23,10 @@ def md_problem_definition():
                     },
                     "md": {"lb": 2000, "ub": 2700},
                     "perforations": {
-                        "p1.start_md": {"lb": 2100, "ub": 2500},
-                        "p1.end_md": {"lb": 2200, "ub": 2400},
+                        "p1": {
+                            "start_md": {"lb": 2100, "ub": 2500},
+                            "end_md": {"lb": 2200, "ub": 2400},
+                        }
                     },
                 },
             },

@@ -480,34 +480,36 @@ Boundaries define the search space (Lower Bound and Upper Bound) for specific we
 | `optimization_constraints` | Dictionary | Maps a variable name to a `[Min, Max]` tuple. |
 
 > Important!
->> For `perforations` constrains following naming pattern is supported:
-`perforation_name` `.` `start_md` or `end_md`
-example `p1.start_md: {'lb': 2000, 'ub': 2200}`
+>> For nested parameters like wellhead coordinates or perforations, the following naming convention is used:
+>
+>  "main_parameter":{ "sub_parameter": {"sub_sub_parameter" :{ "lb": xxx, "ub": yyy }}} example:
 
 Example:
 ```JSON
-"optimization_constraints": {
-  "wellhead": {
-    "x": {
-      "lb": 10,
-      "ub": 3190
+  "optimization_constraints": {
+    "wellhead": {
+      "x": {
+        "lb": 10,
+        "ub": 3190
+      },
+      "y": {
+        "lb": 10,
+        "ub": 3190
+      }
     },
-    "y": {
-      "lb": 10,
-      "ub": 3190
-    }
-  },
-  "md": {
-    "lb": 2000,
-    "ub": 2700
-  },
-  "perforations":{
-    "p1.start_md": {
+    "md": {
       "lb": 2000,
-      "ub": 2200
-   }
-   }
-}
+      "ub": 2700
+    },
+    "perforations": {
+      "p1": {
+        "start_md": {
+          "lb": 2000,
+          "ub": 2200
+        }
+      }
+    }
+  }
 ```
 
 ### Optimization Parameters Section
@@ -525,16 +527,18 @@ These settings control the execution and termination of the optimization process
 | `patience` | Integer | `10` | Generations to wait for improvement before early stopping. |
 | `worker_count` | Integer | `4` | Number of parallel simulation workers (limited by physical CPU cores). |
 
-####
-Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
+#### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 
-- **A**: List of coefficient maps. Variables must be named as `WellName.attribute` (e.g., `PRO.md`).
+- **A**: List of coefficient maps. Variables must be named as `WellName.attribute` (e.g., `PRO.md` or `INJ.perforations.p1.start_md`).
 - **b**: List of constant values (right-hand side of the inequality).
 - **sense**: List of operators (`<=`, `>=`, `<`, `>`). Defaults to `<=` if omitted.
 
-> **Note**: All variables in a single block must refer to the same attribute type (e.g., all must be `.md` or all must be `.wellhead.x`).
+> Important!
+>> The number of rows in `A` and `b` must match the number of variables in the optimization space.
 
-Example: Combined Depth Constraint
+>> For perforation optimization make sure that end_md of perforation is greater than start_md
+
+#### Example: Combined Depth Constraint
 To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5000m:
 
 ```json
@@ -579,8 +583,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           "z": 0.0
         },
         "perforations": {
-		"p1":
-          {
+          "p1": {
             "start_md": 2000.0,
             "end_md": 2500.0
           }
@@ -588,10 +591,19 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
       },
       "optimization_constraints": {
         "wellhead": {
-          "x": { "lb": 100.0, "ub": 1000.0 },
-          "y": { "lb": 100.0, "ub": 1000.0 }
+          "x": {
+            "lb": 100.0,
+            "ub": 1000.0
+          },
+          "y": {
+            "lb": 100.0,
+            "ub": 1000.0
+          }
         },
-        "md": { "lb": 1500.0, "ub": 3000.0 }
+        "md": {
+          "lb": 1500.0,
+          "ub": 3000.0
+        }
       }
     },
     {
@@ -605,9 +617,8 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           "y": 1500.0,
           "z": 0.0
         },
-       "perforations":{
-       "p1":
-          {
+        "perforations": {
+          "p1": {
             "start_md": 2100.0,
             "end_md": 2200.0
           }
@@ -615,10 +626,19 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
       },
       "optimization_constraints": {
         "wellhead": {
-          "x": { "lb": 1000.0, "ub": 2500.0 },
-          "y": { "lb": 1000.0, "ub": 2500.0 }
+          "x": {
+            "lb": 1000.0,
+            "ub": 2500.0
+          },
+          "y": {
+            "lb": 1000.0,
+            "ub": 2500.0
+          }
         },
-        "md": { "lb": 1500.0, "ub": 3000.0 }
+        "md": {
+          "lb": 1500.0,
+          "ub": 3000.0
+        }
       }
     }
   ],
@@ -635,11 +655,16 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           "PRO.md": 1.0
         }
       ],
-      "b": [5000.0],
-      "sense": ["<="]
+      "b": [
+        5000.0
+      ],
+      "sense": [
+        "<="
+      ]
     }
   }
 }
+
 
 ```
 

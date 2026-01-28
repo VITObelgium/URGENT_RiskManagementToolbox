@@ -238,6 +238,12 @@ class OpenDartsConnector(ConnectorInterface):
         cell_connector = _CellConnector(struct_reservoir)
 
         for well_name, perforations_points in wells_with_perforations_points.items():
+            if not perforations_points:
+                logger.warning(
+                    f"Well {well_name} has no perforations points, skipping."
+                )
+                continue
+
             filtered_perforations_points = (
                 OpenDartsConnector._filter_perforations_inside_reservoir(
                     struct_reservoir, perforations_points

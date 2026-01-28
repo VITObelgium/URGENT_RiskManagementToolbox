@@ -2,7 +2,6 @@ import os
 from typing import Any
 
 from logger import get_csv_logger, get_logger
-from orchestration.risk_management_service.core.mappers import ControlVectorMapper
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
@@ -138,9 +137,7 @@ def run_risk_management(
                     }
                 )
 
-                next_solutions = ControlVectorMapper.convert_su_to_pd(
-                    response.next_iter_solutions
-                )
+                next_solutions = response.next_iter_solutions
 
                 _log_generation_summary(
                     solution_updater, generation_summary_logger, loop_controller

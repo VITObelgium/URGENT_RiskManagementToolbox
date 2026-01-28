@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import MutableMapping
 
 from logger import get_logger
 from services.well_management_service.core.models import (
@@ -31,7 +31,7 @@ class SWellTemplate(WellTemplateInterface):
         wellhead: TrajectoryPoint,
         azimuth: float,
         md_step: float,
-        perforations: Sequence[PerforationRange] | None = None,
+        perforations: MutableMapping[str, PerforationRange] | None = None,
     ):
         super().__init__(name, md_step, wellhead, azimuth, perforations)
         self.__logger = get_logger(__name__)
@@ -66,7 +66,10 @@ class SWellTemplate(WellTemplateInterface):
             azimuth=model.azimuth,
             md_step=model.md_step,
             perforations=(
-                [PerforationRange(p.start_md, p.end_md) for p in model.perforations]
+                {
+                    n: PerforationRange(p.start_md, p.end_md)
+                    for n, p in model.perforations.items()
+                }
                 if model.perforations
                 else None
             ),

@@ -5,12 +5,12 @@ from pydantic import ValidationError
 
 from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import (
-    ControlVector,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
     SolutionCandidateServicesTasks,
 )
+from services.solution_updater_service import ControlVector
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def dict_problem_definition():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 50, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "wellhead": {
@@ -31,6 +31,9 @@ def dict_problem_definition():
                         "y": {"lb": 10, "ub": 200},
                     },
                     "md": {"lb": 0, "ub": 300},
+                    "perforations": {
+                        "p1": {"start_md": {"lb": 50.0, "ub": 150.0}},
+                    },
                 },
             },
             {
@@ -39,7 +42,7 @@ def dict_problem_definition():
                     "well_type": "IWell",
                     "wellhead": {"x": 10, "y": 10, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "wellhead": {"x": {"lb": 0, "ub": 100}, "y": {"lb": 10, "ub": 200}},
@@ -125,6 +128,13 @@ def test_handle_iteration_loop_valid_input(
                 "W1.wellhead.y": 88.8,
                 "W2.wellhead.y": 199.9,
             },
+        ),
+        (
+            {
+                "well_placement#W1#perforations#p1#start_md": 55.0,
+                "well_placement#W1#perforations#p1#end_md": 60,
+            },
+            {"W1.perforations.p1.start_md": 55.0, "W1.perforations.p1.end_md": 60},
         ),
     ],
 )
@@ -231,7 +241,7 @@ def test_linear_inequalities_missing_well_constraint_raises():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 0, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {"md": {"lb": 0, "ub": 300}},
             },
@@ -241,7 +251,7 @@ def test_linear_inequalities_missing_well_constraint_raises():
                     "well_type": "IWell",
                     "wellhead": {"x": 10, "y": 10, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": None,
             },
@@ -270,7 +280,7 @@ def test_linear_inequalities_missing_variable_in_constraints_raises():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 0, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {"wellhead": {"x": {"lb": 0, "ub": 100}}},
             }
@@ -345,7 +355,7 @@ def test_linear_inequalities_unknown_well_raises():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 0, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "wellhead": {
@@ -361,7 +371,7 @@ def test_linear_inequalities_unknown_well_raises():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 0, "z": 0},
                     "md": 200,
-                    "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
                 "optimization_constraints": {
                     "wellhead": {
@@ -414,17 +424,6 @@ def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition
         ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
-def test_linear_inequalities_inconsistent_attribute_suffix_raises(
-    dict_problem_definition,
-):
-    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": 1, "W2.wellhead.x": 1}],
-        "b": [100],
-    }
-    with pytest.raises((ValidationError, TypeError)):
-        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
-
-
 def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definition):
     # Constraints only define wellhead.x/y, but A references wellhead.z
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
@@ -444,7 +443,7 @@ def test_duplicate_well_names_raises():
                     "well_type": "IWell",
                     "wellhead": {"x": 0, "y": 0, "z": 0},
                     "md": 100,
-                    "perforations": [{"start_md": 20.0, "end_md": 80.0}],
+                    "perforations": {"p1": {"start_md": 20.0, "end_md": 80.0}},
                 },
                 "optimization_constraints": {"md": {"lb": 0, "ub": 200}},
             },
@@ -511,7 +510,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
                 "md_linear2": 700.0,
                 "azimuth": 90.0,
                 "md_step": 20.0,
-                "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
             },
             "optimization_constraints": {
                 "md_linear1": {"lb": 400, "ub": 600},
@@ -533,7 +532,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
                 "md_linear3": 600.0,
                 "azimuth": 180.0,
                 "md_step": 30.0,
-                "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
             },
             "optimization_constraints": {
                 "md_linear1": {"lb": 300, "ub": 500},
@@ -550,7 +549,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
                 "md_lateral": 1500.0,
                 "azimuth": 45.0,
                 "md_step": 10.0,
-                "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+                "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
             },
             "optimization_constraints": {
                 "TVD": {"lb": 800, "ub": 1200},
@@ -596,7 +595,7 @@ def test_hwell_validation_failure_invalid_geometry():
             "md_lateral": 1500.0,
             "azimuth": 45.0,
             "md_step": 10.0,
-            "perforations": [{"start_md": 100.0, "end_md": 200.0}],
+            "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
         },
         "optimization_constraints": {"TVD": {"lb": 50, "ub": 150}},
     }

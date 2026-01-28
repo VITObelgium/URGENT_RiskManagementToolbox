@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import itertools
-from typing import Literal, Union
+from collections import Counter
+from typing import Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
 from typing_extensions import Annotated
@@ -120,7 +121,7 @@ class HWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
 
 
 WellModel = Annotated[
-    Union[IWellModel, JWellModel, SWellModel, HWellModel],
+    IWellModel | JWellModel | SWellModel | HWellModel,
     Field(discriminator="well_type"),
 ]
 
@@ -267,18 +268,8 @@ def _duplicate_well_names(wells_name: list[str]) -> list[str]:
     Returns duplicate well names (each duplicate appears once), preserving first-duplicate order.
     Example: [A, B, A, A, B] -> ["A", "B"]
     """
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    result: list[str] = []
-
-    for name in wells_name:
-        if name in seen and name not in duplicates:
-            duplicates.add(name)
-            result.append(name)
-        else:
-            seen.add(name)
-
-    return result
+    counts = Counter(wells_name)
+    return [name for name in counts if counts[name] > 1]
 
 
 def _has_valid_range(start_md: float, end_md: float) -> bool:

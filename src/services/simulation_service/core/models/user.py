@@ -6,10 +6,6 @@ from pydantic import BaseModel, Field
 
 from services.well_management_service.core.models import WellManagementServiceResponse
 
-# from services.simulation_service.core.models.shared_from_well_management import (
-#     WellManagementServiceResult,
-# )
-
 
 class SimulationResults(BaseModel, extra="forbid"):
     """

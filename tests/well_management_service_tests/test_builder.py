@@ -1,4 +1,5 @@
-from typing import MutableMapping, Sequence
+from collections.abc import Sequence
+from typing import MutableMapping
 
 import numpy as np
 import pytest

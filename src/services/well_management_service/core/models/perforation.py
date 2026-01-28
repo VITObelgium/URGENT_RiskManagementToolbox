@@ -8,6 +8,7 @@ from services.well_management_service.core import models
 
 @dataclass(frozen=True, slots=True)
 class Perforation:
+    name: str
     range: PerforationRange
     points: tuple[models.Point, ...]
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import copy
 import logging
+import logging.config as lc
 import os
 import shutil
 import subprocess
@@ -215,7 +216,7 @@ def configure_default_profile() -> None:
     cfg.setdefault("root", {}).update({"handlers": []})
     cfg.get("handlers", {}).pop("file", None)
     cfg.get("handlers", {}).pop("console", None)
-    logging.config.dictConfig(cfg)
+    lc.dictConfig(cfg)
     _start_queue_listener()
 
 

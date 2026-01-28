@@ -1,5 +1,6 @@
 from services.problem_dispatcher_service.core.builder import TaskBuilder
-from services.problem_dispatcher_service.core.models import ControlVector, ServiceType
+from services.problem_dispatcher_service.core.models import ServiceType
+from services.solution_updater_service import ControlVector
 
 
 def test_task_builder_creates_tasks_with_control_vector():

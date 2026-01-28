@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import MutableMapping
 
 import numpy as np
 
@@ -32,7 +32,7 @@ class CurvedWellSection(SectionInterface):
         self,
         trajectory: Trajectory,
         md_step: float,
-        perforations: Sequence[PerforationRange] | None = None,
+        perforations: MutableMapping[str, PerforationRange] | None = None,
     ) -> Trajectory:
         last_point = trajectory.get_last_trajectory_point()
         x, y, z, point_md = last_point

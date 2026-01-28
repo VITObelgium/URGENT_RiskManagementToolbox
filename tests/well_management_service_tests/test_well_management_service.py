@@ -18,21 +18,27 @@ from tests.well_management_service_tests.tools import (
 
 # Define sample data for testing
 valid_position: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}
-valid_perforation: dict[str, float] = {"start_md": 100.0, "end_md": 200.0}
-invalid_perforation: dict[str, float] = {"start_md": 300.0, "end_md": 200.0}
-unsorted_perforations: list[dict[str, float]] = [
-    {"start_md": 300.0, "end_md": 400.0},
-    {"start_md": 100.0, "end_md": 200.0},
-]
-sorted_perforations: list[dict[str, float]] = [
-    {"start_md": 100.0, "end_md": 200.0},
-    {"start_md": 300.0, "end_md": 400.0},
-]
-overlapping_perforations: list[dict[str, float]] = [
-    {"start_md": 100.0, "end_md": 200.0},
-    {"start_md": 150.0, "end_md": 250.0},
-]
-out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 4200.0}
+valid_perforation: dict[str, dict[str, float]] = {
+    "p1": {"start_md": 100.0, "end_md": 200.0}
+}
+invalid_perforation: dict[str, dict[str, float]] = {
+    "p1": {"start_md": 300.0, "end_md": 200.0}
+}
+unsorted_perforations: dict[str, dict[str, float]] = {
+    "p2": {"start_md": 300.0, "end_md": 400.0},
+    "p1": {"start_md": 100.0, "end_md": 200.0},
+}
+sorted_perforations: dict[str, dict[str, float]] = {
+    "p1": {"start_md": 100.0, "end_md": 200.0},
+    "p2": {"start_md": 300.0, "end_md": 400.0},
+}
+overlapping_perforations: dict[str, dict[str, float]] = {
+    "p1": {"start_md": 100.0, "end_md": 200.0},
+    "p2": {"start_md": 150.0, "end_md": 250.0},
+}
+out_of_bounds_perforation: dict[str, dict[str, float]] = {
+    "p1": {"start_md": 3000.0, "end_md": 4200.0}
+}
 
 
 @pytest.mark.parametrize(
@@ -96,7 +102,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "md": 500.0,
                 "wellhead": valid_position,
                 "md_step": 10.0,
-                "perforations": [out_of_bounds_perforation],
+                "perforations": out_of_bounds_perforation,
             },
             None,
             None,
@@ -179,7 +185,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "wellhead": valid_position,
                 "azimuth": 90.0,
                 "md_step": 20.0,
-                "perforations": [out_of_bounds_perforation],
+                "perforations": out_of_bounds_perforation,
             },
             None,
             None,
@@ -259,7 +265,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "wellhead": valid_position,
                 "azimuth": 180.0,
                 "md_step": 30.0,
-                "perforations": [out_of_bounds_perforation],
+                "perforations": out_of_bounds_perforation,
             },
             None,
             None,
@@ -338,7 +344,7 @@ out_of_bounds_perforation: dict[str, float] = {"start_md": 3000.0, "end_md": 420
                 "wellhead": valid_position,
                 "azimuth": 45.0,
                 "md_step": 10.0,
-                "perforations": [valid_perforation],
+                "perforations": valid_perforation,
             },
             ValidationError,
             None,
@@ -349,7 +355,7 @@ def test_well_models(
     model_class: Any,
     input_data: dict[str, Any],
     expected_exception: type[BaseException] | None,
-    expected_sorted_perforations: list[dict[str, float]] | None,
+    expected_sorted_perforations: dict[str, dict[str, float]] | None,
 ) -> None:
     if expected_exception:
         with pytest.raises(expected_exception):
@@ -358,10 +364,12 @@ def test_well_models(
         instance = model_class(**input_data)
         assert instance.name == input_data["name"]
         if expected_sorted_perforations:
-            assert [
-                {"start_md": p.start_md, "end_md": p.end_md}
-                for p in instance.perforations
-            ] == expected_sorted_perforations
+            assert list(instance.perforations.keys()) == list(
+                expected_sorted_perforations.keys()
+            )
+            assert {
+                k: v.model_dump() for k, v in instance.perforations.items()
+            } == expected_sorted_perforations
 
 
 @pytest.mark.parametrize(
@@ -391,10 +399,10 @@ def test_perforation_range(
                         "md": 100,
                         "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
                         "md_step": 50.0,
-                        "perforations": [
-                            {"start_md": 10.0, "end_md": 60.0},
-                            {"start_md": 70.0, "end_md": 80.0},
-                        ],
+                        "perforations": {
+                            "p1": {"start_md": 10.0, "end_md": 60.0},
+                            "p2": {"start_md": 70.0, "end_md": 80.0},
+                        },
                     },
                 ]
             },
@@ -479,7 +487,7 @@ def test_perforation_range(
                         "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
                         "azimuth": 0.0,
                         "md_step": 10,
-                        "perforations": [{"start_md": 10, "end_md": 30}],
+                        "perforations": {"p1": {"start_md": 10, "end_md": 30}},
                     },
                 ]
             },
@@ -518,10 +526,10 @@ def test_perforation_range(
                         "md": 100,
                         "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
                         "md_step": 50.0,
-                        "perforations": [
-                            {"start_md": 10.0, "end_md": 60.0},
-                            {"start_md": 70.0, "end_md": 80.0},
-                        ],
+                        "perforations": {
+                            "p1": {"start_md": 10.0, "end_md": 60.0},
+                            "p2": {"start_md": 70.0, "end_md": 80.0},
+                        },
                     },
                     {
                         "well_type": "IWell",
@@ -529,10 +537,10 @@ def test_perforation_range(
                         "md": 100,
                         "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
                         "md_step": 50.0,
-                        "perforations": [
-                            {"start_md": 10.0, "end_md": 60.0},
-                            {"start_md": 70.0, "end_md": 80.0},
-                        ],
+                        "perforations": {
+                            "p1": {"start_md": 10.0, "end_md": 60.0},
+                            "p2": {"start_md": 70.0, "end_md": 80.0},
+                        },
                     },
                 ]
             },
@@ -550,10 +558,10 @@ def test_perforation_range(
                         "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
                         "azimuth": 0.0,
                         "md_step": 1,
-                        "perforations": [
-                            {"start_md": 100.0, "end_md": 200.0},
-                            {"start_md": 300.0, "end_md": 400.0},
-                        ],
+                        "perforations": {
+                            "p1": {"start_md": 100.0, "end_md": 200.0},
+                            "p2": {"start_md": 300.0, "end_md": 400.0},
+                        },
                     },
                 ]
             },
@@ -590,7 +598,7 @@ def test_perforation_range(
                         "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
                         "azimuth": 45.0,
                         "md_step": 10.0,
-                        "perforations": [valid_perforation],
+                        "perforations": valid_perforation,
                     },
                 ]
             },

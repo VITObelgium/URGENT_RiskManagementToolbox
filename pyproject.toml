@@ -155,6 +155,7 @@ protoletariat = "==3.3.9"
 pytest = "==8.3.4"
 pytest-mypy = "==0.10.3"
 pytest-retry = "==1.7.0"
+ruff = "==0.14.14"
 
 
 [tool.pixi.feature.py310.dependencies]
@@ -172,3 +173,13 @@ dev = { features = ["dev"], solve-group = "default" }
 worker = { features = ["py310"], solve-group = "worker", no-default-feature = true }
 
 [tool.pixi.tasks]
+clean-logs = { cmd = "python -c \"import shutil; shutil.rmtree('log', ignore_errors=True)\"" }
+clean-orchestration = { cmd = "python -c \"import shutil; shutil.rmtree('orchestration_files', ignore_errors=True)\"" }
+clean-htmlcov = { cmd = "python -c \"import shutil; shutil.rmtree('htmlcov', ignore_errors=True)\"" }
+clean-all= { depends-on = ["clean-logs", "clean-orchestration", "clean-htmlcov"] }
+
+mypy = { cmd = "mypy" }
+ruff-fix = { cmd = "ruff check --fix ." }
+ruff-format-check =  { cmd = "ruff format ." }
+
+lint = { depends-on = ["ruff-fix", "ruff-format-check", "mypy"] }

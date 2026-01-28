@@ -65,6 +65,12 @@ Maintain codebase quality by executing pre-commit hooks, which will run set of t
 pixi run -e dev pre-commit run -a
 ```
 
+#### Logs and artifacts pruning
+To clean toolbox logs and produced artifacts run following pixi task:
+``` shell
+pixi run -e dev clean-all
+```
+
 ### Release Environment
 Installs the runtime dependencies:
 ```shell
@@ -282,14 +288,15 @@ The `initial_state` defines the **baseline geometry** of a well.
 #### Common fields
 | Field | Required | Description |
 |----|----|----|
-| `well_type` | ✅ | Well type definition |
 | `wellhead` | ✅ | XYZ coordinates of wellhead ex. {"x": 400,"y": 400, "z": 0}  |
-|`perforations`| ❌ | Optional: list perforation interval of well in measure depth ex. [{"start_md":  1000.00, "end_md": 1200.00}]|
-| `md_step` | ❌ | Optional: well trajectory discretization step, default: 0.5 m |
+|`perforations`| ❌ | Optional (but well without perforation may be skipped in simulator - check the worker log(s) file):: dictionary of name and perforation interval of well in measure depth ex. {"perforation_1": {"start_md":  1000.00, "end_md": 1200.00}, "perforation_2":{"start_md": 1500, "end_md": 1550}}|
+| `md_step` | ❌ | Optional:  well trajectory discretization step, default: `0.5 m`, `≥ 0.1m` |
 
-Note:
-* Certain optimization workflows may restrict the model to a single perforation interval.
-* If no perforations are provided, the system may default to perforating the entire length of the well (depending on service configuration)
+Data Validation Rules
+- **Perforation Alignment**: Any perforation defined beyond the well's total `md` is automatically truncated. Intervals starting after the total `md` are discarded.
+- **Overlap Detection**: The system ensures no two perforation intervals overlap.
+- **Automatic Sorting**: Perforations are automatically ordered by their start depth.
+
 
 The well type is selected using the `well_type` discriminator:
 
@@ -308,9 +315,7 @@ The `IWell` represents a straight, inclined well trajectory. It is defined by it
 | :--- | :--- | :--- | :--- |
 | `well_type` | Literal | Fixed identifier for the trajectory type. | Must be `IWell` |
 | `md` | Float | **Measured Depth**: Total length of the wellbore. | `> 0.0` |
-| `wellhead` | Object | The surface reference position (X, Y, Z). | Required |
-| `md_step` | Float | **Step Interval**: The discretization step for calculations. | `≥ 0.1` |
-| `perforations` | Array | List of intervals (start/end) for well completion. | Optional |
+
 
 Example:
 ``` json
@@ -323,19 +328,17 @@ Example:
     "z": 0.0
   },
   "md_step": 0.5,
-  "perforations": [
+  "perforations": {
+   "p1":
     {
       "start_md": 1800.0,
       "end_md": 1950.0
     }
-  ]
+  }
 }
 ```
 
-Data Validation Rules
-- **Perforation Alignment**: Any perforation defined beyond the well's total `md` is automatically truncated. Intervals starting after the total `md` are discarded.
-- **Overlap Detection**: The system ensures no two perforation intervals overlap.
-- **Automatic Sorting**: Perforations are automatically ordered by their start depth.
+
 
 #### J shape well
 
@@ -348,10 +351,8 @@ The `JWell` represents a directional well trajectory consisting of an initial ve
 | `md_curved` | Float | **Curved Section**: Length of the build/curve section. | `> 0.0` |
 | `dls` | Float | **Dogleg Severity**: Curvature rate of the build section in °/30m. The positive value define anticlockwise build direction | `-45.0` to `45.0` |
 | `md_linear2` | Float | **Final Linear Section**: Length of the final tangential section. | `> 0.0` |
-| `wellhead` | Object | The surface reference position (X, Y, Z). | Required |
 | `azimuth` | Float | Azimuth of the well in degrees. | `0.0` to `< 360.0` |
-| `md_step` | Float | **Step Interval**: The discretization step for calculations. | `≥ 0.1` |
-| `perforations` | Array | List of intervals (start/end) for well completion. | Optional |
+
 
 Example:
 ```JSON
@@ -368,21 +369,15 @@ Example:
   },
   "azimuth": 45.0,
   "md_step": 0.5,
-  "perforations": [
+  "perforations": {
+   "p1":
     {
       "start_md": 1200.0,
       "end_md": 1450.0
     }
-  ]
+  }
 }
 ```
-
-
-#### Data Validation Rules
-- **Total Depth Adjustment**: Perforation intervals are automatically validated against the total Measured Depth (sum of `md_linear1`, `md_curved`, and `md_linear2`). Intervals extending beyond the well's end are truncated or removed.
-- **Overlap Prevention**: The system prevents any overlapping perforation intervals.
-- **Sequential Ordering**: Perforations are automatically sorted by their starting depth for calculation consistency.
-
 
 #### S shape well
 
@@ -398,10 +393,8 @@ The `SWell` represents a complex directional well trajectory with two curved sec
 | `md_curved2` | Float | **Second Curve**: Length of the second build/drop section. | `> 0.0` |
 | `dls2` | Float | **Second DLS**: Dogleg Severity for the second curve in °/30m. The positive value define anticlockwise build direction  | `-45.0` to `45.0` |
 | `md_linear3` | Float | **Third Linear Section**: Final straight section. | `> 0.0` |
-| `wellhead` | Object | The surface reference position (X, Y, Z). | Required |
 | `azimuth` | Float | The horizontal direction of the well in degrees. | `0.0` to `< 360.0` |
-| `md_step` | Float | **Step Interval**: The discretization step for calculations. | `≥ 0.1` |
-| `perforations` | Array | List of intervals (start/end) for well completion. | Optional |
+
 
 Example:
 ``` JSON
@@ -421,18 +414,15 @@ Example:
   },
   "azimuth": 180.0,
   "md_step": 0.5,
-  "perforations": [
+  "perforations": {
+   "p1":
     {
       "start_md": 1600.0,
       "end_md": 1900.0
     }
-  ]
+  }
 }
 ```
-#### Data Validation Rules
-- **Total Depth Adjustment**: Perforation intervals are validated against the total Measured Depth (sum of all linear and curved sections). Intervals exceeding the total depth are automatically truncated.
-- **Overlap Prevention**: The system ensures that no two perforation intervals overlap.
-
 
 #### Horizontal well
 
@@ -442,13 +432,10 @@ The `HWell` represents a horizontal well trajectory defined by a specific True V
 | Field | Type | Description | Constraints |
 | :--- | :--- | :--- | :--- |
 | `well_type` | Literal | Fixed identifier for the trajectory type. | Must be `HWell` |
-| `name` | String | The unique name of the well. | Required |
 | `TVD` | Float | **True Vertical Depth**: The vertical depth of the horizontal lateral. | `> 0.0` |
 | `md_lateral` | Float | **Lateral Length**: The length of the horizontal section. | `> 0.0` |
-| `wellhead` | Object | The surface reference position (X, Y, Z). | Required |
 | `azimuth` | Float | The horizontal direction of the lateral in degrees. | `0.0` to `< 360.0` |
-| `md_step` | Float | **Step Interval**: The discretization step for calculations. | `≥ 0.1` |
-| `perforations` | Array | List of intervals (start/end) for well completion. | Optional |
+
 
 Example:
 ```json
@@ -463,41 +450,20 @@ Example:
   },
   "azimuth": 90.0,
   "md_step": 1.0,
-  "perforations": [
+  "perforations": {
+   "p1":
     {
       "start_md": 1200.0,
       "end_md": 2500.0
     }
-  ]
+  }
 }
 ```
 
 #### Data Validation Rules
 - **Geometry Check**: The `TVD` must be sufficient to accommodate the calculated curvature radius of the build section.
 - **Automatic MD Calculation**: The total Measured Depth is automatically derived from the vertical transition and lateral width for perforation clipping.
-- **Overlap Prevention**: The system ensures no two perforation intervals overlap.
 
-Example:
-```json
-{
-  "well_type": "HWell",
-  "TVD": 1000.0,
-  "md_lateral": 1500.0,
-  "wellhead": {
-    "x": 2000.0,
-    "y": 2000.0,
-    "z": 0.0
-  },
-  "azimuth": 90.0,
-  "md_step": 1.0,
-  "perforations": [
-    {
-      "start_md": 1200.0,
-      "end_md": 2500.0
-    }
-  ]
-}
-```
 
 ### Optimization constraints
 
@@ -513,24 +479,37 @@ Boundaries define the search space (Lower Bound and Upper Bound) for specific we
 | :--- | :--- | :--- |
 | `optimization_constraints` | Dictionary | Maps a variable name to a `[Min, Max]` tuple. |
 
+> Important!
+>> For nested parameters like wellhead coordinates or perforations, the following naming convention is used:
+>
+>  "main_parameter":{ "sub_parameter": {"sub_sub_parameter" :{ "lb": xxx, "ub": yyy }}} example:
+
 Example:
 ```JSON
-"optimization_constraints": {
-  "wellhead": {
-    "x": {
-      "lb": 10,
-      "ub": 3190
+  "optimization_constraints": {
+    "wellhead": {
+      "x": {
+        "lb": 10,
+        "ub": 3190
+      },
+      "y": {
+        "lb": 10,
+        "ub": 3190
+      }
     },
-    "y": {
-      "lb": 10,
-      "ub": 3190
+    "md": {
+      "lb": 2000,
+      "ub": 2700
+    },
+    "perforations": {
+      "p1": {
+        "start_md": {
+          "lb": 2000,
+          "ub": 2200
+        }
+      }
     }
-  },
-  "md": {
-    "lb": 2000,
-    "ub": 2700
   }
-}
 ```
 
 ### Optimization Parameters Section
@@ -548,16 +527,18 @@ These settings control the execution and termination of the optimization process
 | `patience` | Integer | `10` | Generations to wait for improvement before early stopping. |
 | `worker_count` | Integer | `4` | Number of parallel simulation workers (limited by physical CPU cores). |
 
-####
-Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
+#### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 
-- **A**: List of coefficient maps. Variables must be named as `WellName.attribute` (e.g., `PRO.md`).
+- **A**: List of coefficient maps. Variables must be named as `WellName.attribute` (e.g., `PRO.md` or `INJ.perforations.p1.start_md`).
 - **b**: List of constant values (right-hand side of the inequality).
 - **sense**: List of operators (`<=`, `>=`, `<`, `>`). Defaults to `<=` if omitted.
 
-> **Note**: All variables in a single block must refer to the same attribute type (e.g., all must be `.md` or all must be `.wellhead.x`).
+> Important!
+>> The number of rows in `A` and `b` must match the number of variables in the optimization space.
 
-Example: Combined Depth Constraint
+>> For perforation optimization make sure that end_md of perforation is greater than start_md
+
+#### Example: Combined Depth Constraint
 To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5000m:
 
 ```json
@@ -601,19 +582,28 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           "y": 500.0,
           "z": 0.0
         },
-        "perforations": [
-          {
+        "perforations": {
+          "p1": {
             "start_md": 2000.0,
             "end_md": 2500.0
           }
-        ]
+        }
       },
       "optimization_constraints": {
         "wellhead": {
-          "x": { "lb": 100.0, "ub": 1000.0 },
-          "y": { "lb": 100.0, "ub": 1000.0 }
+          "x": {
+            "lb": 100.0,
+            "ub": 1000.0
+          },
+          "y": {
+            "lb": 100.0,
+            "ub": 1000.0
+          }
         },
-        "md": { "lb": 1500.0, "ub": 3000.0 }
+        "md": {
+          "lb": 1500.0,
+          "ub": 3000.0
+        }
       }
     },
     {
@@ -626,14 +616,29 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           "x": 1500.0,
           "y": 1500.0,
           "z": 0.0
+        },
+        "perforations": {
+          "p1": {
+            "start_md": 2100.0,
+            "end_md": 2200.0
+          }
         }
       },
       "optimization_constraints": {
         "wellhead": {
-          "x": { "lb": 1000.0, "ub": 2500.0 },
-          "y": { "lb": 1000.0, "ub": 2500.0 }
+          "x": {
+            "lb": 1000.0,
+            "ub": 2500.0
+          },
+          "y": {
+            "lb": 1000.0,
+            "ub": 2500.0
+          }
         },
-        "md": { "lb": 1500.0, "ub": 3000.0 }
+        "md": {
+          "lb": 1500.0,
+          "ub": 3000.0
+        }
       }
     }
   ],
@@ -650,11 +655,16 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           "PRO.md": 1.0
         }
       ],
-      "b": [5000.0],
-      "sense": ["<="]
+      "b": [
+        5000.0
+      ],
+      "sense": [
+        "<="
+      ]
     }
   }
 }
+
 
 ```
 

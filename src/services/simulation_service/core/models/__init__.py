@@ -1,6 +1,3 @@
-from services.simulation_service.core.models.shared_from_well_management import (
-    WellManagementServiceResult,
-)
 from services.simulation_service.core.models.user import (
     SimulationCase,
     SimulationResults,
@@ -13,5 +10,4 @@ __all__ = [
     "SimulationResults",
     "SimulationServiceRequest",
     "SimulationServiceResponse",
-    "WellManagementServiceResult",
 ]

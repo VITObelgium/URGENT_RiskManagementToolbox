@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import MutableMapping
 
 import numpy as np
 import pytest
@@ -71,7 +71,7 @@ from tests.well_management_service_tests.tools import (
             0.0,
             Trajectory((TrajectoryPoint(0, 0, 0, 0),)),
             50.0,
-            [PerforationRange(10.0, 20.0)],
+            {"p1": PerforationRange(10.0, 20.0)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -85,7 +85,7 @@ from tests.well_management_service_tests.tools import (
             0.0,
             Trajectory((TrajectoryPoint(0, 0, 0, 0),)),
             50.0,
-            [PerforationRange(10.0, 20.0), PerforationRange(50.0, 75.0)],
+            {"p1": PerforationRange(10.0, 20.0), "p2": PerforationRange(50.0, 75.0)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -100,7 +100,7 @@ from tests.well_management_service_tests.tools import (
             0.0,
             Trajectory((TrajectoryPoint(0, 0, 0, 0),)),
             30.0,
-            [PerforationRange(10.0, 20.0), PerforationRange(91.0, 99.0)],
+            {"p1": PerforationRange(10.0, 20.0), "p2": PerforationRange(91.0, 99.0)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -118,7 +118,7 @@ from tests.well_management_service_tests.tools import (
             0.0,
             Trajectory((TrajectoryPoint(0, 0, 0, 0),)),
             30.0,
-            [PerforationRange(10.0, 20.0), PerforationRange(51.0, 99.0)],
+            {"p1": PerforationRange(10.0, 20.0), "p2": PerforationRange(51.0, 99.0)},
             (
                 TrajectoryPoint(0, 0, 0, 0),
                 TrajectoryPoint(0, 0, 10, 10),
@@ -138,7 +138,7 @@ def test_linear_well_section(
     input_user_inclination: float | None,
     input_trajectory: Trajectory,
     input_md_step: float,
-    input_perforations: Sequence[PerforationRange] | None,
+    input_perforations: MutableMapping[str, PerforationRange] | None,
     must_contain_trajectory_points_in_order: tuple[TrajectoryPoint, ...],
 ) -> None:
     linear_well_section = LinearWellSection(input_md, input_user_inclination)
@@ -246,7 +246,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             None,
             Trajectory((TrajectoryPoint(0, 0, 0, 0),)),
             150,
-            [PerforationRange(100, 200)],
+            {"p1": PerforationRange(100, 200)},
             (
                 (TrajectoryPoint(0, 0, 0, 0)),
                 (TrajectoryPoint(25.58726308, 0, 95.49296586, 100)),
@@ -261,7 +261,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             None,
             Trajectory((TrajectoryPoint(0, 0, 0, 0),)),
             140,
-            [PerforationRange(100, 280), PerforationRange(295, 300)],
+            {"p1": PerforationRange(100, 280), "p2": PerforationRange(295, 300)},
             (
                 (TrajectoryPoint(0, 0, 0, 0)),
                 (TrajectoryPoint(25.58726308, 0, 95.49296586, 100)),
@@ -277,7 +277,7 @@ R = md / (np.deg2rad(dls) * md / 30.0)
             None,
             Trajectory((TrajectoryPoint(0, 0, 200, 200),)),
             140,
-            [PerforationRange(300, 480), PerforationRange(495, 500)],
+            {"p1": PerforationRange(300, 480), "p2": PerforationRange(495, 500)},
             (
                 (TrajectoryPoint(0, 0, 200, 200)),
                 (TrajectoryPoint(25.58726308, 0, 295.4929659, 300)),
@@ -295,7 +295,7 @@ def test_curved_well_section(
     input_user_inclination: float | None,
     input_trajectory: Trajectory,
     input_md_step: float,
-    input_perforations: Sequence[PerforationRange] | None,
+    input_perforations: MutableMapping[str, PerforationRange] | None,
     must_contain_trajectory_points_in_order: tuple[TrajectoryPoint, ...],
 ) -> None:
     curved_well_section = CurvedWellSection(input_md, input_dls, input_user_inclination)

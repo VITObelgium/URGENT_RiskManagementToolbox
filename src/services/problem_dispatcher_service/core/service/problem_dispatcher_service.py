@@ -5,7 +5,6 @@ from common import OptimizationStrategy
 from logger import get_logger
 from services.problem_dispatcher_service.core.builder import TaskBuilder
 from services.problem_dispatcher_service.core.models import (
-    ControlVector,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
@@ -15,6 +14,7 @@ from services.problem_dispatcher_service.core.service.handlers import (
     WellPlacementHandler,
 )
 from services.problem_dispatcher_service.core.utils import CandidateGenerator
+from services.solution_updater_service import ControlVector
 
 PROBLEM_TYPE_HANDLERS: dict[str, ProblemTypeHandler] = {
     "well_placement": WellPlacementHandler(),

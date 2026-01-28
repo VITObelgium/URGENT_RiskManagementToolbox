@@ -16,6 +16,7 @@ JsonPath: TypeAlias = str
 
 
 class PerforationSchema(TypedDict):
+    name: str
     range: tuple[float, float]
     points: list[Point]
 

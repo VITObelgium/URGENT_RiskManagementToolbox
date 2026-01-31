@@ -178,12 +178,15 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         )
 
         # Log summary with appropriate level based on failures
-        if failed_count > 0:
+        if failed_count or timeout_count:
             logger.warning(
-                f"Completed with {success_count} successful, {failed_count} failed and {timeout_count} timeout simulation(s)"
+                "Completed with %d successful, %d failed and %d timeout simulation(s)",
+                success_count,
+                failed_count,
+                timeout_count,
             )
         else:
-            logger.info(f"All {success_count} simulation(s) completed successfully")
+            logger.info("All %d simulation(s) completed successfully", success_count)
 
         # Sort completed jobs by job_id to maintain order
         sorted_jobs = sorted(self._completed_jobs.items(), key=lambda x: x[0])

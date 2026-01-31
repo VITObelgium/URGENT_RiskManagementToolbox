@@ -38,10 +38,12 @@ def _run_simulator(
     stop_flag: threading.Event | None = None,
 ) -> tuple[SimulationStatus, SimulationResults]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tf:
+    with tempfile.NamedTemporaryFile(
+        mode="w", delete=True, suffix=".json", delete_on_close=False
+    ) as tf:
         json.dump(simulation_job.simulation.input.wells, tf)
         tf_path = tf.name
-    return connector.run(tf_path, stop=stop_flag)
+        return connector.run(tf_path, stop=stop_flag)
 
 
 async def request_simulation_job(stub, worker_id):

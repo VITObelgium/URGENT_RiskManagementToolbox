@@ -29,6 +29,7 @@ class VariableBnd(BaseModel, extra="forbid"):
 
 
 type VariableName = str
+type ObjectiveFnName = str
 type OptimizationConstrains = dict[VariableName, VariableBnd | OptimizationConstrains]
 
 
@@ -49,12 +50,11 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Represents the optimization parameters for the problem dispatcher service.
 
     Attributes:
+        objective (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
         max_generations (int): The maximum number of generations for the optimization algorithm.
         population_size (int): The size of the population in each generation.
         patience (int): The number of generations to wait for improvement before stopping.
         worker_count (int): The number of parallel workers to use for simulations.
-        optimization_strategy (str): The direction of the optimization objective,
-            either 'maximize' or 'minimize'.
         linear_inequalities (dict[str, list] | None): The linear inequality constraints
             for the optimization problem. An example structure is:
             {
@@ -67,13 +67,11 @@ class OptimizationParameters(BaseModel, extra="forbid"):
 
     """
 
+    objectives: dict[ObjectiveFnName, OptimizationStrategy]
     max_generations: int = Field(default=10)
     population_size: int = Field(default=10)
     patience: int = Field(default=10)
     worker_count: int = Field(default=4)
-    optimization_strategy: OptimizationStrategy = Field(
-        default=OptimizationStrategy.MAXIMIZE,
-    )
     linear_inequalities: dict[str, list] | None = Field(default=None)
 
     @field_validator(

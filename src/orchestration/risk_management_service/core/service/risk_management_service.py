@@ -67,7 +67,7 @@ def run_risk_management(
                 optimization_engine=OptimizationEngine.PSO,
                 max_generations=dispatcher.max_generation,
                 patience=dispatcher.patience,
-                optimization_strategy=dispatcher.optimization_strategy,
+                objectives=dispatcher.optimization_strategy,
             )
 
             # Initialize generation summary logger

@@ -67,7 +67,7 @@ def test_pso_handles_mixed_md_and_wellhead_constraints(mixed_constraints_request
         optimization_engine=OptimizationEngine.PSO,
         max_generations=2,
         patience=3,
-        optimization_strategy=OptimizationStrategy.MAXIMIZE,
+        objectives={"metric": OptimizationStrategy.MAXIMIZE},
     )
 
     response = service.process_request(mixed_constraints_request)

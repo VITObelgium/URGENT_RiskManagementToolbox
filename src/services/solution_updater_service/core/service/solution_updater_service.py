@@ -347,7 +347,6 @@ class _SolutionUpdaterServiceLoopController:
     ) -> None:
         """
         Helper class to control the loop of the solution updater service.
-        This class manages the number of iterations for the optimization process, and raises StopIteration exception when convergence fails.
         """
         self._info = "Loop controller running"
         self._solution_updater_service = solution_updater_service
@@ -357,30 +356,30 @@ class _SolutionUpdaterServiceLoopController:
 
         self._base_patience, self._patience_left = patience, patience
 
-        self._last_run_global_best_result: float | None = None
+        # Track history for multi-objective
+        self._last_run_global_best_result: float | npt.NDArray[np.float64] | None = None
+        self._is_multi_objective: bool | None = None
+        self._pareto_front_history: list[npt.NDArray[np.float64]] = []
 
     @property
     def current_generation(self) -> int:
         return self._current_generation
 
     @property
+    def iteration_progress(self) -> float:
+        return self._current_generation / self._max_generations
+
+    @property
     def info(self) -> str:
         return self._info
 
     def running(self) -> bool:
-        """
-        Checks if the loop controller should run
-
-        Returns:
-            bool: True if the loop controller is running, False otherwise.
-        """
-
+        """Checks if the loop controller should run"""
         running = True
 
         if self._max_generation_reached():
             self._info = f"Max Generation {self._max_generations} reached, stopping optimization loop."
             running = False
-
         elif self._patience_reached():
             self._info = (
                 f"Patience {self._base_patience} reached, stopping optimization loop."
@@ -393,22 +392,71 @@ class _SolutionUpdaterServiceLoopController:
         self._current_generation += 1
         self._update_patience()
 
-    def _update_generation(self) -> None:
-        self._current_generation += 1
-
     def _update_patience(self) -> None:
         if self._current_generation < 1:
             return
 
-        last_best = self._last_run_global_best_result
         current_best = self._solution_updater_service.global_best_result
 
-        if last_best == current_best:
-            self._patience_left -= 1
-        else:
-            self._patience_left = self._base_patience
+        # Detect if multi-objective on first run
+        if self._is_multi_objective is None:
+            self._is_multi_objective = isinstance(current_best, np.ndarray)
 
-        self._last_run_global_best_result = current_best
+        if self._is_multi_objective:
+            # Multi-objective: use Pareto front convergence
+            has_improved = self._has_pareto_converged(current_best)
+        else:
+            # Single-objective: direct comparison
+            last_best = self._last_run_global_best_result
+            has_improved = last_best != current_best if last_best is not None else True
+
+        if has_improved:
+            self._patience_left = self._base_patience
+        else:
+            self._patience_left -= 1
+
+        self._last_run_global_best_result = (
+            current_best.copy()
+            if isinstance(current_best, np.ndarray)
+            else current_best
+        )
+
+    def _has_pareto_converged(self, current_best: npt.NDArray[np.float64]) -> bool:
+        """
+        Check if Pareto front has converged using a moving window approach.
+
+        Returns True if improvement detected (NOT converged yet).
+        """
+        # Store current front
+        if isinstance(current_best, np.ndarray):
+            self._pareto_front_history.append(current_best.copy())
+
+        # Need at least 2 iterations to compare
+        if len(self._pareto_front_history) < 2:
+            return True  # Still improving (not converged)
+
+        # Keep only recent history (e.g., last 5 iterations)
+        max_history = 5
+        if len(self._pareto_front_history) > max_history:
+            self._pareto_front_history.pop(0)
+
+        # Compare last two fronts
+        previous = self._pareto_front_history[-2]
+        current = self._pareto_front_history[-1]
+
+        # Simple metric: check if objectives changed significantly
+        threshold = 1e-4
+
+        for i in range(len(current)):
+            if previous[i] != 0:
+                relative_change = abs((current[i] - previous[i]) / previous[i])
+            else:
+                relative_change = abs(current[i] - previous[i])
+
+            if relative_change > threshold:
+                return True  # Significant change = still improving
+
+        return False  # No significant change = converged
 
     def _max_generation_reached(self) -> bool:
         return self._current_generation >= self._max_generations
@@ -423,7 +471,7 @@ class SolutionUpdaterService:
         optimization_engine: OptimizationEngine,
         max_generations: int,
         patience: int,
-        optimization_strategy: OptimizationStrategy = OptimizationStrategy.MINIMIZE,
+        objectives: dict[str, OptimizationStrategy],
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
@@ -436,10 +484,9 @@ class SolutionUpdaterService:
         """
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
-            OptimizationEngineFactory.get_engine(
-                optimization_engine, optimization_strategy
-            )
+            OptimizationEngineFactory.get_engine(optimization_engine)
         )
+        self._objectives = objectives
         self._logger = get_logger(__name__)
         self.loop_controller = _SolutionUpdaterServiceLoopController(
             max_generations=max_generations,
@@ -450,7 +497,7 @@ class SolutionUpdaterService:
         self._control_vector_logger: logging.Logger | None = None
 
     @property
-    def global_best_result(self) -> float:
+    def global_best_result(self) -> float | npt.NDArray[np.float64]:
         return self._engine.global_best_result
 
     @property
@@ -535,6 +582,17 @@ class SolutionUpdaterService:
 
         self._log_control_vector_and_values(control_vector, cost_function_values)
 
+        indexed_objectives_strategy: dict[int, OptimizationStrategy] = {}
+        for obj_name, strategy in self._objectives.items():
+            # Find the index of this objective in the results
+            if obj_name in self._mapper.results_name:
+                idx = self._mapper.results_name.index(obj_name)
+                indexed_objectives_strategy[idx] = strategy
+            else:
+                raise ValueError(
+                    f"Objective '{obj_name}' not found in results {self._mapper.results_name}"
+                )
+
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constraints
         )
@@ -580,19 +638,40 @@ class SolutionUpdaterService:
             raise RuntimeError(f"Failed to process linear constraints: {e}")
 
         engine = ensure_not_none(self._engine)
+        iteration_ratio = self.loop_controller.iteration_progress
         if A_np is not None and b_np is not None:
             try:
                 updated_params = engine.update_solution_to_next_iter(
-                    control_vector, cost_function_values, lb, ub, A=A_np, b=b_np
+                    control_vector,
+                    cost_function_values,
+                    lb,
+                    ub,
+                    indexed_objectives_strategy,
+                    A=A_np,
+                    b=b_np,
+                    iteration_ratio=iteration_ratio,
                 )
             except TypeError:
                 # Fallback if engine does not support A,b
+                logging.warning(
+                    "Engine does not support A,b, using default update_solution_to_next_iter"
+                )
                 updated_params = engine.update_solution_to_next_iter(
-                    control_vector, cost_function_values, lb, ub
+                    control_vector,
+                    cost_function_values,
+                    lb,
+                    ub,
+                    indexed_objectives_strategy,
+                    iteration_ratio=iteration_ratio,
                 )
         else:
             updated_params = engine.update_solution_to_next_iter(
-                control_vector, cost_function_values, lb, ub
+                control_vector,
+                cost_function_values,
+                lb,
+                ub,
+                indexed_objectives_strategy,
+                iteration_ratio=iteration_ratio,
             )
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)

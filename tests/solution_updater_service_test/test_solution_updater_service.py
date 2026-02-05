@@ -29,7 +29,7 @@ def mocked_engine():  # type: ignore
             self.global_best_result = constant_best
 
         def update_solution_to_next_iter(  # type: ignore
-            self, parameters, results, lb, ub
+            self, parameters, results, lb, ub, indexed_objectives_strategy, **kwargs
         ):
             # Mock behavior: Add 1.0 to each parameter value as a simple transformation
             return parameters + 1.0
@@ -43,7 +43,7 @@ def mocked_engine_with_bnb():  # type: ignore
 
     class MockedOptimizationEngine:
         def update_solution_to_next_iter(  # type: ignore
-            self, parameters, results, lb, ub
+            self, parameters, results, lb, ub, indexed_objectives_strategy, **kwargs
         ):
             # Simulate parameter transformation and ensure constraints are applied
             updated_parameters = np.clip(parameters + 1.0, lb, ub)
@@ -63,7 +63,7 @@ def mocked_engine_with_2_stagnant_result():  # type: ignore
             self.stagnation_break = 3
 
         def update_solution_to_next_iter(  # type: ignore
-            self, parameters, results, lb, ub
+            self, parameters, results, lb, ub, indexed_objectives_strategy, **kwargs
         ):
             if self._iter % self.stagnation_break == 0:
                 self.global_best_result -= 1
@@ -89,6 +89,8 @@ def mocked_engine_with_metrics():  # type: ignore
             results: npt.NDArray[np.float64],
             lb: npt.NDArray[np.float64],
             ub: npt.NDArray[np.float64],
+            indexed_objectives_strategy: dict[int, OptimizationStrategy],
+            **kwargs,
         ) -> npt.NDArray[np.float64]:
             self._results_history.append(results)
             self._update_metrics(results)
@@ -130,7 +132,7 @@ def mocked_engine_with_metrics():  # type: ignore
 
 
 @pytest.mark.parametrize(
-    "config_json, expected_result_parameters, optimization_strategy",
+    "config_json, expected_result_parameters, objectives",
     [
         # Case 1: Single solution candidate, MINIMIZE strategy (default)
         (
@@ -143,7 +145,7 @@ def mocked_engine_with_metrics():  # type: ignore
                 ],
             },
             [{"param1": 2.0, "param2": 3.0}],
-            OptimizationStrategy.MINIMIZE,
+            {"metric1": OptimizationStrategy.MINIMIZE},
         ),
         # Case 2: Multiple solution candidates, MAXIMIZE strategy
         (
@@ -163,14 +165,14 @@ def mocked_engine_with_metrics():  # type: ignore
                 {"param1": 4.0, "param2": 5.0},
                 {"param1": 6.0, "param2": 7.0},
             ],
-            OptimizationStrategy.MAXIMIZE,
+            {"metric1": OptimizationStrategy.MAXIMIZE},
         ),
     ],
 )
 def test_update_solution_for_next_iteration_with_strategy(  # type: ignore
     config_json,
     expected_result_parameters,
-    optimization_strategy,
+    objectives,
     mocked_engine,
     monkeypatch,
 ):
@@ -179,7 +181,7 @@ def test_update_solution_for_next_iteration_with_strategy(  # type: ignore
         optimization_engine=engine,
         max_generations=100,
         patience=101,
-        optimization_strategy=optimization_strategy,
+        objectives=objectives,
     )
 
     # Monkeypatch engine
@@ -238,13 +240,14 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
 ):
     # Arrange
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=100, patience=101
+        optimization_engine=engine,
+        max_generations=100,
+        patience=101,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     # Monkeypatch engine
     monkeypatch.setattr(service, "_engine", mocked_engine)
-
-    # Handle "ensure" monkeypatch to bypass type-checking for simplicity
 
     # Act
     result = service.process_request(config_json)
@@ -296,7 +299,10 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
 ):
     # Arrange
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=100, patience=101
+        optimization_engine=engine,
+        max_generations=100,
+        patience=101,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     # Monkeypatch engine
@@ -368,7 +374,10 @@ def test_update_solution_with_boundaries_np(  # type: ignore
 ):
     # Arrange
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=100, patience=101
+        optimization_engine=engine,
+        max_generations=100,
+        patience=101,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     # Monkeypatch engine to use mocked behavior
@@ -455,8 +464,8 @@ def test_optimization_service_full_round(test_case):
 
     lb, ub = bounds[0], bounds[1]
     param_names = [f"x{i}" for i in range(dim)]
-    num_particles = 50
-    iterations = 1000
+    num_particles = 200
+    iterations = 100
     patience = 1001  # infinite patience
 
     np.random.seed(42)
@@ -473,7 +482,10 @@ def test_optimization_service_full_round(test_case):
     }
 
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=iterations, patience=patience
+        optimization_engine=engine,
+        max_generations=iterations,
+        patience=patience,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     loop_controller = service.loop_controller
 
@@ -538,7 +550,10 @@ def test_patience_handling(
 ):
     # Arrange
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=10, patience=patience
+        optimization_engine=engine,
+        max_generations=10,
+        patience=patience,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     # Get the engine fixture based on the parameter
@@ -583,18 +598,13 @@ def test_patience_handling(
 
 
 def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
-    """Test that SolutionMetrics are properly calculated and updated.
-
-    This test verifies that:
-    1. Metrics are properly initialized on first run
-    2. Global minimum is correctly updated when better values are found
-    3. Global minimum is preserved when no better values are found
-    4. All population statistics are correctly calculated
-    5. The metrics object is properly updated after each iteration
-    """
+    """Test that SolutionMetrics are properly calculated and updated."""
     # Arrange
     service = SolutionUpdaterService(
-        optimization_engine=engine, max_generations=3, patience=4
+        optimization_engine=engine,
+        max_generations=3,
+        patience=4,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     monkeypatch.setattr(service, "_engine", mocked_engine_with_metrics)
 
@@ -762,7 +772,7 @@ def test_maximization_service_full_round(test_case):
         optimization_engine=engine,
         max_generations=iterations,
         patience=patience,
-        optimization_strategy=OptimizationStrategy.MAXIMIZE,
+        objectives={"metric1": OptimizationStrategy.MAXIMIZE},
     )
     loop_controller = service.loop_controller
 
@@ -788,3 +798,500 @@ def test_maximization_service_full_round(test_case):
     assert np.isclose(best_result, expected_max_val, atol=tol), (
         f"Best result {best_result} is not close enough to the global maximum value {expected_max_val}."
     )
+
+
+def test_pareto_optimization_zdt1():
+    """
+    Test multi-objective optimization using ZDT1 benchmark problem.
+    """
+
+    EPS = 1e-9
+
+    def zdt1_objectives(x: np.ndarray) -> tuple[float, float]:
+        """Calculate both objectives for ZDT1 problem."""
+        n = len(x)
+        f1 = x[0]
+
+        if n > 1:
+            g = 1.0 + 9.0 * np.sum(x[1:]) / (n - 1)
+        else:
+            g = 1.0
+
+        h = 1.0 - np.sqrt(f1 / g) if g > 0 else 0.0
+        f2 = g * h
+
+        return f1, f2
+
+    def evaluate_zdt1_population(particles: np.ndarray) -> np.ndarray:
+        """Evaluate ZDT1 for all particles, returning [f1, f2] for each."""
+        results = np.array([zdt1_objectives(p) for p in particles])
+        return results
+
+    def create_multi_objective_candidates(
+        positions: np.ndarray, results: np.ndarray, param_names: list
+    ) -> list:
+        """Generate candidates with two objectives."""
+        return [
+            {
+                "control_vector": {"items": dict(zip(param_names, pos))},
+                "cost_function_results": {
+                    "values": {"objective_f1": res[0], "objective_f2": res[1]}
+                },
+            }
+            for pos, res in zip(positions, results)
+        ]
+
+    def is_dominated(point, other_points):
+        """Check if point is dominated by any point in other_points."""
+        for other in other_points:
+            if np.all(other <= point + EPS) and np.any(other < point - EPS):
+                return True
+        return False
+
+    # Test configuration
+    dim = 5
+    lb, ub = 0.0, 1.0
+    param_names = [f"x{i}" for i in range(dim)]
+    num_particles = 100
+    iterations = 500
+    patience = 501
+
+    np.random.seed(42)
+
+    positions = np.random.uniform(lb, ub, (num_particles, dim))
+    results = evaluate_zdt1_population(positions)
+
+    candidates = create_multi_objective_candidates(positions, results, param_names)
+
+    config = {
+        "solution_candidates": candidates,
+        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+    }
+
+    service = SolutionUpdaterService(
+        optimization_engine=engine,
+        max_generations=iterations,
+        patience=patience,
+        objectives={
+            "objective_f1": OptimizationStrategy.MINIMIZE,
+            "objective_f2": OptimizationStrategy.MINIMIZE,
+        },
+    )
+    loop_controller = service.loop_controller
+
+    while loop_controller.running():
+        result = service.process_request(config)
+        positions = np.array(
+            [get_numpy_values(vec.items) for vec in result.next_iter_solutions]
+        )
+        results = evaluate_zdt1_population(positions)
+        config["solution_candidates"] = create_multi_objective_candidates(
+            positions, results, param_names
+        )
+        loop_controller.increment_generation()
+
+    final_f1 = results[:, 0]
+    final_f2 = results[:, 1]
+
+    non_dominated_mask = np.array(
+        [
+            not is_dominated(results[i], np.delete(results, i, axis=0))
+            for i in range(len(results))
+        ]
+    )
+
+    pareto_front = results[non_dominated_mask]
+    pareto_f1 = pareto_front[:, 0]
+    pareto_f2 = pareto_front[:, 1]
+
+    assert len(pareto_front) >= 10, (
+        f"Expected at least 10 non-dominated solutions, got {len(pareto_front)}"
+    )
+
+    f1_range = pareto_f1.max() - pareto_f1.min()
+    assert f1_range > 0.3, (
+        f"Pareto solutions should span across f1 space, got range: {f1_range}"
+    )
+
+    theoretical_f2 = 1.0 - np.sqrt(pareto_f1)
+    distance_to_front = np.abs(pareto_f2 - theoretical_f2)
+    avg_distance = np.mean(distance_to_front)
+
+    assert avg_distance < 0.20, (
+        f"Average distance to theoretical Pareto front too large: {avg_distance:.4f}"
+    )
+
+    dominated_ratio = 1.0 - (len(pareto_front) / len(results))
+
+    assert dominated_ratio < 0.85, (
+        f"Too many dominated solutions in final population: {dominated_ratio:.2%}"
+    )
+
+    print("✓ ZDT1 Pareto optimization test passed:")
+    print(f"  - F1 range: [{final_f1.min():.3f}, {final_f1.max():.3f}]")
+    print(f"  - F2 range: [{final_f2.min():.3f}, {final_f2.max():.3f}]")
+    print(f"  - Non-dominated solutions: {len(pareto_front)}/{len(results)}")
+    print(f"  - Pareto F1 range: [{pareto_f1.min():.3f}, {pareto_f1.max():.3f}]")
+    print(f"  - Avg distance to theoretical front: {avg_distance:.4f}")
+    print(f"  - Dominated solutions: {dominated_ratio:.1%}")
+
+
+def test_pareto_optimization_schaffer_n1():
+    """Test Pareto optimization with Schaffer's function N.1."""
+
+    def schaffer_n1_objectives(x: float) -> tuple[float, float]:
+        """Calculate both objectives for Schaffer N.1 problem."""
+        f1 = x**2
+        f2 = (x - 2.0) ** 2
+        return f1, f2
+
+    def evaluate_schaffer_population(particles: np.ndarray) -> np.ndarray:
+        """Evaluate Schaffer N.1 for all particles."""
+        results = np.array([schaffer_n1_objectives(p[0]) for p in particles])
+        return results
+
+    def create_multi_objective_candidates(
+        positions: np.ndarray, results: np.ndarray, param_names: list
+    ) -> list:
+        """Generate candidates with two objectives."""
+        return [
+            {
+                "control_vector": {"items": dict(zip(param_names, pos))},
+                "cost_function_results": {
+                    "values": {"objective_f1": res[0], "objective_f2": res[1]}
+                },
+            }
+            for pos, res in zip(positions, results)
+        ]
+
+    dim = 1
+    lb, ub = -10.0, 10.0
+    param_names = ["x"]
+    num_particles = 20
+    iterations = 50
+    patience = 51
+
+    np.random.seed(123)
+
+    positions = np.random.uniform(lb, ub, (num_particles, dim))
+    results = evaluate_schaffer_population(positions)
+
+    candidates = create_multi_objective_candidates(positions, results, param_names)
+
+    config = {
+        "solution_candidates": candidates,
+        "optimization_constraints": {"boundaries": {"x": [lb, ub]}},
+    }
+
+    service = SolutionUpdaterService(
+        optimization_engine=engine,
+        max_generations=iterations,
+        patience=patience,
+        objectives={
+            "objective_f1": OptimizationStrategy.MINIMIZE,
+            "objective_f2": OptimizationStrategy.MINIMIZE,
+        },
+    )
+    loop_controller = service.loop_controller
+
+    while loop_controller.running():
+        result = service.process_request(config)
+        positions = np.array(
+            [get_numpy_values(vec.items) for vec in result.next_iter_solutions]
+        )
+        results = evaluate_schaffer_population(positions)
+        config["solution_candidates"] = create_multi_objective_candidates(
+            positions, results, param_names
+        )
+        loop_controller.increment_generation()
+
+    final_x = positions[:, 0]
+    final_f1 = results[:, 0]
+    final_f2 = results[:, 1]
+
+    pareto_optimal_mask = (final_x >= -0.5) & (final_x <= 2.5)
+    pareto_ratio = np.sum(pareto_optimal_mask) / len(final_x)
+
+    assert pareto_ratio > 0.5, (
+        f"At least 50% of solutions should be near Pareto optimal region [0, 2], "
+        f"got {pareto_ratio:.1%}"
+    )
+
+    pareto_x = final_x[pareto_optimal_mask]
+    if len(pareto_x) > 1:
+        x_range = pareto_x.max() - pareto_x.min()
+        assert x_range > 0.5, (
+            f"Solutions should span Pareto front, got range: {x_range:.3f}"
+        )
+
+    print("✓ Schaffer N.1 Pareto optimization test passed:")
+    print(f"  - X range: [{final_x.min():.3f}, {final_x.max():.3f}]")
+    print(f"  - Pareto optimal ratio: {pareto_ratio:.1%}")
+    print(f"  - F1 range: [{final_f1.min():.3f}, {final_f1.max():.3f}]")
+    print(f"  - F2 range: [{final_f2.min():.3f}, {final_f2.max():.3f}]")
+
+
+def test_pareto_optimization_zdt3():
+    """Test multi-objective optimization using ZDT3 benchmark problem."""
+
+    EPS = 1e-9
+
+    def zdt3_objectives(x: np.ndarray) -> tuple[float, float]:
+        n = len(x)
+        f1 = x[0]
+
+        if n > 1:
+            g = 1.0 + 9.0 * np.sum(x[1:]) / (n - 1)
+        else:
+            g = 1.0
+
+        h = (
+            1.0 - np.sqrt(f1 / g) - (f1 / g) * np.sin(10.0 * np.pi * f1)
+            if g > 0
+            else 0.0
+        )
+        f2 = g * h
+
+        return f1, f2
+
+    def evaluate_zdt3_population(particles: np.ndarray) -> np.ndarray:
+        results = np.array([zdt3_objectives(p) for p in particles])
+        return results
+
+    def create_multi_objective_candidates(
+        positions: np.ndarray, results: np.ndarray, param_names: list
+    ) -> list:
+        return [
+            {
+                "control_vector": {"items": dict(zip(param_names, pos))},
+                "cost_function_results": {
+                    "values": {"objective_f1": res[0], "objective_f2": res[1]}
+                },
+            }
+            for pos, res in zip(positions, results)
+        ]
+
+    def is_dominated(point, other_points):
+        for other in other_points:
+            if np.all(other <= point + EPS) and np.any(other < point - EPS):
+                return True
+        return False
+
+    dim = 10
+    lb, ub = 0.0, 1.0
+    param_names = [f"x{i}" for i in range(dim)]
+    num_particles = 200
+    iterations = 500
+    patience = 501
+
+    np.random.seed(100)
+
+    positions = np.zeros((num_particles, dim))
+    positions[:, 0] = np.random.uniform(lb, ub, num_particles)
+    positions[:, 1:] = np.random.uniform(
+        0.0, 0.05, (num_particles, dim - 1)
+    )  # Near zero
+
+    results = evaluate_zdt3_population(positions)
+
+    candidates = create_multi_objective_candidates(positions, results, param_names)
+
+    config = {
+        "solution_candidates": candidates,
+        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+    }
+
+    service = SolutionUpdaterService(
+        optimization_engine=engine,
+        max_generations=iterations,
+        patience=patience,
+        objectives={
+            "objective_f1": OptimizationStrategy.MINIMIZE,
+            "objective_f2": OptimizationStrategy.MINIMIZE,
+        },
+    )
+    loop_controller = service.loop_controller
+
+    while loop_controller.running():
+        result = service.process_request(config)
+        positions = np.array(
+            [get_numpy_values(vec.items) for vec in result.next_iter_solutions]
+        )
+        results = evaluate_zdt3_population(positions)
+        config["solution_candidates"] = create_multi_objective_candidates(
+            positions, results, param_names
+        )
+        loop_controller.increment_generation()
+
+    final_f1 = results[:, 0]
+    final_f2 = results[:, 1]
+
+    non_dominated_mask = np.array(
+        [
+            not is_dominated(results[i], np.delete(results, i, axis=0))
+            for i in range(len(results))
+        ]
+    )
+
+    pareto_front = results[non_dominated_mask]
+    pareto_f1 = pareto_front[:, 0]
+    pareto_f2 = pareto_front[:, 1]
+
+    assert len(pareto_front) >= 8, (
+        f"Expected at least 8 non-dominated solutions, got {len(pareto_front)}"
+    )
+
+    f1_range = pareto_f1.max() - pareto_f1.min()
+    assert f1_range > 0.25, (
+        f"Pareto solutions should span across f1 space, got range: {f1_range}"
+    )
+
+    assert np.max(pareto_f2) < 2.0, (
+        f"F2 values should be reasonable, got max: {np.max(pareto_f2):.4f}"
+    )
+
+    dominated_ratio = 1.0 - (len(pareto_front) / len(results))
+
+    assert dominated_ratio < 0.95, (
+        f"Too many dominated solutions in final population: {dominated_ratio:.2%}"
+    )
+
+    print("✓ ZDT3 Pareto optimization test passed:")
+    print(f"  - F1 range: [{final_f1.min():.3f}, {final_f1.max():.3f}]")
+    print(f"  - F2 range: [{final_f2.min():.3f}, {final_f2.max():.3f}]")
+    print(f"  - Non-dominated solutions: {len(pareto_front)}/{len(results)}")
+    print(f"  - Pareto F1 range: [{pareto_f1.min():.3f}, {pareto_f1.max():.3f}]")
+    print(f"  - Pareto F2 range: [{pareto_f2.min():.3f}, {pareto_f2.max():.3f}]")
+    print(f"  - Dominated solutions: {dominated_ratio:.1%}")
+
+
+def test_pareto_optimization_kursawe():
+    """Test multi-objective optimization using Kursawe benchmark problem."""
+
+    EPS = 1e-9
+
+    def kursawe_objectives(x: np.ndarray) -> tuple[float, float]:
+        n = len(x)
+
+        f1 = 0.0
+        for i in range(n - 1):
+            f1 += -10.0 * np.exp(-0.2 * np.sqrt(x[i] ** 2 + x[i + 1] ** 2))
+
+        f2 = 0.0
+        for i in range(n):
+            f2 += np.abs(x[i]) ** 0.8 + 5.0 * np.sin(x[i] ** 3)
+
+        return f1, f2
+
+    def evaluate_kursawe_population(particles: np.ndarray) -> np.ndarray:
+        results = np.array([kursawe_objectives(p) for p in particles])
+        return results
+
+    def create_multi_objective_candidates(
+        positions: np.ndarray, results: np.ndarray, param_names: list
+    ) -> list:
+        return [
+            {
+                "control_vector": {"items": dict(zip(param_names, pos))},
+                "cost_function_results": {
+                    "values": {"objective_f1": res[0], "objective_f2": res[1]}
+                },
+            }
+            for pos, res in zip(positions, results)
+        ]
+
+    def is_dominated(point, other_points):
+        for other in other_points:
+            if np.all(other <= point + EPS) and np.any(other < point - EPS):
+                return True
+        return False
+
+    dim = 3
+    lb, ub = -5.0, 5.0
+    param_names = [f"x{i}" for i in range(dim)]
+    num_particles = 80
+    iterations = 300
+    patience = 301
+
+    np.random.seed(200)
+
+    positions = np.random.uniform(lb, ub, (num_particles, dim))
+    results = evaluate_kursawe_population(positions)
+
+    candidates = create_multi_objective_candidates(positions, results, param_names)
+
+    config = {
+        "solution_candidates": candidates,
+        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+    }
+
+    service = SolutionUpdaterService(
+        optimization_engine=engine,
+        max_generations=iterations,
+        patience=patience,
+        objectives={
+            "objective_f1": OptimizationStrategy.MINIMIZE,
+            "objective_f2": OptimizationStrategy.MINIMIZE,
+        },
+    )
+    loop_controller = service.loop_controller
+
+    while loop_controller.running():
+        result = service.process_request(config)
+        positions = np.array(
+            [get_numpy_values(vec.items) for vec in result.next_iter_solutions]
+        )
+        results = evaluate_kursawe_population(positions)
+        config["solution_candidates"] = create_multi_objective_candidates(
+            positions, results, param_names
+        )
+        loop_controller.increment_generation()
+
+    final_f1 = results[:, 0]
+    final_f2 = results[:, 1]
+
+    non_dominated_mask = np.array(
+        [
+            not is_dominated(results[i], np.delete(results, i, axis=0))
+            for i in range(len(results))
+        ]
+    )
+
+    pareto_front = results[non_dominated_mask]
+    pareto_f1 = pareto_front[:, 0]
+    pareto_f2 = pareto_front[:, 1]
+
+    assert len(pareto_front) >= 5, (
+        f"Expected at least 5 non-dominated solutions, got {len(pareto_front)}"
+    )
+
+    f1_range = pareto_f1.max() - pareto_f1.min()
+    f2_range = pareto_f2.max() - pareto_f2.min()
+
+    assert f1_range > 2.0, (
+        f"Pareto solutions should span f1 space, got range: {f1_range:.3f}"
+    )
+    assert f2_range > 2.0, (
+        f"Pareto solutions should span f2 space, got range: {f2_range:.3f}"
+    )
+
+    assert pareto_f1.max() < -10.0, (
+        f"F1 maximum should be around -14, got: {pareto_f1.max():.4f}"
+    )
+    assert pareto_f1.min() > -25.0, (
+        f"F1 minimum should be around -20, got: {pareto_f1.min():.4f}"
+    )
+
+    dominated_ratio = 1.0 - (len(pareto_front) / len(results))
+
+    assert dominated_ratio < 0.85, (
+        f"Too many dominated solutions in final population: {dominated_ratio:.2%}"
+    )
+
+    print("✓ Kursawe Pareto optimization test passed:")
+    print(f"  - F1 range: [{final_f1.min():.3f}, {final_f1.max():.3f}]")
+    print(f"  - F2 range: [{final_f2.min():.3f}, {final_f2.max():.3f}]")
+    print(f"  - Non-dominated solutions: {len(pareto_front)}/{len(results)}")
+    print(f"  - Pareto F1 range: [{pareto_f1.min():.3f}, {pareto_f1.max():.3f}]")
+    print(f"  - Pareto F2 range: [{pareto_f2.min():.3f}, {pareto_f2.max():.3f}]")
+    print(f"  - Dominated solutions: {dominated_ratio:.1%}")

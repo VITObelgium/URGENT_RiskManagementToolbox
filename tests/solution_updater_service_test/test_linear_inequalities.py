@@ -21,7 +21,7 @@ def test_pso_respects_linear_inequality_sum_constraint():
         optimization_engine=OptimizationEngine.PSO,
         max_generations=5,
         patience=5,
-        optimization_strategy=OptimizationStrategy.MINIMIZE,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     request = {
@@ -68,7 +68,7 @@ def test_penalty_applied_when_violating_constraint():
         optimization_engine=OptimizationEngine.PSO,
         max_generations=1,
         patience=1,
-        optimization_strategy=OptimizationStrategy.MINIMIZE,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     request = {
@@ -114,7 +114,7 @@ def test_direction_greater_equal_transforms_and_enforced():
         optimization_engine=OptimizationEngine.PSO,
         max_generations=3,
         patience=3,
-        optimization_strategy=OptimizationStrategy.MINIMIZE,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     request = {
         "solution_candidates": [
@@ -157,7 +157,7 @@ def test_strict_less_treated_as_less_equal():
         optimization_engine=OptimizationEngine.PSO,
         max_generations=2,
         patience=2,
-        optimization_strategy=OptimizationStrategy.MINIMIZE,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     request = {
         "solution_candidates": [
@@ -192,7 +192,7 @@ def test_mixed_constraints_greater_and_less_than():
         optimization_engine=OptimizationEngine.PSO,
         max_generations=5,
         patience=5,
-        optimization_strategy=OptimizationStrategy.MINIMIZE,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     request = {
@@ -241,7 +241,7 @@ def test_multiple_inequalities_enforced():
         optimization_engine=OptimizationEngine.PSO,
         max_generations=5,
         patience=5,
-        optimization_strategy=OptimizationStrategy.MINIMIZE,
+        objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
     request = {

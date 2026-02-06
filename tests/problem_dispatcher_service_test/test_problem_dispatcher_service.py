@@ -73,7 +73,7 @@ def test_handle_initial_request_returns_expected_structure(
 
     for candidate in response.solution_candidates:
         assert isinstance(candidate, SolutionCandidateServicesTasks)
-        assert ServiceType.WellManagementService in candidate.tasks
+        assert ServiceType.WellDesignService in candidate.tasks
 
 
 @pytest.mark.parametrize(
@@ -98,7 +98,7 @@ def test_handle_iteration_loop_valid_input(
     assert len(response.solution_candidates) == len(control_vector_items)
 
     for candidate in response.solution_candidates:
-        assert ServiceType.WellManagementService in candidate.tasks
+        assert ServiceType.WellDesignService in candidate.tasks
 
 
 @pytest.mark.parametrize(
@@ -152,9 +152,9 @@ def test_control_vector_multiple_wells(
     assert len(response.solution_candidates) == 1
 
     tasks: SolutionCandidateServicesTasks = response.solution_candidates[0]
-    assert ServiceType.WellManagementService in tasks.tasks
+    assert ServiceType.WellDesignService in tasks.tasks
 
-    service_tasks = tasks.tasks[ServiceType.WellManagementService]
+    service_tasks = tasks.tasks[ServiceType.WellDesignService]
     tasks_by_well = {task["name"]: task for task in service_tasks.request}
 
     for key_path, expected_value in expected_updates.items():
@@ -337,8 +337,8 @@ def test_problem_dispatcher_service_initializes_correct_population(
 
     for candidate in response.solution_candidates:
         # Each candidate should include a WellManagementService task with the ControlVector
-        assert ServiceType.WellManagementService in candidate.tasks
-        payload = candidate.tasks[ServiceType.WellManagementService]
+        assert ServiceType.WellDesignService in candidate.tasks
+        payload = candidate.tasks[ServiceType.WellDesignService]
         control_items = payload.control_vector.items
 
         assert "well_placement#W1#md" in control_items
@@ -571,10 +571,10 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
     assert len(response.solution_candidates) > 0
 
     candidate = response.solution_candidates[0]
-    assert ServiceType.WellManagementService in candidate.tasks
+    assert ServiceType.WellDesignService in candidate.tasks
 
     # Verify control vector keys match constraints
-    task = candidate.tasks[ServiceType.WellManagementService]
+    task = candidate.tasks[ServiceType.WellDesignService]
     control_items = task.control_vector.items
 
     well_name = well_config["well_name"]

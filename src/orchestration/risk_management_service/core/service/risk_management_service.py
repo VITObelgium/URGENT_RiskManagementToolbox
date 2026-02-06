@@ -1,6 +1,9 @@
 import os
 from typing import Any
 
+import numpy as np
+import numpy.typing as npt
+
 from logger import get_csv_logger, get_logger
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
@@ -23,7 +26,7 @@ from services.solution_updater_service import (
     SolutionUpdaterService,
 )
 from services.solution_updater_service.core.utils import ensure_not_none
-from services.well_management_service import WellManagementService
+from services.well_management_service import WellDesignService
 
 logger = get_logger(__name__)
 
@@ -31,7 +34,7 @@ logger = get_logger(__name__)
 def run_risk_management(
     problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
-) -> tuple[float, Any] | None:
+) -> tuple[float | npt.NDArray[np.float64], Any] | None:
     """
     Main entry point for running risk management.
 
@@ -67,7 +70,7 @@ def run_risk_management(
                 optimization_engine=OptimizationEngine.PSO,
                 max_generations=dispatcher.max_generation,
                 patience=dispatcher.patience,
-                objectives=dispatcher.optimization_strategy,
+                objectives=dispatcher.optimization_objectives,
             )
 
             # Initialize generation summary logger
@@ -88,6 +91,9 @@ def run_risk_management(
             logger.debug("Fetching boundaries from ProblemDispatcherService.")
             boundaries = dispatcher.boundaries
             logger.debug("Boundaries retrieved: %s", boundaries)
+            logger.debug("Fetching linear inequalities from ProblemDispatcherService.")
+            linear_inequalities = dispatcher.linear_inequalities
+            logger.debug("Linear inequalities retrieved: %s", linear_inequalities)
 
             # Initialize solutions
             next_solutions = None
@@ -133,7 +139,12 @@ def run_risk_management(
                 response = solution_updater.process_request(
                     {
                         "solution_candidates": updated_solutions,
-                        "optimization_constraints": {"boundaries": boundaries},
+                        "optimization_constraints": {
+                            "boundaries": boundaries,
+                            "A": linear_inequalities["A"],
+                            "b": linear_inequalities["b"],
+                            "sense": linear_inequalities["sense"],
+                        },
                     }
                 )
 
@@ -197,15 +208,13 @@ def _prepare_simulation_cases(
 
         for service, task in solution.tasks.items():
             match service:
-                case ServiceType.WellManagementService:
+                case ServiceType.WellDesignService:
                     logger.debug(
                         "Processing task for service: %s. Task details: %s",
                         service,
                         task,
                     )
-                    wells = WellManagementService.process_request(
-                        {"models": task.request}
-                    )
+                    wells = WellDesignService.process_request({"models": task.request})
                     sim_case["wells"] = wells.model_dump()
                     control_vector.update(task.control_vector.items)
                     logger.debug("Processed wells: %s", wells)

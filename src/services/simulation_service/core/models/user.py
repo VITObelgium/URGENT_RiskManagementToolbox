@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, Field
 
-from services.well_management_service.core.models import WellManagementServiceResponse
+from services.well_management_service.core.models import WellDesignServiceResponse
 
 
 class SimulationResults(BaseModel, extra="forbid"):
@@ -19,7 +19,7 @@ class SimulationResults(BaseModel, extra="forbid"):
 
 
 class SimulationCase(BaseModel, extra="forbid"):
-    wells: WellManagementServiceResponse
+    wells: WellDesignServiceResponse
     control_vector: dict[str, float]
     results: SimulationResults | None = Field(default=None)
 

@@ -4,14 +4,15 @@ from typing import Any, Callable
 
 import numpy as np
 
+from services.shared import ServiceType
 from services.solution_updater_service.core.utils import (
     repair_against_linear_inequalities,
 )
 
 
 def update_initial_state(
-    initial_state: dict[str, Any], update_dict: dict[str, Any]
-) -> dict[str, Any]:
+    initial_state: dict[str | ServiceType, Any], update_dict: dict[str, Any]
+) -> dict[str | ServiceType, Any]:
     """
     Recursively updates a deep copy of the initial_state dictionary with values
     from update_dict. If a value in update_dict is a dictionary, the function
@@ -167,10 +168,9 @@ class CandidateGenerator:
                 if v not in sparse_vars:
                     sparse_vars.append(v)
 
-        # Map "INJ.md" -> "well_placement#INJ#md"
+        # Map "INJ.md" -> "well_design#INJ#md"
         def fk(var: str) -> str:
-            well, attr = var.split(".", 1)
-            return f"well_placement{separator}{well}{separator}{attr}"
+            return var.replace(".", separator)
 
         full_keys = [fk(v) for v in sparse_vars]
         # Filter out vars not present in constraints

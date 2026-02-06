@@ -95,7 +95,7 @@ def test_prepare_simulation_cases_basic():
     fake_task.request = [1]
     fake_task.control_vector = MagicMock(items={"a": 1})
     fake_solution = MagicMock()
-    fake_solution.tasks = {rms.ServiceType.WellManagementService: fake_task}
+    fake_solution.tasks = {rms.ServiceType.WellDesignService: fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
     with patch(
         "orchestration.risk_management_service.core.service.risk_management_service.WellManagementService.process_request"

@@ -29,8 +29,7 @@ class TaskBuilder:
     def __init__(
         self,
         initial_state: dict[str, Any],
-        handlers: dict[str, ProblemTypeHandler],
-        service_type_map: dict[str, ServiceType],
+        handlers: dict[ServiceType, ProblemTypeHandler],
     ):
         """
         Initializes the TaskBuilder with the initial state, handlers, and service type mapping.
@@ -39,12 +38,9 @@ class TaskBuilder:
             initial_state (dict[str, Any]): The initial state dictionary used to build solutions.
             handlers (dict[str, ProblemTypeHandler]): A dictionary mapping problem type strings
                 to their respective handlers.
-            service_type_map (dict[str, ServiceType]): A dictionary mapping problem type strings
-                to their corresponding service types.
         """
         self.initial_state: dict[str, Any] = initial_state
-        self.handlers: dict[str, ProblemTypeHandler] = handlers
-        self.service_type_map: dict[str, ServiceType] = service_type_map
+        self.handlers: dict[ServiceType, ProblemTypeHandler] = handlers
 
     def build(
         self, control_vectors: list[dict[str, float]]
@@ -72,11 +68,10 @@ class TaskBuilder:
             nested_updates = parse_flat_dict_to_nested(cv_dict)
             updated_state = update_initial_state(self.initial_state, nested_updates)
             control_vector = ControlVector(items=cv_dict)
-
             task_map: dict[ServiceType, RequestPayload] = {}
-            for problem_type, solution_items in updated_state.items():
-                handler = self.handlers.get(problem_type)
-                service_type = self.service_type_map.get(problem_type)
+            for service_type, solution_items in updated_state.items():
+                service_type = ServiceType(service_type)  # safeguard
+                handler = self.handlers.get(service_type)
                 if handler and service_type:
                     service_requests = handler.build_service_tasks(solution_items)
                     task_map[service_type] = RequestPayload(

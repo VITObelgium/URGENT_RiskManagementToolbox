@@ -1,10 +1,11 @@
 from typing import Any, Protocol
 
 from services.problem_dispatcher_service.core.models import (
-    OptimizationConstrains,
+    ParameterBoundary,
     VariableBnd,
-    WellPlacementItem,
+    WellDesignItem,
 )
+from services.shared import ServiceType
 
 
 class ProblemTypeHandler(Protocol):
@@ -12,7 +13,7 @@ class ProblemTypeHandler(Protocol):
     Protocol for problem handlers, defining methods required to handle specific optimization problems.
     """
 
-    def build_initial_state(self, items: list[Any]) -> dict[str, Any]:
+    def build_initial_state(self, items: list[Any]) -> dict[str | ServiceType, Any]:
         """
         Build the initial state for the optimization problem.
 
@@ -58,19 +59,21 @@ class ProblemTypeHandler(Protocol):
         ...
 
 
-class WellPlacementHandler(ProblemTypeHandler):
-    def build_initial_state(self, items: list[WellPlacementItem]) -> dict[str, Any]:
+class WellDesignHandler(ProblemTypeHandler):
+    def build_initial_state(
+        self, items: list[WellDesignItem]
+    ) -> dict[str | ServiceType, Any]:
         return {item.well_name: item.initial_state.model_dump() for item in items}
 
     def build_boundaries(
         self,
-        items: list[WellPlacementItem],
+        items: list[WellDesignItem],
         separator: str = "#",
     ) -> dict[str, tuple[float, float]]:
         """
         Build the constraints for the well placement optimization problem.
         Args:
-            items (list[WellPlacementItem]): A list of well placement items.
+            items (list[WellDesignItem]): A list of well placement items.
             separator (str): Separator used to construct constraint keys.
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
@@ -79,9 +82,11 @@ class WellPlacementHandler(ProblemTypeHandler):
         result = {}
         for item in items:
             # Add existing constraints (e.g., wellhead x, y)
-            flattened = _flatten_optimization_parameters(item.optimization_constraints)
+            flattened = _flatten_optimization_parameters(item.parameter_bounds)
             for key, value in flattened.items():
-                result[f"well_placement#{item.well_name}{separator}{key}"] = value
+                result[
+                    f"{ServiceType.WellDesignService}#{item.well_name}{separator}{key}"
+                ] = value
         return result
 
     def build_service_tasks(
@@ -91,7 +96,7 @@ class WellPlacementHandler(ProblemTypeHandler):
 
 
 def _flatten_optimization_parameters(
-    optimization_parameters: OptimizationConstrains,
+    optimization_parameters: ParameterBoundary,
     parent_key: str = "",
     separator: str = "#",
 ) -> dict[str, tuple[float, float]]:

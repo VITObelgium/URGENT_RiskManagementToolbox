@@ -11,17 +11,13 @@ from services.problem_dispatcher_service.core.models import (
 )
 from services.problem_dispatcher_service.core.service.handlers import (
     ProblemTypeHandler,
-    WellPlacementHandler,
+    WellDesignHandler,
 )
 from services.problem_dispatcher_service.core.utils import CandidateGenerator
 from services.solution_updater_service import ControlVector
 
-PROBLEM_TYPE_HANDLERS: dict[str, ProblemTypeHandler] = {
-    "well_placement": WellPlacementHandler(),
-}
-
-PROBLEM_TYPE_TO_SERVICE_TYPE: dict[str, ServiceType] = {
-    "well_placement": ServiceType.WellManagementService,
+PROBLEM_TYPE_HANDLERS: dict[ServiceType, ProblemTypeHandler] = {
+    ServiceType.WellDesignService: WellDesignHandler(),
 }
 
 
@@ -42,16 +38,13 @@ class ProblemDispatcherService:
                 self._problem_definition.optimization_parameters.population_size
             )
             self._handlers = PROBLEM_TYPE_HANDLERS
-            self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()
             self._boundaries = self._build_boundaries()
             opt_params = self._problem_definition.optimization_parameters
             self._linear_inequalities: dict[str, list] | None = getattr(
                 opt_params, "linear_inequalities", None
             )
-            self._task_builder = TaskBuilder(
-                self._initial_state, self._handlers, self._service_type_map
-            )
+            self._task_builder = TaskBuilder(self._initial_state, self._handlers)
             self.logger.debug("ProblemDispatcherService initialized successfully.")
         except Exception as e:
             self.logger.error(
@@ -60,8 +53,8 @@ class ProblemDispatcherService:
             raise
 
     @property
-    def optimization_strategy(self) -> OptimizationStrategy:
-        return self._problem_definition.optimization_parameters.optimization_strategy
+    def optimization_objectives(self) -> dict[str, OptimizationStrategy]:
+        return self._problem_definition.optimization_parameters.objectives
 
     @property
     def max_generation(self) -> int:
@@ -86,15 +79,6 @@ class ProblemDispatcherService:
     def process_iteration(
         self, next_iter_solutions: list[ControlVector] | None = None
     ) -> ProblemDispatcherServiceResponse:
-        """
-        Process one iteration of generating or processing solutions.
-
-        Args:
-            next_iter_solutions: Existing solutions from the previous iteration, if any.
-
-        Returns:
-            ProblemDispatcherServiceResponse: Response containing solution candidates.
-        """
         self.logger.debug("Processing iteration.")
         self.logger.debug(
             "Processing iteration. next_iter_solutions: %s",
@@ -133,14 +117,6 @@ class ProblemDispatcherService:
         log_message: str,
         merge_results: bool = False,
     ) -> dict[str, Any]:
-        """
-        Shared logic to process problem items for state building or constraints.
-
-        Args:
-            process_func (Callable): Function to process the problem items.
-            log_message (str): Log message indicating the operation.
-            merge_results (bool): If True, merge the processed results into one dictionary.
-        """
         self.logger.debug(f"Processing problem items: {log_message}")
         try:
             # Add type annotation for the result variable
@@ -169,13 +145,7 @@ class ProblemDispatcherService:
             self.logger.error("Error during %s: %s", log_message, str(e))
             raise
 
-    def _build_initial_state(self) -> dict[str, Any]:
-        """
-        Build the initial state for the problem handler.
-
-        Returns:
-            dict[str, Any]: Initial state based on the problem definition.
-        """
+    def _build_initial_state(self) -> dict[str | ServiceType, Any]:
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_initial_state(items),
             log_message="Building initial state",
@@ -183,12 +153,6 @@ class ProblemDispatcherService:
         )
 
     def _build_boundaries(self) -> dict[str, tuple[float, float]]:
-        """
-        Build problem constraints.
-
-        Returns:
-            dict[str, tuple[float, float]]: Boundaries of the problem.
-        """
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_boundaries(items),
             log_message="Building boundaries",

@@ -1,9 +1,9 @@
 from services.well_management_service.core.service.well_builder import WellBuilder
-from services.well_management_service.core.service.well_management_service import (
-    WellManagementService,
+from services.well_management_service.core.service.well_design_service import (
+    WellDesignService,
 )
 
 __all__ = [
-    "WellManagementService",
+    "WellDesignService",
     "WellBuilder",
 ]

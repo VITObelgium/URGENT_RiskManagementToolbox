@@ -126,22 +126,22 @@ WellModel = Annotated[
 ]
 
 
-class WellManagementServiceRequest(BaseModel, extra="forbid"):
+class WellDesignServiceRequest(BaseModel, extra="forbid"):
     models: list[WellModel]
 
     @model_validator(mode="after")
-    def validate_wells_name(self) -> WellManagementServiceRequest:
+    def validate_wells_name(self) -> WellDesignServiceRequest:
         wells_name = [n.name for n in self.models]
         if duplicates := _duplicate_well_names(wells_name):
             raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")
         return self
 
 
-class WellManagementServiceResponse(BaseModel, extra="forbid"):
+class WellDesignServiceResponse(BaseModel, extra="forbid"):
     wells: list[SimulationWellModel]
 
     @model_validator(mode="after")
-    def validate_wells_name(self) -> WellManagementServiceResponse:
+    def validate_wells_name(self) -> WellDesignServiceResponse:
         wells_name = [n.name for n in self.wells]
         if duplicates := _duplicate_well_names(wells_name):
             raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")

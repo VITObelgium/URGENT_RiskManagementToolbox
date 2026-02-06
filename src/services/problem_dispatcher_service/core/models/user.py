@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import math
-from enum import StrEnum
-from typing import Any
 
 import psutil
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -11,6 +9,12 @@ from typing_extensions import Annotated
 
 from common import OptimizationStrategy
 from logger import get_logger
+from services.shared import (
+    validate_linear_inequalities,
+    validate_boundaries,
+    ServiceType,
+    ServiceRequest,
+)
 from services.solution_updater_service import ControlVector
 from services.well_management_service import WellModel
 
@@ -23,20 +27,19 @@ class VariableBnd(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def check_bounds(self) -> "VariableBnd":
-        if self.lb > self.ub:
-            raise ValueError("Variable bounds invalid: lb must be <= ub")
+        validate_boundaries(self.lb, self.ub)
         return self
 
 
 type VariableName = str
 type ObjectiveFnName = str
-type OptimizationConstrains = dict[VariableName, VariableBnd | OptimizationConstrains]
+type ParameterBoundary = dict[VariableName, VariableBnd | ParameterBoundary]
 
 
-class WellPlacementItem(BaseModel, extra="forbid"):
+class WellDesignItem(BaseModel, extra="forbid"):
     well_name: str
     initial_state: WellModel
-    optimization_constraints: OptimizationConstrains
+    parameter_bounds: ParameterBoundary
 
     @model_validator(mode="before")
     @classmethod
@@ -120,53 +123,15 @@ class OptimizationParameters(BaseModel, extra="forbid"):
         except KeyError:
             raise KeyError("linear_inequalities must contain both 'A' and 'b'")
 
-        if not isinstance(A, list) or not isinstance(b, list):
-            raise ValueError("'A' and 'b' in linear_inequalities must be lists")
-        if len(A) != len(b):
-            raise ValueError("Number of rows in A must match length of b")
+        validate_linear_inequalities(A, b, senses)
 
-        if senses is not None:
-            if not isinstance(senses, list):
-                raise ValueError("'sense' must be a list when provided")
-            if len(senses) != len(A):
-                raise ValueError("Length of 'sense' must match number of rows in A")
-            allowed = {"<=", ">=", "<", ">"}
-            if not all(s in allowed for s in senses):
-                raise ValueError(
-                    f"Invalid inequality direction(s) in 'sense'. Allowed: {sorted(allowed)}"
-                )
-        else:
-            # As default when not specified, we set all senses to "<="
+        if senses is None:
             self.linear_inequalities["sense"] = ["<="] * len(A)
 
-        # Collect attribute suffixes to ensure same attribute referenced (e.g., all '.md')
-        for row_idx, row in enumerate(A):
-            if not isinstance(row, dict):
-                raise TypeError(
-                    f"Row {row_idx} in A must be a dict mapping variable to coefficient"
-                )
-            if len(row) == 0:
-                raise ValueError(f"Row {row_idx} in A is empty")
-            for var, coef in row.items():
-                if not isinstance(coef, (int, float)):
-                    raise TypeError(
-                        f"Coefficient for {var} in row {row_idx} must be numeric"
-                    )
-                if "." not in var:
-                    raise ValueError(
-                        f"Variable '{var}' in linear inequalities must contain a '.' separating well and attribute (e.g., 'INJ.md')"
-                    )
-            if not isinstance(b[row_idx], (int, float)):
-                raise TypeError(f"b[{row_idx}] must be numeric")
         return self
 
 
-class ServiceType(StrEnum):
-    # mapping between service and optimization problem
-    WellManagementService = "well_placement"
-
-
-def _unique_items(seq: list[WellPlacementItem]) -> list[WellPlacementItem]:
+def _unique_items(seq: list[WellDesignItem]) -> list[WellDesignItem]:
     """Ensures that all well names in the sequence are unique."""
     names = [w.well_name for w in seq]
     if len(names) != len(set(names)):
@@ -175,11 +140,11 @@ def _unique_items(seq: list[WellPlacementItem]) -> list[WellPlacementItem]:
     return seq
 
 
-UniqueWellList = Annotated[list[WellPlacementItem], AfterValidator(_unique_items)]
+UniqueWellList = Annotated[list[WellDesignItem], AfterValidator(_unique_items)]
 
 
 class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
-    well_placement: UniqueWellList
+    well_design: UniqueWellList
     optimization_parameters: OptimizationParameters
 
     @model_validator(mode="after")
@@ -199,12 +164,12 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
             return True
 
         constraints_by_well = {
-            w.well_name: (w.optimization_constraints or {}) for w in self.well_placement
+            w.well_name: (w.parameter_bounds or {}) for w in self.well_design
         }
 
         for A_row in self.optimization_parameters.linear_inequalities["A"]:
             for key in A_row.keys():
-                var = key
+                _, var = key.split(".", 1)  # remove service prefix
                 well_name, attr_path = var.split(".", 1)
                 top_attr = attr_path.split(".", 1)[0]
                 if well_name not in constraints_by_well:
@@ -226,25 +191,12 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
         return self
 
 
-type ServiceRequest = list[
-    dict[str, Any]
-]  # generic type which should be compiled with service(s) request
-
-
 class RequestPayload(BaseModel, extra="forbid"):
     request: ServiceRequest
     control_vector: ControlVector
 
 
 class SolutionCandidateServicesTasks(BaseModel, extra="forbid"):
-    """
-    Represents a collection of tasks mapped to their respective service types.
-
-    Attributes:
-        tasks (dict[ServiceType, RequestPayload]): A dictionary mapping each service type
-        to its corresponding payload containing service requests and control vectors.
-    """
-
     tasks: dict[ServiceType, RequestPayload]
 
 

@@ -13,7 +13,7 @@ class ProblemTypeHandler(Protocol):
     Protocol for problem handlers, defining methods required to handle specific optimization problems.
     """
 
-    def build_initial_state(self, items: list[Any]) -> dict[str | ServiceType, Any]:
+    def build_initial_state(self, items: list[Any]) -> dict[str, Any]:
         """
         Build the initial state for the optimization problem.
 
@@ -26,16 +26,16 @@ class ProblemTypeHandler(Protocol):
 
         ...
 
-    def build_boundaries(
-        self, items: list[Any], *args: Any, **kwargs: Any
+    def build_full_key_boundaries(
+        self, items: list[Any], separator: str = "#"
     ) -> dict[str, tuple[float, float]]:
         """
         Build the constraints for the optimization problem.
 
         Args:
             items (list[Any]): A list of items to build constraints from.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
+            separator (str): Separator used to construct constraint keys.
+
 
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
@@ -60,12 +60,10 @@ class ProblemTypeHandler(Protocol):
 
 
 class WellDesignHandler(ProblemTypeHandler):
-    def build_initial_state(
-        self, items: list[WellDesignItem]
-    ) -> dict[str | ServiceType, Any]:
+    def build_initial_state(self, items: list[WellDesignItem]) -> dict[str, Any]:
         return {item.well_name: item.initial_state.model_dump() for item in items}
 
-    def build_boundaries(
+    def build_full_key_boundaries(
         self,
         items: list[WellDesignItem],
         separator: str = "#",
@@ -79,6 +77,7 @@ class WellDesignHandler(ProblemTypeHandler):
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
             and values as the bounds (lower, upper).
         """
+
         result = {}
         for item in items:
             # Add existing constraints (e.g., wellhead x, y)

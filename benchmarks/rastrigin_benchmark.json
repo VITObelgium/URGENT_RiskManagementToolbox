@@ -1,5 +1,5 @@
 {
-  "well_placement": [
+  "well_design": [
     {
       "well_name": "X1",
       "initial_state": {
@@ -12,7 +12,7 @@
           "z": 0
         }
       },
-      "optimization_constraints": {
+      "parameter_bounds": {
         "wellhead": {
           "x": {
             "lb": -5.12,
@@ -37,7 +37,7 @@
           "z": 0
         }
       },
-      "optimization_constraints": {
+      "parameter_bounds": {
         "wellhead": {
           "x": {
             "lb": -5.12,

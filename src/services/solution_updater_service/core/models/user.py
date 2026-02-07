@@ -47,7 +47,7 @@ class SolutionCandidate(BaseModel, extra="forbid"):
 
 class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     solution_candidates: list[SolutionCandidate]
-    optimization_constraints: OptimizationConstrains | None = Field(default=None)
+    parameter_bounds: OptimizationConstrains | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_cost_functions(
@@ -77,9 +77,9 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     def validate_optimization_boundaries_contain_the_same_optimization_variables(
         self,
     ) -> SolutionUpdaterServiceRequest:
-        if self.optimization_constraints is None:
+        if self.parameter_bounds is None:
             return self
-        bounded_optimization_variables = self.optimization_constraints.boundaries.keys()
+        bounded_optimization_variables = self.parameter_bounds.boundaries.keys()
         for candidate in self.solution_candidates:
             if candidate.control_vector.items.keys() != bounded_optimization_variables:
                 raise ValueError(

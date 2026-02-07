@@ -250,7 +250,7 @@ The toolbox expects **one JSON file** that defines:
 
 ```json
 {
-  "well_placement": [...],
+  "well_design": [...],
   "optimization_parameters": { ... }
 }
 ```
@@ -259,18 +259,18 @@ The toolbox expects **one JSON file** that defines:
 
 | Field | Type | Required | Description |
 |-----|----|----|----|
-| `well_placement` | array | ✅ | List of wells participating placement, trajectory and perforation optimization |
+| `well_design` | array | ✅ | List of wells participating placement, trajectory and perforation optimization |
 | `optimization_parameters` | object | ✅ | Global optimization settings |
 
 ### Well Placement Section
 
-`well_placement` is an array of objects:
+`well_design` is an array of objects:
 
 ```json
 {
   "well_name": "INJ",
   "initial_state": { ... },
-  "optimization_constraints": { ... }
+  "parameter_bounds": { ... }
 }
 ```
 
@@ -280,7 +280,7 @@ The toolbox expects **one JSON file** that defines:
 |----|----|----|
 | `well_name` | ✅ | Unique identifier used across the configuration |
 | `initial_state` | ✅ | Defines well initial (user defined) geometry and completion |
-| `optimization_constraints` | ✅ | Selects which parameters (from initial state) are optimized, with the lower and upper range |
+| `parameter_bounds` | ✅ | Selects which parameters (from initial state) are optimized, with the lower and upper range |
 
 ### Initial state
 The `initial_state` defines the **baseline geometry** of a well.
@@ -468,7 +468,7 @@ Example:
 ### Optimization constraints
 
 
-Optimization constraints (`optimization_constraints`) define the boundaries for individual well parameters
+Optimization constraints (`parameter_bounds`) define the boundaries for individual well parameters
 
 ####  Parameter Boundaries
 Boundaries define the search space (Lower Bound and Upper Bound) for specific well attributes.
@@ -477,7 +477,7 @@ Boundaries define the search space (Lower Bound and Upper Bound) for specific we
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `optimization_constraints` | Dictionary | Maps a variable name to a `[Min, Max]` tuple. |
+| `parameter_bounds` | Dictionary | Maps a variable name to a `[Min, Max]` tuple. |
 
 > Important!
 >> For nested parameters like wellhead coordinates or perforations, the following naming convention is used:
@@ -486,7 +486,7 @@ Boundaries define the search space (Lower Bound and Upper Bound) for specific we
 
 Example:
 ```JSON
-  "optimization_constraints": {
+  "parameter_bounds": {
     "wellhead": {
       "x": {
         "lb": 10,
@@ -570,7 +570,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
 
 ```json
 {
-  "well_placement": [
+  "well_design": [
     {
       "well_name": "INJ",
       "initial_state": {
@@ -589,7 +589,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           }
         }
       },
-      "optimization_constraints": {
+      "parameter_bounds": {
         "wellhead": {
           "x": {
             "lb": 100.0,
@@ -624,7 +624,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           }
         }
       },
-      "optimization_constraints": {
+      "parameter_bounds": {
         "wellhead": {
           "x": {
             "lb": 1000.0,

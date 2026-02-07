@@ -77,6 +77,10 @@ class TaskBuilder:
                     task_map[service_type] = RequestPayload(
                         request=service_requests, control_vector=control_vector
                     )
+                else:
+                    raise ValueError(
+                        f"Invalid service type: {service_type} or handler missing."
+                    )
 
             tasks_list.append(SolutionCandidateServicesTasks(tasks=task_map))
         return tasks_list

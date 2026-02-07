@@ -114,8 +114,8 @@ plugins = [
 ]
 
 [tool.pytest.ini_options]
-retries = 1
-retry_delay = 0
+retries = 2
+retry_delay = 0.1
 pythonpath = "src"
 log_file = "log/pytest_log.log"
 log_file_format = "%(process)d %(thread)d %(asctime)s %(module)s:%(lineno)d %(levelname)s - %(message)s"
@@ -156,7 +156,6 @@ pytest = "==8.3.4"
 pytest-mypy = "==0.10.3"
 pytest-retry = "==1.7.0"
 ruff = "==0.14.14"
-pytest-xdist = "==3.8.0"
 
 
 [tool.pixi.feature.py310.dependencies]
@@ -185,4 +184,4 @@ ruff-format-check =  { cmd = "ruff format ." }
 
 lint = { depends-on = ["ruff-fix", "ruff-format-check", "mypy"] }
 
-pytest = {cmd= "pytest -n auto"}
+pytest = {cmd= "pytest ."}

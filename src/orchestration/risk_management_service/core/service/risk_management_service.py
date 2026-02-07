@@ -88,9 +88,9 @@ def run_risk_management(
                 + ["ind_" + str(idx) for idx in range(dispatcher.population_size)],
             )
 
-            logger.debug("Fetching boundaries from ProblemDispatcherService.")
-            boundaries = dispatcher.boundaries
-            logger.debug("Boundaries retrieved: %s", boundaries)
+            logger.debug("Fetching full key boundaries from ProblemDispatcherService.")
+            full_key_boundaries = dispatcher.full_key_boundaries
+            logger.debug("Boundaries retrieved: %s", full_key_boundaries)
             logger.debug("Fetching linear inequalities from ProblemDispatcherService.")
             linear_inequalities = dispatcher.linear_inequalities
             logger.debug("Linear inequalities retrieved: %s", linear_inequalities)
@@ -139,8 +139,8 @@ def run_risk_management(
                 response = solution_updater.process_request(
                     {
                         "solution_candidates": updated_solutions,
-                        "optimization_constraints": {
-                            "boundaries": boundaries,
+                        "parameter_bounds": {
+                            "full_key_boundaries": full_key_boundaries,
                             "A": linear_inequalities["A"],
                             "b": linear_inequalities["b"],
                             "sense": linear_inequalities["sense"],

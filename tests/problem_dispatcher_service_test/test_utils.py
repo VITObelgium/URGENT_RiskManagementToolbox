@@ -21,7 +21,7 @@ def test_parse_flat_dict_to_nested():
 
 def test_get_corresponding_initial_state_as_flat_dict():
     initial = {
-        "well_placement": {
+        "well_design": {
             "INJ": {
                 "md": 3000.0,
                 "md_step": 5.0,
@@ -41,12 +41,12 @@ def test_get_corresponding_initial_state_as_flat_dict():
         }
     }
 
-    variable_source = ["well_placement#INJ#md", "well_placement#PRO#wellhead#x"]
+    variable_source = ["well_design#INJ#md", "well_design#PRO#wellhead#x"]
 
     results = get_corresponding_initial_state_as_flat_dict(initial, variable_source)
     assert results == {
-        "well_placement#INJ#md": 3000.0,
-        "well_placement#PRO#wellhead#x": 700.0,
+        "well_design#INJ#md": 3000.0,
+        "well_design#PRO#wellhead#x": 700.0,
     }
 
 

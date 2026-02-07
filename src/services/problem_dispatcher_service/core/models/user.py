@@ -10,10 +10,10 @@ from typing_extensions import Annotated
 from common import OptimizationStrategy
 from logger import get_logger
 from services.shared import (
-    validate_linear_inequalities,
-    validate_boundaries,
-    ServiceType,
     ServiceRequest,
+    ServiceType,
+    validate_boundaries,
+    validate_linear_inequalities,
 )
 from services.solution_updater_service import ControlVector
 from services.well_management_service import WellModel
@@ -169,7 +169,11 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
 
         for A_row in self.optimization_parameters.linear_inequalities["A"]:
             for key in A_row.keys():
-                _, var = key.split(".", 1)  # remove service prefix
+                service, var = key.split(".", 1)  # remove service prefix
+                if service not in ServiceType:
+                    raise ValueError(
+                        f"Unknown service type: {service}. Make sure service type is used as prefix in variable name."
+                    )
                 well_name, attr_path = var.split(".", 1)
                 top_attr = attr_path.split(".", 1)[0]
                 if well_name not in constraints_by_well:

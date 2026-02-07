@@ -13,9 +13,9 @@ benchmarks = {
 
 
 def _get_control_vector(result):
-    well_placement = result[1]["well_placement"]
+    well_design = result[1]["well_design"]
     coords_flat = []
-    for well_name, well_data in well_placement.items():
+    for well_name, well_data in well_design.items():
         coords_flat.append(well_data["wellhead"]["x"])
         coords_flat.append(well_data["wellhead"]["y"])
     return np.array(coords_flat)

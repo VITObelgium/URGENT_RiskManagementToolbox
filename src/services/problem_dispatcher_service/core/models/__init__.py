@@ -1,6 +1,6 @@
 from services.problem_dispatcher_service.core.models.user import (
-    ParameterBoundary,
     OptimizationParameters,
+    ParameterBoundary,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     RequestPayload,

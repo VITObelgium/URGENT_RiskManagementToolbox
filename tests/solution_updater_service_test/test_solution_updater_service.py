@@ -338,7 +338,7 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 10.0}},
                     }
                 ],
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "boundaries": {
                         "param1": [0.0, 5.0],
                         "param2": [0.0, 3.0],
@@ -358,7 +358,7 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 15.0}},
                     }
                 ],
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "boundaries": {
                         "param1": [0.0, 4.0],
                         "param2": [0.0, 3.0],
@@ -478,7 +478,7 @@ def test_optimization_service_full_round(test_case):
 
     config = {
         "solution_candidates": candidates,
-        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
     }
 
     service = SolutionUpdaterService(
@@ -765,7 +765,7 @@ def test_maximization_service_full_round(test_case):
 
     config = {
         "solution_candidates": candidates,
-        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
     }
 
     service = SolutionUpdaterService(
@@ -865,7 +865,7 @@ def test_pareto_optimization_zdt1():
 
     config = {
         "solution_candidates": candidates,
-        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
     }
 
     service = SolutionUpdaterService(
@@ -980,7 +980,7 @@ def test_pareto_optimization_schaffer_n1():
 
     config = {
         "solution_candidates": candidates,
-        "optimization_constraints": {"boundaries": {"x": [lb, ub]}},
+        "parameter_bounds": {"boundaries": {"x": [lb, ub]}},
     }
 
     service = SolutionUpdaterService(
@@ -1098,7 +1098,7 @@ def test_pareto_optimization_zdt3():
 
     config = {
         "solution_candidates": candidates,
-        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
     }
 
     service = SolutionUpdaterService(
@@ -1222,7 +1222,7 @@ def test_pareto_optimization_kursawe():
 
     config = {
         "solution_candidates": candidates,
-        "optimization_constraints": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
     }
 
     service = SolutionUpdaterService(

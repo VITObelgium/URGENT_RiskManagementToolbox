@@ -39,7 +39,7 @@ class ProblemDispatcherService:
             )
             self._handlers = PROBLEM_TYPE_HANDLERS
             self._initial_state = self._build_initial_state()
-            self._boundaries = self._build_boundaries()
+            self._full_key_boundaries = self._build_full_key_boundaries()
             opt_params = self._problem_definition.optimization_parameters
             self._linear_inequalities: dict[str, list] | None = getattr(
                 opt_params, "linear_inequalities", None
@@ -69,8 +69,8 @@ class ProblemDispatcherService:
         return self._problem_definition.optimization_parameters.patience
 
     @property
-    def boundaries(self) -> dict[str, tuple[float, float]]:
-        return self._boundaries
+    def full_key_boundaries(self) -> dict[str, tuple[float, float]]:
+        return self._full_key_boundaries
 
     @property
     def linear_inequalities(self) -> dict[str, list] | None:
@@ -88,7 +88,7 @@ class ProblemDispatcherService:
         try:
             if next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
-                    self._boundaries,
+                    self._full_key_boundaries,
                     self._n_size,
                     random.uniform,
                     self._initial_state,
@@ -145,16 +145,18 @@ class ProblemDispatcherService:
             self.logger.error("Error during %s: %s", log_message, str(e))
             raise
 
-    def _build_initial_state(self) -> dict[str | ServiceType, Any]:
+    def _build_initial_state(self) -> dict[str, Any]:
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_initial_state(items),
             log_message="Building initial state",
             merge_results=False,
         )
 
-    def _build_boundaries(self) -> dict[str, tuple[float, float]]:
+    def _build_full_key_boundaries(self) -> dict[str, tuple[float, float]]:
         return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_boundaries(items),
+            process_func=lambda handler, items: handler.build_full_key_boundaries(
+                items
+            ),
             log_message="Building boundaries",
             merge_results=True,
         )

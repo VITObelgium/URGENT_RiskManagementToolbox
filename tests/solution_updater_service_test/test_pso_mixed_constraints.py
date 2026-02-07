@@ -15,8 +15,8 @@ def mixed_constraints_request():
             {
                 "control_vector": {
                     "items": {
-                        "well_placement#INJ#md": 2800.0,  # Violates ub
-                        "well_placement#INJ#wellhead#x": 150.0,
+                        "well_design#INJ#md": 2800.0,  # Violates ub
+                        "well_design#INJ#wellhead#x": 150.0,
                     }
                 },
                 "cost_function_results": {"values": {"metric": 10.0}},
@@ -24,8 +24,8 @@ def mixed_constraints_request():
             {
                 "control_vector": {
                     "items": {
-                        "well_placement#INJ#md": 2500.0,
-                        "well_placement#INJ#wellhead#x": 5.0,  # Violates lb
+                        "well_design#INJ#md": 2500.0,
+                        "well_design#INJ#wellhead#x": 5.0,  # Violates lb
                     }
                 },
                 "cost_function_results": {"values": {"metric": 12.0}},
@@ -33,8 +33,8 @@ def mixed_constraints_request():
             {
                 "control_vector": {
                     "items": {
-                        "well_placement#INJ#md": 1900.0,  # Violates lb
-                        "well_placement#INJ#wellhead#x": 3200.0,  # Violates ub
+                        "well_design#INJ#md": 1900.0,  # Violates lb
+                        "well_design#INJ#wellhead#x": 3200.0,  # Violates ub
                     }
                 },
                 "cost_function_results": {"values": {"metric": 9.0}},
@@ -42,17 +42,17 @@ def mixed_constraints_request():
             {
                 "control_vector": {
                     "items": {
-                        "well_placement#INJ#md": 2500.0,
-                        "well_placement#INJ#wellhead#x": 1500.0,  # Feasible
+                        "well_design#INJ#md": 2500.0,
+                        "well_design#INJ#wellhead#x": 1500.0,  # Feasible
                     }
                 },
                 "cost_function_results": {"values": {"metric": 15.0}},
             },
         ],
-        "optimization_constraints": {
+        "parameter_bounds": {
             "boundaries": {
-                "well_placement#INJ#md": (2000.0, 2700.0),
-                "well_placement#INJ#wellhead#x": (10.0, 3190.0),
+                "well_design#INJ#md": (2000.0, 2700.0),
+                "well_design#INJ#wellhead#x": (10.0, 3190.0),
             }
         },
     }
@@ -72,16 +72,16 @@ def test_pso_handles_mixed_md_and_wellhead_constraints(mixed_constraints_request
 
     response = service.process_request(mixed_constraints_request)
 
-    md_bounds = mixed_constraints_request["optimization_constraints"]["boundaries"][
-        "well_placement#INJ#md"
+    md_bounds = mixed_constraints_request["parameter_bounds"]["boundaries"][
+        "well_design#INJ#md"
     ]
-    x_bounds = mixed_constraints_request["optimization_constraints"]["boundaries"][
-        "well_placement#INJ#wellhead#x"
+    x_bounds = mixed_constraints_request["parameter_bounds"]["boundaries"][
+        "well_design#INJ#wellhead#x"
     ]
 
     for solution in response.next_iter_solutions:
-        md_val = solution.items["well_placement#INJ#md"]
-        x_val = solution.items["well_placement#INJ#wellhead#x"]
+        md_val = solution.items["well_design#INJ#md"]
+        x_val = solution.items["well_design#INJ#wellhead#x"]
 
         assert md_bounds[0] <= md_val <= md_bounds[1]
         assert x_bounds[0] <= x_val <= x_bounds[1]

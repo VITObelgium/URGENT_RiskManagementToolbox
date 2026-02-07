@@ -106,7 +106,7 @@ class CandidateGenerator:
 
 
         Parameters:
-            boundaries: A mapping of fully-qualified flat keys to (lb, ub) tuples, e.g."well_placement#INJ#md": (2000, 2700)
+            boundaries: A mapping of fully-qualified flat keys to (lb, ub) tuples, e.g."well_design#INJ#md": (2000, 2700)
             n_size: The number of candidate solutions to generate.
             random_fn: A function to generate random numbers within a given range.
             initial_state: The initial state of the problem.

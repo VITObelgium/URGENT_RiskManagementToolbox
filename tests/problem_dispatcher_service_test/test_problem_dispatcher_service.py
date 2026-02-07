@@ -16,7 +16,7 @@ from services.solution_updater_service import ControlVector
 @pytest.fixture
 def dict_problem_definition():
     return {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "W1",
                 "initial_state": {
@@ -25,7 +25,7 @@ def dict_problem_definition():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "wellhead": {
                         "x": {"lb": 0, "ub": 100},
                         "y": {"lb": 10, "ub": 200},
@@ -44,14 +44,14 @@ def dict_problem_definition():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "wellhead": {"x": {"lb": 0, "ub": 100}, "y": {"lb": 10, "ub": 200}},
                     "md": {"lb": 0, "ub": 300},
                 },
             },
         ],
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
     }
@@ -79,9 +79,9 @@ def test_handle_initial_request_returns_expected_structure(
 @pytest.mark.parametrize(
     "control_vector_items",
     [
-        [{"well_placement#W1#wellhead#x": 5.0, "well_placement#W1#md": 100.0}],
-        [{"well_placement#W1#md": 90.0, "well_placement#W2#wellhead#y": 100.0}],
-        [{"well_placement#W1#wellhead#x": 50.0, "well_placement#W2#wellhead#x": 10.0}],
+        [{"well_design#W1#wellhead#x": 5.0, "well_design#W1#md": 100.0}],
+        [{"well_design#W1#md": 90.0, "well_design#W2#wellhead#y": 100.0}],
+        [{"well_design#W1#wellhead#x": 50.0, "well_design#W2#wellhead#x": 10.0}],
     ],
 )
 def test_handle_iteration_loop_valid_input(
@@ -105,22 +105,22 @@ def test_handle_iteration_loop_valid_input(
     "control_vector_items, expected_updates",
     [
         (
-            {"well_placement#W1#md": 75.0, "well_placement#W2#md": 155.0},
+            {"well_design#W1#md": 75.0, "well_design#W2#md": 155.0},
             {"W1.md": 75.0, "W2.md": 155.0},
         ),
         (
             {
-                "well_placement#W1#wellhead#x": 42.0,
-                "well_placement#W2#wellhead#x": 55.5,
+                "well_design#W1#wellhead#x": 42.0,
+                "well_design#W2#wellhead#x": 55.5,
             },
             {"W1.wellhead.x": 42.0, "W2.wellhead.x": 55.5},
         ),
         (
             {
-                "well_placement#W1#md": 50.0,
-                "well_placement#W2#md": 250.0,
-                "well_placement#W1#wellhead#y": 88.8,
-                "well_placement#W2#wellhead#y": 199.9,
+                "well_design#W1#md": 50.0,
+                "well_design#W2#md": 250.0,
+                "well_design#W1#wellhead#y": 88.8,
+                "well_design#W2#wellhead#y": 199.9,
             },
             {
                 "W1.md": 50.0,
@@ -131,8 +131,8 @@ def test_handle_iteration_loop_valid_input(
         ),
         (
             {
-                "well_placement#W1#perforations#p1#start_md": 55.0,
-                "well_placement#W1#perforations#p1#end_md": 60,
+                "well_design#W1#perforations#p1#start_md": 55.0,
+                "well_design#W1#perforations#p1#end_md": 60,
             },
             {"W1.perforations.p1.start_md": 55.0, "W1.perforations.p1.end_md": 60},
         ),
@@ -171,7 +171,7 @@ def test_control_vector_multiple_wells(
 def test_invalid_problem_definition_type_raises_validation_error():
     with pytest.raises(ValidationError):
         ProblemDispatcherDefinition.model_validate(
-            {"well_placement": "not-a-list", "optimization_parameters": {}}
+            {"well_design": "not-a-list", "optimization_parameters": {}}
         )
 
 
@@ -196,7 +196,7 @@ def test_handle_iteration_loop_with_invalid_float_value(dict_problem_definition)
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    control_vectors = [ControlVector(items={"well_placement#W1#md": 75.5})]
+    control_vectors = [ControlVector(items={"well_design#W1#md": 75.5})]
     response = service.process_iteration(control_vectors)
     assert isinstance(response, ProblemDispatcherServiceResponse)
     assert len(response.solution_candidates) == 1
@@ -204,7 +204,7 @@ def test_handle_iteration_loop_with_invalid_float_value(dict_problem_definition)
 
 def test_get_linear_inequalities(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": 1, "W2.md": 1}],
+        "A": [{"well_design.W1.md": 1, "well_design.W2.md": 1}],
         "b": [100],
         "sense": ["<="],
     }
@@ -220,7 +220,7 @@ def test_get_linear_inequalities(dict_problem_definition):
 
 def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.wellhead.x": 1, "W2.wellhead.x": 1}],
+        "A": [{"well_design.W1.wellhead.x": 1, "well_design.W2.wellhead.x": 1}],
         "b": [200],
         "sense": ["<="],
     }
@@ -234,7 +234,7 @@ def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
 
 def test_linear_inequalities_missing_well_constraint_raises():
     pd = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "W1",
                 "initial_state": {
@@ -243,7 +243,7 @@ def test_linear_inequalities_missing_well_constraint_raises():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {"md": {"lb": 0, "ub": 300}},
+                "parameter_bounds": {"md": {"lb": 0, "ub": 300}},
             },
             {
                 "well_name": "W2",
@@ -253,7 +253,7 @@ def test_linear_inequalities_missing_well_constraint_raises():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": None,
+                "parameter_bounds": None,
             },
         ],
         "optimization_parameters": {
@@ -271,9 +271,9 @@ def test_linear_inequalities_missing_well_constraint_raises():
 
 
 def test_linear_inequalities_missing_variable_in_constraints_raises():
-    # W1 has optimization_constraints but missing 'md' entry required by inequalities
+    # W1 has parameter_bounds but missing 'md' entry required by inequalities
     pd = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "W1",
                 "initial_state": {
@@ -282,13 +282,13 @@ def test_linear_inequalities_missing_variable_in_constraints_raises():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {"wellhead": {"x": {"lb": 0, "ub": 100}}},
+                "parameter_bounds": {"wellhead": {"x": {"lb": 0, "ub": 100}}},
             }
         ],
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
-            "linear_inequalities": {"A": [{"W1.md": 1}], "b": [100]},
+            "linear_inequalities": {"A": [{"well.design.W1.md": 1}], "b": [100]},
         },
     }
 
@@ -312,7 +312,7 @@ def test_process_iteration_exception_handling(dict_problem_definition, monkeypat
 
 
 def test_initialization_failure(dict_problem_definition):
-    dict_problem_definition["well_placement"][0]["optimization_constraints"] = "invalid"
+    dict_problem_definition["well_design"][0]["parameter_bounds"] = "invalid"
     with pytest.raises(ValidationError):
         ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
@@ -324,14 +324,12 @@ def test_problem_dispatcher_service_initializes_correct_population(
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    assert service._boundaries
+    assert service._full_key_boundaries
     response = service.process_iteration()
     assert len(response.solution_candidates) > 0
 
     # Extract md bounds from the fixture for W1
-    w1_md_bounds = dict_problem_definition["well_placement"][0][
-        "optimization_constraints"
-    ]["md"]
+    w1_md_bounds = dict_problem_definition["well_design"][0]["parameter_bounds"]["md"]
     lb = w1_md_bounds["lb"]
     ub = w1_md_bounds["ub"]
 
@@ -341,14 +339,14 @@ def test_problem_dispatcher_service_initializes_correct_population(
         payload = candidate.tasks[ServiceType.WellDesignService]
         control_items = payload.control_vector.items
 
-        assert "well_placement#W1#md" in control_items
-        md_val = control_items["well_placement#W1#md"]
+        assert "well_design#W1#md" in control_items
+        md_val = control_items["well_design#W1#md"]
         assert lb <= md_val <= ub
 
 
 def test_linear_inequalities_unknown_well_raises():
     pd = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "INJ",
                 "initial_state": {
@@ -357,7 +355,7 @@ def test_linear_inequalities_unknown_well_raises():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "wellhead": {
                         "x": {"lb": 0, "ub": 100},
                         "y": {"lb": 0, "ub": 100},
@@ -373,7 +371,7 @@ def test_linear_inequalities_unknown_well_raises():
                     "md": 200,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "wellhead": {
                         "x": {"lb": 0, "ub": 100},
                         "y": {"lb": 0, "ub": 100},
@@ -436,7 +434,7 @@ def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definit
 
 def test_duplicate_well_names_raises():
     pd = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "W1",
                 "initial_state": {
@@ -445,7 +443,7 @@ def test_duplicate_well_names_raises():
                     "md": 100,
                     "perforations": {"p1": {"start_md": 20.0, "end_md": 80.0}},
                 },
-                "optimization_constraints": {"md": {"lb": 0, "ub": 200}},
+                "parameter_bounds": {"md": {"lb": 0, "ub": 200}},
             },
             {
                 "well_name": "W1",
@@ -455,7 +453,7 @@ def test_duplicate_well_names_raises():
                     "md": 150,
                     "perforations": [{"start_md": 50.0, "end_md": 140.0}],
                 },
-                "optimization_constraints": {"md": {"lb": 0, "ub": 300}},
+                "parameter_bounds": {"md": {"lb": 0, "ub": 300}},
             },
         ],
         "optimization_parameters": {
@@ -468,7 +466,7 @@ def test_duplicate_well_names_raises():
 
 
 def test_variable_bounds_lb_gt_ub_raises(dict_problem_definition):
-    dict_problem_definition["well_placement"][0]["optimization_constraints"]["md"] = {
+    dict_problem_definition["well_design"][0]["parameter_bounds"]["md"] = {
         "lb": 100,
         "ub": 50,
     }
@@ -512,7 +510,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
                 "md_step": 20.0,
                 "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
             },
-            "optimization_constraints": {
+            "parameter_bounds": {
                 "md_linear1": {"lb": 400, "ub": 600},
                 "azimuth": {"lb": 0, "ub": 360},
             },
@@ -534,7 +532,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
                 "md_step": 30.0,
                 "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
             },
-            "optimization_constraints": {
+            "parameter_bounds": {
                 "md_linear1": {"lb": 300, "ub": 500},
                 "dls1": {"lb": 5, "ub": 15},
             },
@@ -551,7 +549,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
                 "md_step": 10.0,
                 "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
             },
-            "optimization_constraints": {
+            "parameter_bounds": {
                 "TVD": {"lb": 800, "ub": 1200},
                 "md_lateral": {"lb": 1000, "ub": 2000},
             },
@@ -560,8 +558,8 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
 )
 def test_problem_dispatcher_supports_extended_well_types(well_config):
     problem_definition = {
-        "well_placement": [well_config],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+        "well_design": [well_config],
+        "optimization_parameters": {"objectives": {"metrics1": "maximize"}},
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     service = ProblemDispatcherService(problem_definition=problem_definition)
@@ -578,8 +576,8 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
     control_items = task.control_vector.items
 
     well_name = well_config["well_name"]
-    for param in well_config["optimization_constraints"]:
-        key = f"well_placement#{well_name}#{param}"
+    for param in well_config["parameter_bounds"]:
+        key = f"well_design#{well_name}#{param}"
         assert key in control_items
 
 
@@ -597,10 +595,10 @@ def test_hwell_validation_failure_invalid_geometry():
             "md_step": 10.0,
             "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
         },
-        "optimization_constraints": {"TVD": {"lb": 50, "ub": 150}},
+        "parameter_bounds": {"TVD": {"lb": 50, "ub": 150}},
     }
     problem_definition = {
-        "well_placement": [well_config],
+        "well_design": [well_config],
         "optimization_parameters": {"optimization_strategy": "maximize"},
     }
 

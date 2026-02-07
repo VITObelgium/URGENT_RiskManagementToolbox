@@ -593,14 +593,12 @@ class SolutionUpdaterService:
                     f"Objective '{obj_name}' not found in results {self._mapper.results_name}"
                 )
 
-        lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
-            config.optimization_constraints
-        )
+        lb, ub = self._mapper.get_variables_lb_and_ub_boundary(config.parameter_bounds)
         A_np = None
         b_np = None
 
         try:
-            if config.optimization_constraints and config.optimization_constraints.A:
+            if config.parameter_bounds and config.parameter_bounds.A:
                 self._logger.info("Linear inequalities provided, processing...")
                 simple_to_idx: dict[str, int] = {}
                 if not self._mapper._state:
@@ -611,7 +609,7 @@ class SolutionUpdaterService:
                         simple = f"{parts[1]}.{parts[-1]}"
                         simple_to_idx[simple] = idx
                 A_rows = []
-                for row in config.optimization_constraints.A:
+                for row in config.parameter_bounds.A:
                     dense = np.zeros(control_vector.shape[1], dtype=np.float64)
                     for var, coef in zip(row.keys(), row.values()):
                         if var not in simple_to_idx:
@@ -622,12 +620,12 @@ class SolutionUpdaterService:
                     A_rows.append(dense)
                 A_np = np.vstack(A_rows) if A_rows else None
                 b_np = (
-                    np.array(config.optimization_constraints.b, dtype=np.float64)
-                    if config.optimization_constraints.b
+                    np.array(config.parameter_bounds.b, dtype=np.float64)
+                    if config.parameter_bounds.b
                     else None
                 )
                 # Apply sense transformation: convert any >, >= into <= by multiplying both sides by -1
-                senses = config.optimization_constraints.sense
+                senses = config.parameter_bounds.sense
                 if A_np is not None and b_np is not None and senses is not None:
                     for i, s in enumerate(senses):
                         if s in (">", ">="):

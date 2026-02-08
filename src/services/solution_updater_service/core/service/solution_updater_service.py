@@ -15,7 +15,7 @@ from services.solution_updater_service.core.engines import (
 )
 from services.solution_updater_service.core.models import (
     ControlVector,
-    OptimizationConstrains,
+    OptimizationConstraints,
     OptimizationEngine,
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
@@ -265,7 +265,7 @@ class _Mapper:
         ]
 
     def get_variables_lb_and_ub_boundary(
-        self, constraints: OptimizationConstrains | None
+        self, constraints: OptimizationConstraints | None
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Retrieves the lower and upper boundary values for control vector parameters
@@ -277,7 +277,7 @@ class _Mapper:
         for the lower bound and `np.inf` (positive infinity) for the upper bound.
 
         Args:
-            constraints (OptimizationConstrains | None):
+            constraints (OptimizationConstraints | None):
                 An `OptimizationBoundaries` object containing boundary constraints for the
                 control vector parameters. The boundaries include per-parameter lower
                 and upper bounds structured as key-value pairs, where the key is the
@@ -542,8 +542,12 @@ class SolutionUpdaterService:
         b_np = None
 
         try:
-            if config.optimization_constraints and config.optimization_constraints.A:
-                self._logger.info("Linear inequalities provided, processing...")
+            lin = (
+                config.optimization_constraints.linear_inequalities
+                if config.optimization_constraints
+                else None
+            )
+            if lin and lin.A:
                 simple_to_idx: dict[str, int] = {}
                 if not self._mapper._state:
                     raise ValueError("Control vector mapping state is not initialized.")
@@ -553,7 +557,7 @@ class SolutionUpdaterService:
                         simple = f"{parts[1]}.{parts[-1]}"
                         simple_to_idx[simple] = idx
                 A_rows = []
-                for row in config.optimization_constraints.A:
+                for row in lin.A:
                     dense = np.zeros(control_vector.shape[1], dtype=np.float64)
                     for var, coef in zip(row.keys(), row.values()):
                         if var not in simple_to_idx:
@@ -563,13 +567,9 @@ class SolutionUpdaterService:
                         dense[simple_to_idx[var]] = float(coef)
                     A_rows.append(dense)
                 A_np = np.vstack(A_rows) if A_rows else None
-                b_np = (
-                    np.array(config.optimization_constraints.b, dtype=np.float64)
-                    if config.optimization_constraints.b
-                    else None
-                )
+                b_np = np.array(lin.b, dtype=np.float64) if lin.b else None
                 # Apply sense transformation: convert any >, >= into <= by multiplying both sides by -1
-                senses = config.optimization_constraints.sense
+                senses = lin.sense
                 if A_np is not None and b_np is not None and senses is not None:
                     for i, s in enumerate(senses):
                         if s in (">", ">="):

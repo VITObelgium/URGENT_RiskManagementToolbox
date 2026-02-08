@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 
 import psutil
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -10,6 +10,7 @@ from pydantic.functional_validators import AfterValidator
 from typing_extensions import Annotated
 
 from common import OptimizationStrategy
+from common.models.linear_inequalities import LinearInequalities
 from logger import get_logger
 from services.solution_updater_service import ControlVector
 from services.well_management_service import WellModel
@@ -22,25 +23,32 @@ class VariableBnd(BaseModel, extra="forbid"):
     ub: float = Field(default=float("inf"))
 
     @model_validator(mode="after")
-    def check_bounds(self) -> "VariableBnd":
+    def check_bounds(self) -> Self:
         if self.lb > self.ub:
             raise ValueError("Variable bounds invalid: lb must be <= ub")
         return self
 
 
 type VariableName = str
-type OptimizationConstrains = dict[VariableName, VariableBnd | OptimizationConstrains]
+type OptimizationConstraintsMap = dict[
+    VariableName, VariableBnd | OptimizationConstraintsMap
+]
 
 
 class WellPlacementItem(BaseModel, extra="forbid"):
     well_name: str
     initial_state: WellModel
-    optimization_constraints: OptimizationConstrains
+    optimization_constraints: OptimizationConstraintsMap
 
     @model_validator(mode="before")
     @classmethod
-    def set_initial_state_well_name(cls, values):
-        values["initial_state"]["name"] = values["well_name"]
+    def set_initial_state_well_name(cls, values: Any) -> Any:
+        if (
+            isinstance(values, dict)
+            and "well_name" in values
+            and "initial_state" in values
+        ):
+            values["initial_state"]["name"] = values["well_name"]
         return values
 
 
@@ -55,39 +63,18 @@ class OptimizationParameters(BaseModel, extra="forbid"):
         worker_count (int): The number of parallel workers to use for simulations.
         optimization_strategy (str): The direction of the optimization objective,
             either 'maximize' or 'minimize'.
-        linear_inequalities (dict[str, list] | None): The linear inequality constraints
-            for the optimization problem. An example structure is:
-            {
-                "A": [
-                    {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0}
-                ],
-                "b": [30.0, 3000.0],
-                "sense": [">=", "<="]  # optional list, defaults to "<=" if omitted
-            }
-
+        linear_inequalities (LinearInequalities | None): The linear inequality constraints
+            for the optimization problem.
     """
 
-    max_generations: int = Field(default=10)
-    population_size: int = Field(default=10)
-    patience: int = Field(default=10)
-    worker_count: int = Field(default=4)
+    max_generations: int = Field(default=10, gt=0)
+    population_size: int = Field(default=10, gt=0)
+    patience: int = Field(default=10, gt=0)
+    worker_count: int = Field(default=4, gt=0)
     optimization_strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.MAXIMIZE,
     )
-    linear_inequalities: dict[str, list] | None = Field(default=None)
-
-    @field_validator(
-        "max_generations",
-        "population_size",
-        "patience",
-        "worker_count",
-        mode="before",
-    )
-    @classmethod
-    def check_positive_ints(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("Value must be a positive integer")
-        return value
+    linear_inequalities: LinearInequalities | None = Field(default=None)
 
     @field_validator("worker_count", mode="before")
     @classmethod
@@ -103,63 +90,12 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     @model_validator(mode="after")
     def validate_worker_count_not_greater_than_population_size(
         self,
-    ) -> OptimizationParameters:
+    ) -> Self:
         if self.worker_count > self.population_size:
             self.worker_count = self.population_size
             logger.warning(
                 f"Worker_count {self.worker_count} exceeds population_size {self.population_size}. Setting worker_count to population_size."
             )
-        return self
-
-    @model_validator(mode="after")
-    def validate_linear_inequalities(self) -> OptimizationParameters:
-        if self.linear_inequalities is None:
-            return self
-        try:
-            A = self.linear_inequalities["A"]
-            b = self.linear_inequalities["b"]
-            senses = self.linear_inequalities.get("sense")
-        except KeyError:
-            raise KeyError("linear_inequalities must contain both 'A' and 'b'")
-
-        if not isinstance(A, list) or not isinstance(b, list):
-            raise ValueError("'A' and 'b' in linear_inequalities must be lists")
-        if len(A) != len(b):
-            raise ValueError("Number of rows in A must match length of b")
-
-        if senses is not None:
-            if not isinstance(senses, list):
-                raise ValueError("'sense' must be a list when provided")
-            if len(senses) != len(A):
-                raise ValueError("Length of 'sense' must match number of rows in A")
-            allowed = {"<=", ">=", "<", ">"}
-            if not all(s in allowed for s in senses):
-                raise ValueError(
-                    f"Invalid inequality direction(s) in 'sense'. Allowed: {sorted(allowed)}"
-                )
-        else:
-            # As default when not specified, we set all senses to "<="
-            self.linear_inequalities["sense"] = ["<="] * len(A)
-
-        # Collect attribute suffixes to ensure same attribute referenced (e.g., all '.md')
-        for row_idx, row in enumerate(A):
-            if not isinstance(row, dict):
-                raise TypeError(
-                    f"Row {row_idx} in A must be a dict mapping variable to coefficient"
-                )
-            if len(row) == 0:
-                raise ValueError(f"Row {row_idx} in A is empty")
-            for var, coef in row.items():
-                if not isinstance(coef, (int, float)):
-                    raise TypeError(
-                        f"Coefficient for {var} in row {row_idx} must be numeric"
-                    )
-                if "." not in var:
-                    raise ValueError(
-                        f"Variable '{var}' in linear inequalities must contain a '.' separating well and attribute (e.g., 'INJ.md')"
-                    )
-            if not isinstance(b[row_idx], (int, float)):
-                raise TypeError(f"b[{row_idx}] must be numeric")
         return self
 
 
@@ -185,11 +121,9 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     optimization_parameters: OptimizationParameters
 
     @model_validator(mode="after")
-    def check_linear_inequalities_constraints_compliance(self):
-        inequalities = getattr(
-            self.optimization_parameters, "linear_inequalities", None
-        )
-        if not inequalities or "A" not in inequalities:
+    def check_linear_inequalities_constraints_compliance(self) -> Self:
+        lin = self.optimization_parameters.linear_inequalities
+        if not lin:
             return self
 
         def _has_nested_path(d: dict, path: list[str]) -> bool:
@@ -204,7 +138,7 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
             w.well_name: (w.optimization_constraints or {}) for w in self.well_placement
         }
 
-        for A_row in self.optimization_parameters.linear_inequalities["A"]:
+        for A_row in lin.A:
             for key in A_row.keys():
                 var = key
                 well_name, attr_path = var.split(".", 1)

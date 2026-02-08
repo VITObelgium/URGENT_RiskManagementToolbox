@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from enum import StrEnum
+from typing import Self
 
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
+
+from common.models.linear_inequalities import LinearInequalities
 
 type OptimizationVariable = str
 type CostFunction = str
@@ -16,55 +19,17 @@ class OptimizationEngine(StrEnum):
     PSO = "PSO"
 
 
-class OptimizationConstrains(BaseModel, extra="forbid"):
+class OptimizationConstraints(BaseModel, extra="forbid"):
     boundaries: dict[OptimizationVariable, tuple[LowerBound, UpperBound]]
-    A: list[dict[str, float]] | None = Field(default=None)
-    b: list[float] | None = Field(default=None)
-    sense: list[str] | None = Field(default=None)
+    linear_inequalities: LinearInequalities | None = Field(default=None)
 
     @model_validator(mode="after")
-    def validate_lower_bound_is_less_than_upper_bound(self) -> OptimizationConstrains:
+    def validate_boundaries(self) -> Self:
         for variable, (lower_bound, upper_bound) in self.boundaries.items():
             if lower_bound >= upper_bound:
                 raise ValueError(
                     f"Lower bound for {variable} must be less than upper bound."
                 )
-        if (self.A is None) ^ (self.b is None):
-            raise ValueError("Both A and b must be provided together or both None")
-        if self.A is not None:
-            if len(self.A) != len(self.b):  # type: ignore[arg-type]
-                raise ValueError("A row count must equal length of b")
-            if self.sense is not None and len(self.sense) != len(self.A):
-                raise ValueError("sense length must match number of A rows")
-            if self.sense is None and self.A is not None:
-                self.sense = ["<="] * len(self.A)
-            allowed = {"<=", ">=", "<", ">"}
-            for s in self.sense or []:
-                if s not in allowed:
-                    raise ValueError(
-                        f"Invalid inequality direction '{s}'. Allowed: {sorted(allowed)}"
-                    )
-            suffix_ref: str | None = None
-            for idx, row in enumerate(self.A):
-                if not isinstance(row, dict) or not row:
-                    raise ValueError(f"Row {idx} in A must be a non-empty dict")
-                for var, coef in row.items():
-                    if not isinstance(coef, (int, float)):
-                        raise TypeError(
-                            f"Coefficient for variable '{var}' in row {idx} must be numeric"
-                        )
-                    if "." not in var:
-                        raise ValueError(
-                            f"Variable '{var}' must contain '.' separating well and attribute (e.g., 'INJ.md')"
-                        )
-                    suffix = var.split(".", 1)[1]
-                    if suffix_ref is None:
-                        suffix_ref = suffix
-                    elif suffix != suffix_ref:
-                        raise ValueError(
-                            "All variables in linear inequalities must refer to the same attribute; "
-                            f"found '{suffix_ref}' and '{suffix}'."
-                        )
         return self
 
 
@@ -135,12 +100,12 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     """
 
     solution_candidates: list[SolutionCandidate]
-    optimization_constraints: OptimizationConstrains | None = Field(default=None)
+    optimization_constraints: OptimizationConstraints | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_cost_functions(
         self,
-    ) -> SolutionUpdaterServiceRequest:
+    ) -> Self:
         cost_functions = self.solution_candidates[0].cost_function_results.values.keys()
         for candidate in self.solution_candidates:
             if candidate.cost_function_results.values.keys() != cost_functions:
@@ -152,7 +117,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_optimization_variables(
         self,
-    ) -> SolutionUpdaterServiceRequest:
+    ) -> Self:
         optimization_variables = self.solution_candidates[0].control_vector.items.keys()
         for candidate in self.solution_candidates:
             if candidate.control_vector.items.keys() != optimization_variables:
@@ -164,7 +129,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     @model_validator(mode="after")
     def validate_optimization_boundaries_contain_the_same_optimization_variables(
         self,
-    ) -> SolutionUpdaterServiceRequest:
+    ) -> Self:
         if self.optimization_constraints is None:
             return self
         bounded_optimization_variables = self.optimization_constraints.boundaries.keys()
@@ -178,7 +143,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     @model_validator(mode="after")
     def reorder_solution_candidates_optimization_variables_and_cost_functions(
         self,
-    ) -> SolutionUpdaterServiceRequest:
+    ) -> Self:
         """
         Reorders the control vector parameters and metrics alphabetically so that all solution
         candidates have the same consistent order.

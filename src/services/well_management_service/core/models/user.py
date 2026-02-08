@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import itertools
+from abc import abstractmethod
 from collections import Counter
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
 from typing_extensions import Annotated
@@ -17,7 +18,7 @@ class PerforationRangeModel(BaseModel, extra="forbid"):
     end_md: float = Field(ge=0.0)
 
     @model_validator(mode="after")
-    def validate_perforation_start_and_end(self) -> PerforationRangeModel:
+    def validate_perforation_start_and_end(self) -> Self:
         if not _has_valid_range(self.start_md, self.end_md):
             raise ValueError(
                 f"Invalid range: start ({self.start_md}) must be less than end ({self.end_md})"
@@ -39,16 +40,27 @@ class _BaseWellModel(BaseModel, extra="forbid"):
         default=None
     )
 
+    @property
+    @abstractmethod
+    def total_md(self) -> float:
+        """Return the total measured depth of the well."""
+        ...
+
     @model_validator(mode="after")
-    def sort_perforations(self) -> _BaseWellModel:
+    def sort_perforations(self) -> Self:
         if self.perforations:
             self.perforations = _sort_perforations(self.perforations)
         return self
 
     @model_validator(mode="after")
-    def validate_perforations_not_overlap(self) -> _BaseWellModel:
+    def validate_perforations_not_overlap(self) -> Self:
         if not _are_perforations_non_overlapping(self.perforations):
             raise ValueError("Perforations can't overlap")
+        return self
+
+    @model_validator(mode="after")
+    def adjust_perforations_to_well_md(self) -> Self:
+        self.perforations = _adjust_perforations(self.total_md, self.perforations)
         return self
 
 
@@ -56,11 +68,9 @@ class IWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     well_type: Literal["IWell"] = Field(default="IWell")
     md: float = Field(gt=0.0)
 
-    @model_validator(mode="after")
-    def adjust_perforations_to_well_md(self) -> IWellModel:
-        total_md = self.md
-        self.perforations = _adjust_perforations(total_md, self.perforations)
-        return self
+    @property
+    def total_md(self) -> float:
+        return self.md
 
 
 class JWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
@@ -71,11 +81,9 @@ class JWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     md_linear2: float = Field(gt=0.0)
     azimuth: float = Field(ge=0.0, lt=360.0)
 
-    @model_validator(mode="after")
-    def adjust_perforations_to_well_md(self) -> JWellModel:
-        total_md = self.md_linear1 + self.md_curved + self.md_linear2
-        self.perforations = _adjust_perforations(total_md, self.perforations)
-        return self
+    @property
+    def total_md(self) -> float:
+        return self.md_linear1 + self.md_curved + self.md_linear2
 
 
 class SWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
@@ -89,17 +97,15 @@ class SWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     md_linear3: float = Field(gt=0.0)
     azimuth: float = Field(ge=0.0, lt=360.0)
 
-    @model_validator(mode="after")
-    def adjust_perforations_to_well_md(self) -> SWellModel:
-        total_md = (
+    @property
+    def total_md(self) -> float:
+        return (
             self.md_linear1
             + self.md_curved1
             + self.md_linear2
             + self.md_curved2
             + self.md_linear3
         )
-        self.perforations = _adjust_perforations(total_md, self.perforations)
-        return self
 
 
 class HWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
@@ -108,16 +114,14 @@ class HWellModel(_BaseWellModel, extra="forbid", str_strip_whitespace=True):
     md_lateral: float = Field(gt=0.0)
     azimuth: float = Field(ge=0.0, lt=360.0)
 
-    @model_validator(mode="after")
-    def adjust_perforations_to_well_md(self) -> HWellModel:
+    @property
+    def total_md(self) -> float:
         from services.well_management_service.core.well_templates import HWellTemplate
 
         md_linear1, md_curved, md_linear2 = HWellTemplate.get_sections_mds(
             depth=self.TVD, width=self.md_lateral
         )
-        total_md = md_linear1 + md_curved + md_linear2
-        self.perforations = _adjust_perforations(total_md, self.perforations)
-        return self
+        return md_linear1 + md_curved + md_linear2
 
 
 WellModel = Annotated[
@@ -126,14 +130,18 @@ WellModel = Annotated[
 ]
 
 
+def _validate_unique_well_names(wells_name: list[str]) -> None:
+    """Raise ValueError if any well names are duplicated."""
+    if duplicates := _duplicate_well_names(wells_name):
+        raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")
+
+
 class WellManagementServiceRequest(BaseModel, extra="forbid"):
     models: list[WellModel]
 
     @model_validator(mode="after")
-    def validate_wells_name(self) -> WellManagementServiceRequest:
-        wells_name = [n.name for n in self.models]
-        if duplicates := _duplicate_well_names(wells_name):
-            raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")
+    def validate_wells_name(self) -> Self:
+        _validate_unique_well_names([n.name for n in self.models])
         return self
 
 
@@ -141,10 +149,8 @@ class WellManagementServiceResponse(BaseModel, extra="forbid"):
     wells: list[SimulationWellModel]
 
     @model_validator(mode="after")
-    def validate_wells_name(self) -> WellManagementServiceResponse:
-        wells_name = [n.name for n in self.wells]
-        if duplicates := _duplicate_well_names(wells_name):
-            raise ValueError(f"Well names must be unique. Duplicate:{duplicates}")
+    def validate_wells_name(self) -> Self:
+        _validate_unique_well_names([n.name for n in self.wells])
         return self
 
 
@@ -154,7 +160,7 @@ class SimulationWellPerforationModel(BaseModel, extra="forbid"):
     points: tuple[tuple[float, float, float], ...]
 
     @model_validator(mode="after")
-    def validate_perforation_start_and_end(self) -> SimulationWellPerforationModel:
+    def validate_perforation_start_and_end(self) -> Self:
         start_md, end_md = self.range
         if not _has_valid_range(start_md, end_md):
             raise ValueError(

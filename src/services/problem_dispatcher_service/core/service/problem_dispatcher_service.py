@@ -46,8 +46,10 @@ class ProblemDispatcherService:
             self._initial_state = self._build_initial_state()
             self._boundaries = self._build_boundaries()
             opt_params = self._problem_definition.optimization_parameters
-            self._linear_inequalities: dict[str, list] | None = getattr(
-                opt_params, "linear_inequalities", None
+            self._linear_inequalities: dict[str, list] | None = (
+                opt_params.linear_inequalities.model_dump()
+                if opt_params.linear_inequalities is not None
+                else None
             )
             self._task_builder = TaskBuilder(
                 self._initial_state, self._handlers, self._service_type_map

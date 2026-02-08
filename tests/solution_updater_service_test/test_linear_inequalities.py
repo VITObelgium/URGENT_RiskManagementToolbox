@@ -1,8 +1,9 @@
 import pytest
 
 from common import OptimizationStrategy
+from common.models.linear_inequalities import LinearInequalities
 from services.solution_updater_service.core.models import (
-    OptimizationConstrains,
+    OptimizationConstraints,
     OptimizationEngine,
 )
 from services.solution_updater_service.core.service import SolutionUpdaterService
@@ -38,11 +39,13 @@ def test_pso_respects_linear_inequality_sum_constraint():
                 "well_placement#INJ#md": [0.0, 3000.0],
                 "well_placement#PRO#md": [0.0, 3000.0],
             },
-            "A": [
-                {"INJ.md": 1.0, "PRO.md": 1.0},
-            ],
-            "b": [3000.0],
-            "sense": ["<="],
+            "linear_inequalities": {
+                "A": [
+                    {"INJ.md": 1.0, "PRO.md": 1.0},
+                ],
+                "b": [3000.0],
+                "sense": ["<="],
+            },
         },
     }
 
@@ -85,9 +88,11 @@ def test_penalty_applied_when_violating_constraint():
                 "well_placement#INJ#md": [0.0, 3000.0],
                 "well_placement#PRO#md": [0.0, 3000.0],
             },
-            "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-            "b": [3000.0],
-            "sense": ["<="],
+            "linear_inequalities": {
+                "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
+                "b": [3000.0],
+                "sense": ["<="],
+            },
         },
     }
 
@@ -98,13 +103,15 @@ def test_penalty_applied_when_violating_constraint():
     )
 
 
-def test_sparse_A_validation_rejects_mixed_attributes():
+def test_sparse_A_validation_rejects_variable_without_dot():
     with pytest.raises(ValueError):
-        OptimizationConstrains(
+        OptimizationConstraints(
             boundaries={"x": (0.0, 1.0)},
-            A=[{"INJ.md": 1.0, "PRO.length": 1.0}],
-            b=[100.0],
-            sense=["<="],
+            linear_inequalities=LinearInequalities(
+                A=[{"INJmd": 1.0}],
+                b=[100.0],
+                sense=["<="],
+            ),
         )
 
 
@@ -130,9 +137,11 @@ def test_direction_greater_equal_transforms_and_enforced():
                 "well_placement#INJ#md": [0.0, 3000.0],
                 "well_placement#PRO#md": [0.0, 3000.0],
             },
-            "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-            "b": [1000.0],
-            "sense": [">="],
+            "linear_inequalities": {
+                "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
+                "b": [1000.0],
+                "sense": [">="],
+            },
         },
     }
     for _ in range(2):
@@ -173,9 +182,11 @@ def test_strict_less_treated_as_less_equal():
                 "well_placement#INJ#md": [0.0, 3000.0],
                 "well_placement#PRO#md": [0.0, 3000.0],
             },
-            "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-            "b": [1200.0],
-            "sense": ["<"],
+            "linear_inequalities": {
+                "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
+                "b": [1200.0],
+                "sense": ["<"],
+            },
         },
     }
     resp = service.process_request(request)
@@ -209,12 +220,14 @@ def test_mixed_constraints_greater_and_less_than():
                 "well_placement#INJ#md": [0.0, 3000.0],
                 "well_placement#PRO#md": [0.0, 3000.0],
             },
-            "A": [
-                {"INJ.md": 1.0, "PRO.md": 1.0},
-                {"INJ.md": 1.0, "PRO.md": 1.0},
-            ],
-            "b": [1000.0, 3000.0],
-            "sense": [">=", "<="],
+            "linear_inequalities": {
+                "A": [
+                    {"INJ.md": 1.0, "PRO.md": 1.0},
+                    {"INJ.md": 1.0, "PRO.md": 1.0},
+                ],
+                "b": [1000.0, 3000.0],
+                "sense": [">=", "<="],
+            },
         },
     }
 
@@ -258,12 +271,14 @@ def test_multiple_inequalities_enforced():
                 "well_placement#INJ#md": [0.0, 3000.0],
                 "well_placement#PRO#md": [0.0, 3000.0],
             },
-            "A": [
-                {"INJ.md": 1.0},
-                {"PRO.md": 1.0},
-            ],
-            "b": [800.0, 800.0],
-            "sense": [">=", ">="],
+            "linear_inequalities": {
+                "A": [
+                    {"INJ.md": 1.0},
+                    {"PRO.md": 1.0},
+                ],
+                "b": [800.0, 800.0],
+                "sense": [">=", ">="],
+            },
         },
     }
 

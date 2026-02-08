@@ -1,6 +1,6 @@
 from services.solution_updater_service.core.models.user import (
     ControlVector,
-    OptimizationConstrains,
+    OptimizationConstraints,
     OptimizationEngine,
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
@@ -9,7 +9,7 @@ from services.solution_updater_service.core.models.user import (
 
 __all__ = [
     "ControlVector",
-    "OptimizationConstrains",
+    "OptimizationConstraints",
     "SolutionCandidate",
     "SolutionUpdaterServiceRequest",
     "SolutionUpdaterServiceResponse",

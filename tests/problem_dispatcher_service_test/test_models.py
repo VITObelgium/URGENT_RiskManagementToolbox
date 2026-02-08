@@ -18,11 +18,11 @@ def valid_linear_inequalities():
 
 def test_valid_linear_inequalities(valid_linear_inequalities):
     params = OptimizationParameters(linear_inequalities=valid_linear_inequalities)
-    assert params.linear_inequalities == valid_linear_inequalities
+    assert params.linear_inequalities.model_dump() == valid_linear_inequalities
 
 
 def test_linear_inequalities_missing_b():
-    with pytest.raises(KeyError, match="must contain both 'A' and 'b'"):
+    with pytest.raises(ValidationError, match="Field required"):
         OptimizationParameters(linear_inequalities={"A": [{"INJ.md": 1.0}]})
 
 
@@ -32,7 +32,7 @@ def test_linear_inequalities_A_not_list():
 
 
 def test_linear_inequalities_mismatched_lengths():
-    with pytest.raises(ValueError, match="Number of rows in A must match length of b"):
+    with pytest.raises(ValidationError, match="A row count must equal length of b"):
         OptimizationParameters(linear_inequalities={"A": [{}, {}], "b": [1]})
 
 
@@ -45,7 +45,7 @@ def test_linear_inequalities_invalid_sense_type():
 
 def test_linear_inequalities_mismatched_sense_length():
     with pytest.raises(
-        ValueError, match="Length of 'sense' must match number of rows in A"
+        ValidationError, match="sense length must match number of A rows"
     ):
         OptimizationParameters(
             linear_inequalities={"A": [{}], "b": [1], "sense": ["<=", ">="]}
@@ -53,7 +53,7 @@ def test_linear_inequalities_mismatched_sense_length():
 
 
 def test_linear_inequalities_invalid_sense_value():
-    with pytest.raises(ValueError, match="Invalid inequality direction"):
+    with pytest.raises(ValidationError, match="Invalid inequality direction"):
         OptimizationParameters(
             linear_inequalities={"A": [{}], "b": [1], "sense": ["invalid"]}
         )
@@ -61,35 +61,33 @@ def test_linear_inequalities_invalid_sense_value():
 
 def test_linear_inequalities_default_sense():
     params = OptimizationParameters(linear_inequalities={"A": [{"X.md": 1}], "b": [1]})
-    assert params.linear_inequalities["sense"] == ["<="]
+    assert params.linear_inequalities.sense == ["<="]
 
 
 def test_linear_inequalities_A_row_not_dict():
-    with pytest.raises(TypeError, match="Row 0 in A must be a dict"):
+    with pytest.raises(ValidationError):
         OptimizationParameters(linear_inequalities={"A": ["not a dict"], "b": [1]})
 
 
 def test_linear_inequalities_empty_A_row():
-    with pytest.raises(ValueError, match="Row 0 in A is empty"):
+    with pytest.raises(ValidationError, match="Row 0 in A must be a non-empty dict"):
         OptimizationParameters(linear_inequalities={"A": [{}], "b": [1]})
 
 
 def test_linear_inequalities_non_numeric_coefficient():
-    with pytest.raises(
-        TypeError, match="Coefficient for X.md in row 0 must be numeric"
-    ):
+    with pytest.raises(ValidationError):
         OptimizationParameters(linear_inequalities={"A": [{"X.md": "a"}], "b": [1]})
 
 
 def test_linear_inequalities_variable_no_dot():
     with pytest.raises(
-        ValueError, match="must contain a '.' separating well and attribute"
+        ValidationError, match="must contain '.' separating well and attribute"
     ):
         OptimizationParameters(linear_inequalities={"A": [{"INJ": 1.0}], "b": [1]})
 
 
 def test_linear_inequalities_non_numeric_b():
-    with pytest.raises(TypeError, match="b\\[0\\] must be numeric"):
+    with pytest.raises(ValidationError):
         OptimizationParameters(linear_inequalities={"A": [{"X.md": 1}], "b": ["a"]})
 
 
@@ -104,34 +102,34 @@ def test_optimization_parameters_defaults():
 
 # Tests for positive integer validation
 def test_max_generations_must_be_positive():
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(max_generations=0)
 
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(max_generations=-5)
 
 
 def test_population_size_must_be_positive():
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(population_size=0)
 
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(population_size=-10)
 
 
 def test_patience_must_be_positive():
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(patience=0)
 
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(patience=-3)
 
 
 def test_worker_count_must_be_positive():
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(worker_count=0)
 
-    with pytest.raises(ValidationError, match="Value must be a positive integer"):
+    with pytest.raises(ValidationError, match="greater than 0"):
         OptimizationParameters(worker_count=-2)
 
 

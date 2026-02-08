@@ -1,7 +1,7 @@
 from typing import Any, Protocol
 
 from services.problem_dispatcher_service.core.models import (
-    OptimizationConstrains,
+    OptimizationConstraintsMap,
     VariableBnd,
     WellPlacementItem,
 )
@@ -91,7 +91,7 @@ class WellPlacementHandler(ProblemTypeHandler):
 
 
 def _flatten_optimization_parameters(
-    optimization_parameters: OptimizationConstrains,
+    optimization_parameters: OptimizationConstraintsMap,
     parent_key: str = "",
     separator: str = "#",
 ) -> dict[str, tuple[float, float]]:

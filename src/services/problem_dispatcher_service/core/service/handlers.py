@@ -1,11 +1,10 @@
 from typing import Any, Protocol
 
 from services.problem_dispatcher_service.core.models import (
-    ParameterBoundary,
-    VariableBnd,
+    ParameterBoundaries,
     WellDesignItem,
 )
-from services.shared import ServiceType
+from services.shared import Boundaries, ServiceType
 
 
 class ProblemTypeHandler(Protocol):
@@ -28,7 +27,7 @@ class ProblemTypeHandler(Protocol):
 
     def build_full_key_boundaries(
         self, items: list[Any], separator: str = "#"
-    ) -> dict[str, tuple[float, float]]:
+    ) -> dict[str, Boundaries]:
         """
         Build the constraints for the optimization problem.
 
@@ -67,7 +66,7 @@ class WellDesignHandler(ProblemTypeHandler):
         self,
         items: list[WellDesignItem],
         separator: str = "#",
-    ) -> dict[str, tuple[float, float]]:
+    ) -> dict[str, Boundaries]:
         """
         Build the constraints for the well placement optimization problem.
         Args:
@@ -85,7 +84,7 @@ class WellDesignHandler(ProblemTypeHandler):
             for key, value in flattened.items():
                 result[
                     f"{ServiceType.WellDesignService}#{item.well_name}{separator}{key}"
-                ] = value
+                ] = Boundaries(**{"lb": value[0], "ub": value[1]})
         return result
 
     def build_service_tasks(
@@ -95,14 +94,14 @@ class WellDesignHandler(ProblemTypeHandler):
 
 
 def _flatten_optimization_parameters(
-    optimization_parameters: ParameterBoundary,
+    optimization_parameters: ParameterBoundaries,
     parent_key: str = "",
     separator: str = "#",
 ) -> dict[str, tuple[float, float]]:
     flat: dict[str, tuple[float, float]] = {}
     for key, value in optimization_parameters.items():
         full_key = f"{parent_key}{separator}{key}" if parent_key else key
-        if isinstance(value, VariableBnd):
+        if isinstance(value, Boundaries):
             flat[full_key] = (value.lb, value.ub)
         elif isinstance(value, dict):
             nested_flat = _flatten_optimization_parameters(value, full_key, separator)

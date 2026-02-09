@@ -3,6 +3,7 @@ import pytest
 from common import OptimizationStrategy
 from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
+from services.shared import Boundaries
 
 
 @pytest.fixture
@@ -61,15 +62,21 @@ def md_problem_definition():
 
 
 def test_boundaries_include_md(md_problem_definition):
-    md_problem_definition["optimization_parameters"]["population_size"] = 1
+    md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
     boundaries = svc.full_key_boundaries
-    assert boundaries["well_design#INJ#md"] == (2000.0, 2700.0)
-    assert boundaries["well_design#PRO#md"] == (2000.0, 2700.0)
-    assert boundaries["well_design#INJ#perforations#p1#start_md"] == (2100.0, 2500.0)
+    assert boundaries["well_design#INJ#md"] == Boundaries(
+        **{"lb": 2000.0, "ub": 2700.0}
+    )
+    assert boundaries["well_design#PRO#md"] == Boundaries(
+        **{"lb": 2000.0, "ub": 2700.0}
+    )
+    assert boundaries["well_design#INJ#perforations#p1#start_md"] == Boundaries(
+        **{"lb": 2100.0, "ub": 2500.0}
+    )
 
 
 def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
@@ -96,13 +103,15 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
 
     from services.solution_updater_service.core.engines.pso import PSOEngine
 
-    md_problem_definition["optimization_parameters"]["population_size"] = 1
+    md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
     boundaries = svc.full_key_boundaries
-    lb, ub = boundaries["well_design#INJ#md"]
+    bnd = boundaries["well_design#INJ#md"]
+    lb = bnd.lb
+    ub = bnd.ub
 
     engine = PSOEngine(seed=42)
 

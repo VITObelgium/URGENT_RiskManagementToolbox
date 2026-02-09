@@ -10,6 +10,7 @@ from services.problem_dispatcher_service.core.models import (
     ServiceType,
     SolutionCandidateServicesTasks,
 )
+from services.shared import LinearInequalities
 from services.solution_updater_service import ControlVector
 
 
@@ -57,7 +58,7 @@ def dict_problem_definition():
     }
 
 
-@pytest.mark.parametrize("n_size", [1, 3])
+@pytest.mark.parametrize("n_size", [2, 3])
 def test_handle_initial_request_returns_expected_structure(
     dict_problem_definition, n_size
 ):
@@ -212,10 +213,9 @@ def test_get_linear_inequalities(dict_problem_definition):
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    inequalities = service.linear_inequalities
+    inequalities = service.full_key_linear_inequalities
     assert inequalities is not None
-    assert "A" in inequalities
-    assert "b" in inequalities
+    assert isinstance(inequalities, LinearInequalities)
 
 
 def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
@@ -228,7 +228,7 @@ def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
         dict_problem_definition
     )
     service = ProblemDispatcherService(problem_definition=problem_definition)
-    inequalities = service.linear_inequalities
+    inequalities = service.full_key_linear_inequalities
     assert inequalities is not None
 
 

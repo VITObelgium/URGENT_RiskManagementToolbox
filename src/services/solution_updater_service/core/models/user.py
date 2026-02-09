@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from dataclasses import field
 from enum import StrEnum
+from typing import Self
 
 import numpy as np
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
-from services.shared import validate_boundaries, validate_linear_inequalities
+from services.shared import Boundaries, LinearInequalities
 
 type OptimizationVariableName = str
 type CostFunctionName = str
-type LowerBound = float
-type UpperBound = float
 
 
 class OptimizationEngine(StrEnum):
@@ -19,17 +19,8 @@ class OptimizationEngine(StrEnum):
 
 
 class OptimizationConstrains(BaseModel, extra="forbid"):
-    boundaries: dict[OptimizationVariableName, tuple[LowerBound, UpperBound]]
-    A: list[dict[OptimizationVariableName, float]] | None = Field(default=None)
-    b: list[float] | None = Field(default=None)
-    sense: list[str] | None = Field(default=None)
-
-    @model_validator(mode="after")
-    def validate_constraints(self) -> OptimizationConstrains:
-        for variable, (lower_bound, upper_bound) in self.boundaries.items():
-            validate_boundaries(lower_bound, upper_bound)
-        validate_linear_inequalities(self.A, self.b, self.sense)
-        return self
+    boundaries: dict[OptimizationVariableName, Boundaries]
+    linear_inequalities: LinearInequalities | None = field(default=None)
 
 
 class ControlVector(BaseModel, extra="forbid"):
@@ -47,12 +38,12 @@ class SolutionCandidate(BaseModel, extra="forbid"):
 
 class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
     solution_candidates: list[SolutionCandidate]
-    parameter_bounds: OptimizationConstrains | None = Field(default=None)
+    optimization_constrains: OptimizationConstrains
 
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_cost_functions(
-        self,
-    ) -> SolutionUpdaterServiceRequest:
+            self,
+    ) -> Self:
         cost_functions = self.solution_candidates[0].cost_function_results.values.keys()
         for candidate in self.solution_candidates:
             if candidate.cost_function_results.values.keys() != cost_functions:
@@ -63,8 +54,8 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_optimization_variables(
-        self,
-    ) -> SolutionUpdaterServiceRequest:
+            self,
+    ) -> Self:
         optimization_variables = self.solution_candidates[0].control_vector.items.keys()
         for candidate in self.solution_candidates:
             if candidate.control_vector.items.keys() != optimization_variables:
@@ -75,11 +66,11 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_optimization_boundaries_contain_the_same_optimization_variables(
-        self,
-    ) -> SolutionUpdaterServiceRequest:
-        if self.parameter_bounds is None:
+            self,
+    ) -> Self:
+        if self.optimization_constrains is None:
             return self
-        bounded_optimization_variables = self.parameter_bounds.boundaries.keys()
+        bounded_optimization_variables = self.optimization_constrains.boundaries.keys()
         for candidate in self.solution_candidates:
             if candidate.control_vector.items.keys() != bounded_optimization_variables:
                 raise ValueError(
@@ -89,8 +80,8 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def reorder_solution_candidates_optimization_variables_and_cost_functions(
-        self,
-    ) -> SolutionUpdaterServiceRequest:
+            self,
+    ) -> Self:
         """
         Reorders the control vector parameters and metrics alphabetically so that all solution
         candidates have the same consistent order.

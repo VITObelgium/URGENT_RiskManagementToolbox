@@ -17,7 +17,7 @@ def test_pso_respects_linear_inequality_sum_constraint():
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=5,
-        patience=5,
+        max_stall_generations=5,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -30,16 +30,18 @@ def test_pso_respects_linear_inequality_sum_constraint():
                 {"well_design#INJ#md": 2000.0, "well_design#PRO#md": 1000.0}, 9.0
             ),  # feasible
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": [0.0, 3000.0],
-                "well_design#PRO#md": [0.0, 3000.0],
+                "well_design#INJ#md": {"lb": 0.0, "ub": 3000.0},
+                "well_design#PRO#md": {"lb": 0.0, "ub": 3000.0},
             },
-            "A": [
-                {"INJ.md": 1.0, "PRO.md": 1.0},
-            ],
-            "b": [3000.0],
-            "sense": ["<="],
+            "linear_inequalities": {
+                "A": [
+                    {"well_design#INJ#md": 1.0, "well_design#PRO#md": 1.0},
+                ],
+                "b": [3000.0],
+                "sense": ["<="],
+            },
         },
     }
 
@@ -64,7 +66,7 @@ def test_penalty_applied_when_violating_constraint():
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=1,
-        patience=1,
+        max_stall_generations=1,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -77,14 +79,16 @@ def test_penalty_applied_when_violating_constraint():
                 {"well_design#INJ#md": 1500.0, "well_design#PRO#md": 1500.0}, 6.0
             ),  # feasible (sum 3000)
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": [0.0, 3000.0],
-                "well_design#PRO#md": [0.0, 3000.0],
+                "well_design#INJ#md": {"lb": 0.0, "ub": 3000.0},
+                "well_design#PRO#md": {"lb": 0.0, "ub": 3000.0},
             },
-            "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-            "b": [3000.0],
-            "sense": ["<="],
+            "linear_inequalities": {
+                "A": [{"well_design#INJ#md": 1.0, "well_design#PRO#md": 1.0}],
+                "b": [3000.0],
+                "sense": ["<="],
+            },
         },
     }
 
@@ -98,7 +102,7 @@ def test_direction_greater_equal_transforms_and_enforced():
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=3,
-        patience=3,
+        max_stall_generations=3,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     request = {
@@ -110,14 +114,16 @@ def test_direction_greater_equal_transforms_and_enforced():
                 {"well_design#INJ#md": 600.0, "well_design#PRO#md": 600.0}, 6.0
             ),  # satisfies
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": [0.0, 3000.0],
-                "well_design#PRO#md": [0.0, 3000.0],
+                "well_design#INJ#md": {"lb": 0.0, "ub": 3000.0},
+                "well_design#PRO#md": {"lb": 0.0, "ub": 3000.0},
             },
-            "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-            "b": [1000.0],
-            "sense": [">="],
+            "linear_inequalities": {
+                "A": [{"well_design#INJ#md": 1.0, "well_design#PRO#md": 1.0}],
+                "b": [1000.0],
+                "sense": [">="],
+            },
         },
     }
     for _ in range(2):
@@ -141,7 +147,7 @@ def test_strict_less_treated_as_less_equal():
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=2,
-        patience=2,
+        max_stall_generations=2,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     request = {
@@ -153,14 +159,16 @@ def test_strict_less_treated_as_less_equal():
                 {"well_design#INJ#md": 400.0, "well_design#PRO#md": 400.0}, 6.0
             ),  # satisfies
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": [0.0, 3000.0],
-                "well_design#PRO#md": [0.0, 3000.0],
+                "well_design#INJ#md": {"lb": 0.0, "ub": 3000.0},
+                "well_design#PRO#md": {"lb": 0.0, "ub": 3000.0},
             },
-            "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
-            "b": [1200.0],
-            "sense": ["<"],
+            "linear_inequalities": {
+                "A": [{"well_design#INJ#md": 1.0, "well_design#PRO#md": 1.0}],
+                "b": [1200.0],
+                "sense": ["<"],
+            },
         },
     }
     resp = service.process_request(request)
@@ -176,7 +184,7 @@ def test_mixed_constraints_greater_and_less_than():
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=5,
-        patience=5,
+        max_stall_generations=5,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -189,17 +197,19 @@ def test_mixed_constraints_greater_and_less_than():
                 {"well_design#INJ#md": 2000.0, "well_design#PRO#md": 1500.0}, 9.0
             ),
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": [0.0, 3000.0],
-                "well_design#PRO#md": [0.0, 3000.0],
+                "well_design#INJ#md": {"lb": 0.0, "ub": 3000.0},
+                "well_design#PRO#md": {"lb": 0.0, "ub": 3000.0},
             },
-            "A": [
-                {"INJ.md": 1.0, "PRO.md": 1.0},
-                {"INJ.md": 1.0, "PRO.md": 1.0},
-            ],
-            "b": [1000.0, 3000.0],
-            "sense": [">=", "<="],
+            "linear_inequalities": {
+                "A": [
+                    {"well_design#INJ#md": 1.0, "well_design#PRO#md": 1.0},
+                    {"well_design#INJ#md": 1.0, "well_design#PRO#md": 1.0},
+                ],
+                "b": [1000.0, 3000.0],
+                "sense": [">=", "<="],
+            },
         },
     }
 
@@ -225,7 +235,7 @@ def test_multiple_inequalities_enforced():
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=5,
-        patience=5,
+        max_stall_generations=5,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -238,17 +248,19 @@ def test_multiple_inequalities_enforced():
                 {"well_design#INJ#md": 500.0, "well_design#PRO#md": 200.0}, 9.0
             ),
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": [0.0, 3000.0],
-                "well_design#PRO#md": [0.0, 3000.0],
+                "well_design#INJ#md": {"lb": 0.0, "ub": 3000.0},
+                "well_design#PRO#md": {"lb": 0.0, "ub": 3000.0},
             },
-            "A": [
-                {"INJ.md": 1.0},
-                {"PRO.md": 1.0},
-            ],
-            "b": [800.0, 800.0],
-            "sense": [">=", ">="],
+            "linear_inequalities": {
+                "A": [
+                    {"well_design#INJ#md": 1.0},
+                    {"well_design#PRO#md": 1.0},
+                ],
+                "b": [800.0, 800.0],
+                "sense": [">=", ">="],
+            },
         },
     }
 

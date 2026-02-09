@@ -69,7 +69,7 @@ def run_risk_management(
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,
                 max_generations=dispatcher.max_generation,
-                patience=dispatcher.patience,
+                max_stall_generations=dispatcher.max_stall_generations,
                 objectives=dispatcher.optimization_objectives,
             )
 
@@ -92,8 +92,10 @@ def run_risk_management(
             full_key_boundaries = dispatcher.full_key_boundaries
             logger.debug("Boundaries retrieved: %s", full_key_boundaries)
             logger.debug("Fetching linear inequalities from ProblemDispatcherService.")
-            linear_inequalities = dispatcher.linear_inequalities
-            logger.debug("Linear inequalities retrieved: %s", linear_inequalities)
+            full_key_linear_inequalities = dispatcher.full_key_linear_inequalities
+            logger.debug(
+                "Linear inequalities retrieved: %s", full_key_linear_inequalities
+            )
 
             # Initialize solutions
             next_solutions = None
@@ -139,11 +141,9 @@ def run_risk_management(
                 response = solution_updater.process_request(
                     {
                         "solution_candidates": updated_solutions,
-                        "parameter_bounds": {
-                            "full_key_boundaries": full_key_boundaries,
-                            "A": linear_inequalities["A"],
-                            "b": linear_inequalities["b"],
-                            "sense": linear_inequalities["sense"],
+                        "optimization_constrains": {
+                            "boundaries": full_key_boundaries,
+                            "linear_inequalities": full_key_linear_inequalities,
                         },
                     }
                 )

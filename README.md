@@ -524,7 +524,7 @@ These settings control the execution and termination of the optimization process
 | `optimization_strategy` | String | `maximize` | Direction of the objective function: `maximize` or `minimize`. |
 | `max_generations` | Integer | `10` | Maximum number of iterations for the algorithm. |
 | `population_size` | Integer | `10` | Number of solution candidates to evaluate per generation. |
-| `patience` | Integer | `10` | Generations to wait for improvement before early stopping. |
+| `max_stall_generations` | Integer | `10` | Generations to wait for improvement before early stopping. |
 | `worker_count` | Integer | `4` | Number of parallel simulation workers (limited by physical CPU cores). |
 
 #### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
@@ -646,7 +646,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
     "optimization_strategy": "maximize",
     "max_generations": 50,
     "population_size": 20,
-    "patience": 5,
+    "max_stall_generations": 5,
     "worker_count": 4,
     "linear_inequalities": {
       "A": [

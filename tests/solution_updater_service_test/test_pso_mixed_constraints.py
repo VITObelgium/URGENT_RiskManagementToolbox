@@ -49,10 +49,10 @@ def mixed_constraints_request():
                 "cost_function_results": {"values": {"metric": 15.0}},
             },
         ],
-        "parameter_bounds": {
+        "optimization_constrains": {
             "boundaries": {
-                "well_design#INJ#md": (2000.0, 2700.0),
-                "well_design#INJ#wellhead#x": (10.0, 3190.0),
+                "well_design#INJ#md": {"lb": 2000.0, "ub": 2700.0},
+                "well_design#INJ#wellhead#x": {"lb": 10.0, "ub": 3190.0},
             }
         },
     }
@@ -66,16 +66,16 @@ def test_pso_handles_mixed_md_and_wellhead_constraints(mixed_constraints_request
     service = SolutionUpdaterService(
         optimization_engine=OptimizationEngine.PSO,
         max_generations=2,
-        patience=3,
+        max_stall_generations=3,
         objectives={"metric": OptimizationStrategy.MAXIMIZE},
     )
 
     response = service.process_request(mixed_constraints_request)
 
-    md_bounds = mixed_constraints_request["parameter_bounds"]["boundaries"][
+    md_bounds = mixed_constraints_request["optimization_constrains"]["boundaries"][
         "well_design#INJ#md"
     ]
-    x_bounds = mixed_constraints_request["parameter_bounds"]["boundaries"][
+    x_bounds = mixed_constraints_request["optimization_constrains"]["boundaries"][
         "well_design#INJ#wellhead#x"
     ]
 
@@ -83,5 +83,5 @@ def test_pso_handles_mixed_md_and_wellhead_constraints(mixed_constraints_request
         md_val = solution.items["well_design#INJ#md"]
         x_val = solution.items["well_design#INJ#wellhead#x"]
 
-        assert md_bounds[0] <= md_val <= md_bounds[1]
-        assert x_bounds[0] <= x_val <= x_bounds[1]
+        assert md_bounds["lb"] <= md_val <= md_bounds["ub"]
+        assert x_bounds["lb"] <= x_val <= x_bounds["ub"]

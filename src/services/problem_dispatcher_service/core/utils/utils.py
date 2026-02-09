@@ -1,10 +1,11 @@
 import copy
 from collections.abc import MutableMapping
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import numpy as np
 
-from services.shared import ServiceType
+from services.problem_dispatcher_service.core.models import LinearInequalities
+from services.shared import Boundaries, ServiceType
 from services.solution_updater_service.core.utils import (
     repair_against_linear_inequalities,
 )
@@ -90,11 +91,11 @@ def _flatten_dict(d, parent_key="", separator="#"):
 class CandidateGenerator:
     @staticmethod
     def generate(
-        boundaries: dict[str, tuple[float, float]],
+        full_key_boundaries: dict[str, Boundaries],
         n_size: int,
         random_fn: Callable[[float, float], float],
         initial_state: dict[str, Any],
-        linear_inequalities: dict[str, list] | None = None,
+        linear_inequalities: LinearInequalities | None = None,
         separator: str = "#",
         tol: float = 1e-3,
         max_repair_iter: int = 20,
@@ -106,7 +107,7 @@ class CandidateGenerator:
 
 
         Parameters:
-            boundaries: A mapping of fully-qualified flat keys to (lb, ub) tuples, e.g."well_design#INJ#md": (2000, 2700)
+            full_key_boundaries: A mapping of fully-qualified flat keys to (lb, ub) tuples, e.g."well_design#INJ#md": (2000, 2700)
             n_size: The number of candidate solutions to generate.
             random_fn: A function to generate random numbers within a given range.
             initial_state: The initial state of the problem.
@@ -119,22 +120,23 @@ class CandidateGenerator:
             A list of candidate solutions, each represented as a dictionary of variable assignments.
         """
 
-        for key, (lb, ub) in boundaries.items():
-            if lb > ub:
+        for key, bnd in full_key_boundaries.items():
+            if bnd.lb > bnd.ub:
                 raise ValueError(
-                    f"Invalid boundary for {key}: lower bound ({lb}) > upper bound ({ub})"
+                    f"Invalid boundary for {key}: lower bound ({bnd.lb}) > upper bound ({bnd.ub})"
                 )
-            if not (np.isfinite(lb) and np.isfinite(ub)):
+            if not (np.isfinite(bnd.lb) and np.isfinite(bnd.ub)):
                 raise ValueError(
-                    f"Invalid boundary for {key}: bounds must be finite. Got lb={lb}, ub={ub}"
+                    f"Invalid boundary for {key}: bounds must be finite. Got lb={bnd.lb}, ub={bnd.ub}"
                 )
 
         user_initial_candidate = get_corresponding_initial_state_as_flat_dict(
-            initial_state, list(boundaries.keys()), separator=separator
+            initial_state, list(full_key_boundaries.keys()), separator=separator
         )
 
         for key, val in user_initial_candidate.items():
-            lb, ub = boundaries[key]
+            bnd = full_key_boundaries[key]
+            lb, ub = bnd.lb, bnd.ub
             if not (lb - tol <= val <= ub + tol):
                 raise ValueError(
                     f"Initial user state for {key} is out of bounds: {val} (Bounds: [{lb}, {ub}])"
@@ -144,22 +146,25 @@ class CandidateGenerator:
         if not linear_inequalities:
             if not linear_inequalities:
                 random_candidates = [
-                    {key: random_fn(lb, ub) for key, (lb, ub) in boundaries.items()}
+                    {
+                        key: random_fn(b.lb, b.ub)
+                        for key, b in full_key_boundaries.items()
+                    }
                     for _ in range(n_size - 1)
                 ]
                 return [user_initial_candidate] + random_candidates
 
         # Scenario with linear constraints provided
-        keys = list(boundaries.keys())
-        lbs = {k: float(boundaries[k][0]) for k in keys}
-        ubs = {k: float(boundaries[k][1]) for k in keys}
+        keys = list(full_key_boundaries.keys())
+        lbs = {k: float(full_key_boundaries[k].lb) for k in keys}
+        ubs = {k: float(full_key_boundaries[k].ub) for k in keys}
 
         def sample_one() -> dict[str, float]:
             return {k: float(random_fn(lbs[k], ubs[k])) for k in keys}
 
-        A_rows: list[dict[str, float]] = linear_inequalities["A"]
-        b_vals: list[float] = linear_inequalities["b"]
-        senses: list[str] = linear_inequalities.get("sense", ["<="] * len(A_rows))
+        A_rows: list[dict[str, float]] = linear_inequalities.A
+        b_vals: list[float] = linear_inequalities.b
+        senses: Sequence[str] = linear_inequalities.sense
 
         # Extract involved sparse variable names like "INJ.md", "PRO.md"
         sparse_vars: list[str] = []
@@ -174,7 +179,7 @@ class CandidateGenerator:
 
         full_keys = [fk(v) for v in sparse_vars]
         # Filter out vars not present in constraints
-        valid_mask = [k in boundaries for k in full_keys]
+        valid_mask = [k in full_key_boundaries for k in full_keys]
         sparse_vars = [v for v, m in zip(sparse_vars, valid_mask) if m]
         full_keys = [k for k, m in zip(full_keys, valid_mask) if m]
 

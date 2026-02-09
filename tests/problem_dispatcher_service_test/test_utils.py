@@ -3,6 +3,7 @@ from services.problem_dispatcher_service.core.utils import (
     get_corresponding_initial_state_as_flat_dict,
     parse_flat_dict_to_nested,
 )
+from services.shared import Boundaries
 
 
 def test_parse_flat_dict_to_nested():
@@ -51,7 +52,10 @@ def test_get_corresponding_initial_state_as_flat_dict():
 
 
 def test_candidate_generator():
-    constraints = {"a": (0.0, 1.0), "b": (10.0, 20.0)}
+    constraints = {
+        "a": Boundaries(**{"lb": 0.0, "ub": 1.0}),
+        "b": Boundaries(**{"lb": 10.0, "ub": 20.0}),
+    }
     initial_state = {"a": 0.5, "b": 15.0}
     candidates = CandidateGenerator.generate(
         constraints,

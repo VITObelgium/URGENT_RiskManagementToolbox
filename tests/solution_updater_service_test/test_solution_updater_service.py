@@ -143,6 +143,12 @@ def mocked_engine_with_metrics():  # type: ignore
                         "cost_function_results": {"values": {"metric1": 10.0}},
                     }
                 ],
+                "optimization_constrains": {
+                    "boundaries": {
+                        "param1": {"lb": -10, "ub": 10.0},
+                        "param2": {"lb": -1.0, "ub": 1.00},
+                    },
+                },
             },
             [{"param1": 2.0, "param2": 3.0}],
             {"metric1": OptimizationStrategy.MINIMIZE},
@@ -160,6 +166,12 @@ def mocked_engine_with_metrics():  # type: ignore
                         "cost_function_results": {"values": {"metric1": 20.0}},
                     },
                 ],
+                "optimization_constrains": {
+                    "boundaries": {
+                        "param1": {"lb": -10, "ub": 10.0},
+                        "param2": {"lb": -1.0, "ub": 1.00},
+                    },
+                },
             },
             [
                 {"param1": 4.0, "param2": 5.0},
@@ -180,7 +192,7 @@ def test_update_solution_for_next_iteration_with_strategy(  # type: ignore
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=100,
-        patience=101,
+        max_stall_generations=101,
         objectives=objectives,
     )
 
@@ -209,6 +221,12 @@ def test_update_solution_for_next_iteration_with_strategy(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 10.0}},
                     }
                 ],
+                "optimization_constrains": {
+                    "boundaries": {
+                        "param1": {"lb": -10, "ub": 10.0},
+                        "param2": {"lb": -1.0, "ub": 1.00},
+                    },
+                },
             },
             [
                 {"param1": 2.0, "param2": 3.0}
@@ -227,6 +245,12 @@ def test_update_solution_for_next_iteration_with_strategy(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 20.0}},
                     },
                 ],
+                "optimization_constrains": {
+                    "boundaries": {
+                        "param1": {"lb": -10, "ub": 10.0},
+                        "param2": {"lb": -1.0, "ub": 1.00},
+                    },
+                },
             },
             [
                 {"param1": 4.0, "param2": 5.0},
@@ -242,7 +266,7 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=100,
-        patience=101,
+        max_stall_generations=101,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -272,6 +296,12 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 10.0}},
                     }
                 ],
+                "optimization_constrains": {
+                    "boundaries": {
+                        "param1": {"lb": -10, "ub": 10.0},
+                        "param2": {"lb": -1.0, "ub": 1.00},
+                    },
+                },
             },
             # Second call input
             {
@@ -281,6 +311,12 @@ def test_update_solution_for_next_iteration_single_call(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 15.0}},
                     }
                 ],
+                "optimization_constrains": {
+                    "boundaries": {
+                        "param1": {"lb": -10, "ub": 10.0},
+                        "param2": {"lb": -1.0, "ub": 1.00},
+                    },
+                },
             },
             # Expected result after first call
             [{"param1": 2.0, "param2": 3.0}],
@@ -301,7 +337,7 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=100,
-        patience=101,
+        max_stall_generations=101,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -338,11 +374,11 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 10.0}},
                     }
                 ],
-                "parameter_bounds": {
+                "optimization_constrains": {
                     "boundaries": {
-                        "param1": [0.0, 5.0],
-                        "param2": [0.0, 3.0],
-                    }
+                        "param1": {"lb": 0, "ub": 5},
+                        "param2": {"lb": 0, "ub": 3},
+                    },
                 },
             },
             np.array(
@@ -358,11 +394,11 @@ def test_update_solution_for_next_iteration_multiple_calls(  # type: ignore
                         "cost_function_results": {"values": {"metric1": 15.0}},
                     }
                 ],
-                "parameter_bounds": {
+                "optimization_constrains": {
                     "boundaries": {
-                        "param1": [0.0, 4.0],
-                        "param2": [0.0, 3.0],
-                    }
+                        "param1": {"lb": 0, "ub": 4},
+                        "param2": {"lb": 0, "ub": 3},
+                    },
                 },
             },
             np.array([[4.0, 3.0]]),  # Results are capped to the upper bounds
@@ -376,7 +412,7 @@ def test_update_solution_with_boundaries_np(  # type: ignore
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=100,
-        patience=101,
+        max_stall_generations=101,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -466,7 +502,7 @@ def test_optimization_service_full_round(test_case):
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 200
     iterations = 100
-    patience = 1001  # infinite patience
+    max_stall_generations = 1001  # infinite max_stall_generations
 
     np.random.seed(42)
 
@@ -478,13 +514,15 @@ def test_optimization_service_full_round(test_case):
 
     config = {
         "solution_candidates": candidates,
-        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "optimization_constrains": {
+            "boundaries": {k: {"lb": lb, "ub": ub} for k in param_names}
+        },
     }
 
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=iterations,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     loop_controller = service.loop_controller
@@ -514,19 +552,19 @@ def test_optimization_service_full_round(test_case):
 
 
 @pytest.mark.parametrize(
-    "patience, engine_fixture, patience_checks",
+    "max_stall_generations, engine_fixture, max_stall_generations_checks",
     [
         # Case 1: Engine that updates global_best_result every 3 iterations
         (
             2,
             "mocked_engine_with_2_stagnant_result",
             [
-                {"generation": 1, "running": True, "patience_left": 2},
-                {"generation": 2, "running": True, "patience_left": 1},
+                {"generation": 1, "running": True, "max_stall_generations_left": 2},
+                {"generation": 2, "running": True, "max_stall_generations_left": 1},
                 {
                     "generation": 3,
                     "running": True,
-                    "patience_left": 2,
+                    "max_stall_generations_left": 2,
                 },  # Reset due to improvement
             ],
         ),
@@ -535,24 +573,28 @@ def test_optimization_service_full_round(test_case):
             1,
             "mocked_engine",
             [
-                {"generation": 1, "running": True, "patience_left": 1},
+                {"generation": 1, "running": True, "max_stall_generations_left": 1},
                 {
                     "generation": 2,
                     "running": False,
-                    "patience_left": 0,
-                },  # Should stop here (patience <= 0)
+                    "max_stall_generations_left": 0,
+                },  # Should stop here (max_stall_generations <= 0)
             ],
         ),
     ],
 )
-def test_patience_handling(
-    patience, engine_fixture, patience_checks, request, monkeypatch
+def test_max_stall_generations_handling(
+    max_stall_generations,
+    engine_fixture,
+    max_stall_generations_checks,
+    request,
+    monkeypatch,
 ):
     # Arrange
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=10,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
 
@@ -568,6 +610,9 @@ def test_patience_handling(
                 "cost_function_results": {"values": {"metric1": 10.0}},
             }
         ],
+        "optimization_constrains": {
+            "boundaries": {"param1": {"lb": 0, "ub": 5}, "param2": {"lb": 0, "ub": 3}},
+        },
     }
 
     loop_controller = service.loop_controller
@@ -577,14 +622,14 @@ def test_patience_handling(
         "Loop controller should be running after initialization"
     )
 
-    # Run through the patience checks
-    for i, check in enumerate(patience_checks, 1):
+    # Run through the max_stall_generations checks
+    for i, check in enumerate(max_stall_generations_checks, 1):
         service.process_request(config_json)
         loop_controller.increment_generation()
 
         expected_generation = check["generation"]
         expected_running = check["running"]
-        expected_patience = check["patience_left"]
+        expected_max_stall_generations = check["max_stall_generations_left"]
 
         assert loop_controller.current_generation == expected_generation, (
             f"Iteration {i}: wrong generation count"
@@ -592,8 +637,8 @@ def test_patience_handling(
         assert loop_controller.running() is expected_running, (
             f"Iteration {i}: wrong running state - expected {expected_running}"
         )
-        assert loop_controller._patience_left == expected_patience, (
-            f"Iteration {i}: wrong patience value - expected {expected_patience}, got {loop_controller._patience_left}"
+        assert loop_controller._stall_left == expected_max_stall_generations, (
+            f"Iteration {i}: wrong max_stall_generations value - expected {expected_max_stall_generations}, got {loop_controller._stall_left}"
         )
 
 
@@ -603,7 +648,7 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=3,
-        patience=4,
+        max_stall_generations=4,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
     )
     monkeypatch.setattr(service, "_engine", mocked_engine_with_metrics)
@@ -627,6 +672,9 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
                         "cost_function_results": {"values": {"metric1": 3.0}},
                     },
                 ],
+                "optimization_constrains": {
+                    "boundaries": {"param1": {"lb": 0, "ub": 5}},
+                },
             },
             "expected_metrics": {
                 "global_min": 1.0,
@@ -654,6 +702,9 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
                         "cost_function_results": {"values": {"metric1": 2.5}},
                     },
                 ],
+                "optimization_constrains": {
+                    "boundaries": {"param1": {"lb": 0, "ub": 5}},
+                },
             },
             "expected_metrics": {
                 "global_min": 0.5,  # Updated global min
@@ -681,6 +732,9 @@ def test_solution_metrics_calculation(mocked_engine_with_metrics, monkeypatch):
                         "cost_function_results": {"values": {"metric1": 4.0}},
                     },
                 ],
+                "optimization_constrains": {
+                    "boundaries": {"param1": {"lb": 0, "ub": 5}},
+                },
             },
             "expected_metrics": {
                 "global_min": 0.5,  # Keeps previous global min
@@ -753,7 +807,7 @@ def test_maximization_service_full_round(test_case):
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 50
     iterations = 1000
-    patience = 1001  # infinite patience
+    max_stall_generations = 1001  # infinite max_stall_generations
 
     np.random.seed(42)
 
@@ -765,13 +819,15 @@ def test_maximization_service_full_round(test_case):
 
     config = {
         "solution_candidates": candidates,
-        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "optimization_constrains": {
+            "boundaries": {k: {"lb": lb, "ub": ub} for k in param_names}
+        },
     }
 
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=iterations,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={"metric1": OptimizationStrategy.MAXIMIZE},
     )
     loop_controller = service.loop_controller
@@ -854,7 +910,7 @@ def test_pareto_optimization_zdt1():
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 100
     iterations = 500
-    patience = 501
+    max_stall_generations = 501
 
     np.random.seed(42)
 
@@ -865,13 +921,15 @@ def test_pareto_optimization_zdt1():
 
     config = {
         "solution_candidates": candidates,
-        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "optimization_constrains": {
+            "boundaries": {k: {"lb": lb, "ub": ub} for k in param_names}
+        },
     }
 
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=iterations,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={
             "objective_f1": OptimizationStrategy.MINIMIZE,
             "objective_f2": OptimizationStrategy.MINIMIZE,
@@ -969,7 +1027,7 @@ def test_pareto_optimization_schaffer_n1():
     param_names = ["x"]
     num_particles = 20
     iterations = 50
-    patience = 51
+    max_stall_generations = 51
 
     np.random.seed(123)
 
@@ -980,13 +1038,13 @@ def test_pareto_optimization_schaffer_n1():
 
     config = {
         "solution_candidates": candidates,
-        "parameter_bounds": {"boundaries": {"x": [lb, ub]}},
+        "optimization_constrains": {"boundaries": {"x": {"lb": lb, "ub": ub}}},
     }
 
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=iterations,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={
             "objective_f1": OptimizationStrategy.MINIMIZE,
             "objective_f2": OptimizationStrategy.MINIMIZE,
@@ -1082,7 +1140,7 @@ def test_pareto_optimization_zdt3():
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 200
     iterations = 500
-    patience = 501
+    max_stall_generations = 501
 
     np.random.seed(100)
 
@@ -1098,13 +1156,15 @@ def test_pareto_optimization_zdt3():
 
     config = {
         "solution_candidates": candidates,
-        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "optimization_constrains": {
+            "boundaries": {k: {"lb": lb, "ub": ub} for k in param_names}
+        },
     }
 
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=iterations,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={
             "objective_f1": OptimizationStrategy.MINIMIZE,
             "objective_f2": OptimizationStrategy.MINIMIZE,
@@ -1211,7 +1271,7 @@ def test_pareto_optimization_kursawe():
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 80
     iterations = 300
-    patience = 301
+    max_stall_generations = 301
 
     np.random.seed(200)
 
@@ -1222,13 +1282,15 @@ def test_pareto_optimization_kursawe():
 
     config = {
         "solution_candidates": candidates,
-        "parameter_bounds": {"boundaries": {k: [lb, ub] for k in param_names}},
+        "optimization_constrains": {
+            "boundaries": {k: {"lb": lb, "ub": ub} for k in param_names}
+        },
     }
 
     service = SolutionUpdaterService(
         optimization_engine=engine,
         max_generations=iterations,
-        patience=patience,
+        max_stall_generations=max_stall_generations,
         objectives={
             "objective_f1": OptimizationStrategy.MINIMIZE,
             "objective_f2": OptimizationStrategy.MINIMIZE,

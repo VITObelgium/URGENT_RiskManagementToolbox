@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 import services.well_management_service.core.well_templates as well_templates
@@ -39,7 +37,7 @@ class WellDesignService:
 
     @staticmethod
     def _build_wells(
-        config: WellDesignServiceRequest,
+            config: WellDesignServiceRequest,
     ) -> WellDesignServiceResponse:
         WellDesignService._logger.debug("Building wells from configuration: %s", config)
 
@@ -70,16 +68,3 @@ class WellDesignService:
             "Completed well building with response: %s", response
         )
         return response
-
-    @staticmethod
-    def dump_results_schema(path: Path | str) -> None:
-        WellDesignService._logger.info("Dumping result schema to path: %s", path)
-
-        with open(path, mode="w+") as fp:
-            schema = WellDesignServiceResponse.model_json_schema()
-            WellDesignService._logger.debug("Result schema: %s", schema)
-            fp.write(json.dumps(obj=schema))
-
-        WellDesignService._logger.info(
-            "Result schema successfully written to: %s", path
-        )

@@ -77,7 +77,7 @@ def test_run_risk_management_happy_path(
         mock_problem_def = MagicMock()
         mock_problem_def.optimization_parameters.worker_count = 1
         mock_problem_def.optimization_parameters.population_size = 1
-        mock_problem_def.optimization_parameters.patience = 1
+        mock_problem_def.optimization_parameters.max_stall_generations = 1
         mock_problem_def.optimization_parameters.max_generations = 1
 
         rms.run_risk_management(

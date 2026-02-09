@@ -42,7 +42,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_cost_functions(
-            self,
+        self,
     ) -> Self:
         cost_functions = self.solution_candidates[0].cost_function_results.values.keys()
         for candidate in self.solution_candidates:
@@ -54,7 +54,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_solution_candidates_contain_the_same_optimization_variables(
-            self,
+        self,
     ) -> Self:
         optimization_variables = self.solution_candidates[0].control_vector.items.keys()
         for candidate in self.solution_candidates:
@@ -66,7 +66,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_optimization_boundaries_contain_the_same_optimization_variables(
-            self,
+        self,
     ) -> Self:
         if self.optimization_constrains is None:
             return self
@@ -80,7 +80,7 @@ class SolutionUpdaterServiceRequest(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def reorder_solution_candidates_optimization_variables_and_cost_functions(
-            self,
+        self,
     ) -> Self:
         """
         Reorders the control vector parameters and metrics alphabetically so that all solution

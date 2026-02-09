@@ -529,7 +529,6 @@ class SolutionUpdaterService:
     def process_request(
         self, request_dict: dict[str, Any]
     ) -> SolutionUpdaterServiceResponse:
-
         self._logger.info("Processing control vectors update request...")
         config = SolutionUpdaterServiceRequest(**request_dict)
 
@@ -634,14 +633,10 @@ class SolutionUpdaterService:
                             )
                         dense[simple_to_idx[var]] = float(coef)
                     A_rows.append(dense)
-                A_np = np.vstack(A_rows) if A_rows else None
-                b_np = (
-                    np.array(
-                        config.optimization_constrains.linear_inequalities.b,
-                        dtype=np.float64,
-                    )
-                    if config.optimization_constrains.linear_inequalities.b
-                    else None
+                A_np = np.vstack(A_rows)
+                b_np = np.array(
+                    config.optimization_constrains.linear_inequalities.b,
+                    dtype=np.float64,
                 )
                 # Apply sense transformation: convert any >, >= into <= by multiplying both sides by -1
                 senses = config.optimization_constrains.linear_inequalities.sense

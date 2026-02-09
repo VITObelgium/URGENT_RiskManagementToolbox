@@ -212,7 +212,6 @@ def test_run_success(mock_popen: Mock) -> None:
     mock_popen_instance.stdout = io.StringIO(
         "Building connection list...\n"
         "OpenDartsConnector: Type:heat, Value:2312.12\n"
-        "OpenDartsConnector: Type:heat, Value:[1.23, 4.56, 7.89]\n"
         "# 1 \tT = 0.0001\tDT = 0.0001\tNI = 2\tLI=2\n"
         "# 2 \tT = 0.0003\tDT = 0.0002\tNI = 1\tLI=1\n"
         "# 3 \tT = 0.0007\tDT = 0.0004\tNI = 1\tLI=1\n"
@@ -221,9 +220,12 @@ def test_run_success(mock_popen: Mock) -> None:
     mock_popen_instance.stderr = io.StringIO("")
     mock_popen_instance.returncode = 0
 
-    simulation_status, results = OpenDartsConnector.run("test_config")
+    expected_cost_function_names = {"heat": float("nan")}
+    simulation_status, results = OpenDartsConnector.run(
+        "test_config", expected_cost_function_names
+    )
 
-    assert results == {"heat": [2312.12, [1.23, 4.56, 7.89]]}
+    assert results == {"heat": 2312.12}
     assert simulation_status == SimulationStatus.SUCCESS
 
 
@@ -232,9 +234,13 @@ def test_run_handles_no_output_lines(mock_popen: Mock) -> None:
     mock_popen_instance.stdout = io.StringIO("")
     mock_popen_instance.stderr = io.StringIO("")
     mock_popen_instance.returncode = 0
-    simulation_status, results = OpenDartsConnector.run("test_config")
-    assert simulation_status == SimulationStatus.SUCCESS
-    assert results == {}
+    expected_cost_function_with_default_values = {"heat": float("nan")}
+
+    simulation_status, results = OpenDartsConnector.run(
+        "test_config", expected_cost_function_with_default_values
+    )
+    assert simulation_status == SimulationStatus.FAILED
+    assert results == expected_cost_function_with_default_values
 
 
 def test_run_success_with_single_broadcasted_value(mock_popen: Mock) -> None:
@@ -247,11 +253,38 @@ def test_run_success_with_single_broadcasted_value(mock_popen: Mock) -> None:
     )
     mock_popen_instance.stderr = io.StringIO("")
     mock_popen_instance.returncode = 0
-
-    simulation_status, results = OpenDartsConnector.run("test_config")
+    expected_cost_function_with_default_values = {"heat": float("nan")}
+    simulation_status, results = OpenDartsConnector.run(
+        "test_config", expected_cost_function_with_default_values
+    )
 
     assert simulation_status == SimulationStatus.SUCCESS
     assert results == {"heat": 2312.12}
+    mock_popen.assert_called_once()
+    assert mock_popen_instance.wait.called
+
+
+def test_run_success_with_multiple_broadcasted_value(mock_popen: Mock) -> None:
+    mock_popen_instance = mock_popen.return_value
+
+    mock_popen_instance.stdout = io.StringIO(
+        "Building connection list...\n"
+        "OpenDartsConnector: Type:p1, Value:38.58\n"
+        "OpenDartsConnector: Type:PP2, Value:-32.501\n"
+        "# 1 \tT = 0.0001\tDT = 0.0001\tNI = 2\tLI=2\n"
+    )
+    mock_popen_instance.stderr = io.StringIO("")
+    mock_popen_instance.returncode = 0
+    expected_cost_function_with_default_values = {
+        "p1": float("nan"),
+        "PP2": float("nan"),
+    }
+    simulation_status, results = OpenDartsConnector.run(
+        "test_config", expected_cost_function_with_default_values
+    )
+
+    assert simulation_status == SimulationStatus.SUCCESS
+    assert results == {"p1": 38.58, "PP2": -32.501}
     mock_popen.assert_called_once()
     assert mock_popen_instance.wait.called
 
@@ -263,7 +296,10 @@ def test_run_failure(mock_popen: Mock) -> None:
     mock_popen_instance.stderr = io.StringIO("Error details from stderr")
     mock_popen_instance.returncode = 1
 
-    simulation_status, _ = OpenDartsConnector.run("test_config")
+    expected_cost_function_with_default_values = {"heat": float("nan")}
+    simulation_status, _ = OpenDartsConnector.run(
+        "test_config", expected_cost_function_with_default_values
+    )
 
     assert simulation_status == SimulationStatus.FAILED
 
@@ -277,16 +313,12 @@ def test_run_handles_exception(mock_popen: Mock) -> None:
         "services.simulation_service.core.connectors.open_darts.ManagedSubprocess.__enter__",
         side_effect=Exception("fail"),
     ):
-        status, results = OpenDartsConnector.run("test_config")
-        assert status == SimulationStatus.FAILED
-        # The default_failed_results dict is returned, not an empty dict
-        from services.simulation_service.core.connectors.common import (
-            SimulationResultType,
+        expected_cost_function_with_default_values = {"heat": float("nan")}
+        status, results = OpenDartsConnector.run(
+            "test_config", expected_cost_function_with_default_values
         )
-
-        # Check that all keys are present and all values are NaN
-        assert set(results.keys()) == set(SimulationResultType)
-        assert all(np.isnan(v) for v in results.values())
+        assert status == SimulationStatus.FAILED
+        assert results == expected_cost_function_with_default_values
 
 
 @open_darts_input_configuration_injector

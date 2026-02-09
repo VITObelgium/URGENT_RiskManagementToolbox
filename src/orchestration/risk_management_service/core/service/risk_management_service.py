@@ -111,7 +111,9 @@ def run_risk_management(
                 logger.debug("Generated solutions: %s", solutions)
 
                 # Prepare simulation cases
-                sim_cases = _prepare_simulation_cases(solutions)
+                sim_cases = _prepare_simulation_cases(
+                    solutions, dispatcher.expected_optimization_function_names
+                )
                 logger.debug("Prepared simulation cases: %s", sim_cases)
 
                 # Process simulation with the simulation service
@@ -126,9 +128,7 @@ def run_risk_management(
                     {
                         "control_vector": {"items": simulation_case.control_vector},
                         "cost_function_results": {
-                            "values": ensure_not_none(
-                                simulation_case.results
-                            ).model_dump()
+                            "values": ensure_not_none(simulation_case.results)
                         },
                     }
                     for simulation_case in completed_cases.simulation_cases
@@ -185,7 +185,7 @@ def run_risk_management(
 
 
 def _prepare_simulation_cases(
-    solutions: ProblemDispatcherServiceResponse,
+    solutions: ProblemDispatcherServiceResponse, expected_cost_function_names: list[str]
 ) -> list[dict[(str, Any)]]:
     """
     Prepare simulation cases from generated candidates.
@@ -222,6 +222,7 @@ def _prepare_simulation_cases(
                     logger.warning("Service not implemented: %s", service)
 
         sim_case["control_vector"] = control_vector
+        sim_case["results"] = {k: float("nan") for k in expected_cost_function_names}
         sim_cases.append(sim_case)
         logger.debug("Simulation case #%d prepared: %s", index + 1, sim_case)
 

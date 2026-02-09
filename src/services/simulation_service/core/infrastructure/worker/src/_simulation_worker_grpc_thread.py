@@ -41,9 +41,14 @@ def _run_simulator(
     with tempfile.NamedTemporaryFile(
         mode="w", delete=True, suffix=".json", delete_on_close=False
     ) as tf:
+        user_cost_function_with_default_values = json.loads(
+            simulation_job.simulation.result.result
+        )
         json.dump(simulation_job.simulation.input.wells, tf)
         tf_path = tf.name
-        return connector.run(tf_path, stop=stop_flag)
+        return connector.run(
+            tf_path, user_cost_function_with_default_values, stop=stop_flag
+        )
 
 
 async def request_simulation_job(stub, worker_id):

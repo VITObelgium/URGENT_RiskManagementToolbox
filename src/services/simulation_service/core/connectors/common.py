@@ -5,7 +5,6 @@ This module must be aligned with python 3.10 syntax, as open-darts whl requires 
 
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from enum import Enum
 from typing import TypeAlias, TypedDict
 
@@ -53,19 +52,7 @@ def extract_well_with_perforations_points(
     return results
 
 
-class SimulationResultType(str, Enum):
-    """
-    NOTES:
-        please make sure that implementation of SimulationResultType is aligned with:
-            - SimulationResults from user.py
-    """
-
-    Heat = "Heat"
-
-
-SimulationResults: TypeAlias = dict[
-    SimulationResultType, float | Sequence[float] | Sequence[Sequence[float] | float]
-]
+SimulationResults: TypeAlias = dict[str, float]
 
 
 class SimulationStatus(Enum):
@@ -78,5 +65,7 @@ class ConnectorInterface(ABC):
     @staticmethod
     @abstractmethod
     def run(
-        config_path: JsonPath, stop: threading.Event | None = None
+        config_path: JsonPath,
+        user_cost_function_with_default_values: SimulationResults,
+        stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]: ...

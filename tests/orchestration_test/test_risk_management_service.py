@@ -101,7 +101,10 @@ def test_prepare_simulation_cases_basic():
         "orchestration.risk_management_service.core.service.risk_management_service.WellDesignService.process_request"
     ) as mock_well:
         mock_well.return_value.model_dump.return_value = {"well": 1}
-        sim_cases = rms._prepare_simulation_cases(solutions)
+        fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
+        sim_cases = rms._prepare_simulation_cases(
+            solutions, fake_expected_cost_function_names
+        )
         assert isinstance(sim_cases, list)
         assert sim_cases[0]["wells"] == {"well": 1}
         assert sim_cases[0]["control_vector"] == {"a": 1}
@@ -112,8 +115,11 @@ def test_prepare_simulation_cases_unhandled_service():
     fake_solution = MagicMock()
     fake_solution.tasks = {"UnknownService": fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
+    fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
 
-    sim_cases = rms._prepare_simulation_cases(solutions)
+    sim_cases = rms._prepare_simulation_cases(
+        solutions, fake_expected_cost_function_names
+    )
     assert isinstance(sim_cases, list)
     assert "control_vector" in sim_cases[0]
 

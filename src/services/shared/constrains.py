@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, FiniteFloat, model_validator, Field
+from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
 
 
 class Boundaries(BaseModel, extra="forbid"):
@@ -24,7 +24,15 @@ class LinearInequalities(BaseModel, extra="forbid"):
     sense: list[Literal["<=", ">=", "<", ">"]] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_the_same_length(self) -> Self:
+    def check_dimensions(self) -> Self:
         if not len(self.A) == len(self.b) == len(self.sense):
             raise ValueError("A, b and sense must have the same length")
         return self
+
+    @field_validator("A")
+    @classmethod
+    def check_rows_not_empty(cls, value):
+        for i, row in enumerate(value):
+            if not row:
+                raise ValueError(f"Row {i} in A must not be empty")
+        return value

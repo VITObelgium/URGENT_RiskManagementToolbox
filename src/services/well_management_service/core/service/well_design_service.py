@@ -37,7 +37,7 @@ class WellDesignService:
 
     @staticmethod
     def _build_wells(
-            config: WellDesignServiceRequest,
+        config: WellDesignServiceRequest,
     ) -> WellDesignServiceResponse:
         WellDesignService._logger.debug("Building wells from configuration: %s", config)
 

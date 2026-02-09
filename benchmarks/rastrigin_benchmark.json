@@ -52,7 +52,9 @@
     }
   ],
   "optimization_parameters": {
-    "optimization_strategy": "minimize",
+		"objectives": {
+			"Heat": "maximize"
+		},
     "population_size" : 100,
     "max_generations" : 500,
     "max_stall_generations" : 501

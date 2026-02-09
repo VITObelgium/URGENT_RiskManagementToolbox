@@ -63,6 +63,10 @@ class ProblemDispatcherService:
         return self._problem_definition.optimization_parameters.objectives
 
     @property
+    def expected_optimization_function_names(self) -> list[str]:
+        return list(self.optimization_objectives.keys())
+
+    @property
     def max_generation(self) -> int:
         return self._problem_definition.optimization_parameters.max_generations
 

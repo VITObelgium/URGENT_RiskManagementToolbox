@@ -53,7 +53,7 @@
   ],
   "optimization_parameters": {
 		"objectives": {
-			"Heat": "maximize"
+			"y": "minimize"
 		},
     "population_size" : 100,
     "max_generations" : 500,

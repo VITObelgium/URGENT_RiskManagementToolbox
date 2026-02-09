@@ -45,6 +45,8 @@ def _run_simulator(
             simulation_job.simulation.result.result
         )
         json.dump(simulation_job.simulation.input.wells, tf)
+        tf.flush()
+
         tf_path = tf.name
         return connector.run(
             tf_path, user_cost_function_with_default_values, stop=stop_flag

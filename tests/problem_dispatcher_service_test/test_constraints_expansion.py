@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from common import OptimizationStrategy
@@ -80,6 +81,7 @@ def test_boundaries_include_md(md_problem_definition):
 
 
 def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
+    np.random.seed(42)
     md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition

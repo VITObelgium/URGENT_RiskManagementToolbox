@@ -143,7 +143,30 @@ class SimulationService:
                 cluster_response = stub.PerformSimulations(simulations_request)
                 logger.info("Simulations completed on the cluster.")
             except grpc.RpcError as e:
-                logger.error("Error performing simulations: %s", e)
+                code = None
+                details = None
+                try:
+                    if hasattr(e, "code"):
+                        code = e.code()
+                    if hasattr(e, "details"):
+                        details = e.details()
+                except Exception:
+                    pass
+
+                # ABORTED is what the server should return for "critical failure, shutting down".
+                if code == grpc.StatusCode.ABORTED:
+                    logger.critical(
+                        "Simulations aborted by server (code=%s, details=%s).",
+                        code,
+                        details,
+                    )
+                else:
+                    logger.error(
+                        "Error performing simulations (code=%s, details=%s): %s",
+                        code,
+                        details,
+                        e,
+                    )
                 raise
             except KeyboardInterrupt:
                 logger.warning("Simulation interrupted by user.")

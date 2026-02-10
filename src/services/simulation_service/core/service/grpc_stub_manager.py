@@ -25,17 +25,7 @@ class GrpcStubManager:
     @classmethod
     @contextmanager
     def get_stub(cls, server_host, server_port):
-        """
-        Context manager that provides a reusable gRPC stub.
-
-        Args:
-            server_host (str): The server hostname.
-            server_port (int): The server port.
-
-        Yields:
-            sm_grpc.SimulationMessagingStub: The gRPC stub for simulation messaging.
-        """
-        # Create channel and stub if they don't exist
+        # ... existing code ...
         with cls._lock:
             if cls._channel is None or cls._stub is None:
                 config = get_simulation_config()
@@ -49,8 +39,34 @@ class GrpcStubManager:
         try:
             yield cls._stub
         except grpc.RpcError as e:
+            code = None
+            details = None
+            try:
+                if hasattr(e, "code"):
+                    code = e.code()
+                if hasattr(e, "details"):
+                    details = e.details()
+            except Exception:
+                pass
+
+            # These can be "expected" in your design:
+            # - ABORTED: server intentionally aborted due to critical worker exception
+            # - CANCELLED: shutdown in progress / RPC cancelled
+            if code in (grpc.StatusCode.ABORTED, grpc.StatusCode.CANCELLED):
+                logger.info(
+                    "gRPC call ended intentionally (code=%s, details=%s).",
+                    code,
+                    details,
+                )
+            else:
+                logger.error(
+                    "Error with gRPC communication (code=%s, details=%s): %s",
+                    code,
+                    details,
+                    e,
+                )
+
             # If there's a connection error, close and reset the channel and stub
-            logger.error("Error with gRPC communication: %s", e)
             with cls._lock:
                 if cls._channel is not None:
                     cls._channel.close()

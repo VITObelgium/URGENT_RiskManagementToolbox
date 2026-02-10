@@ -33,6 +33,25 @@ MODEL_RETRY_DELAY_SEC = 5
 JOB_RETRY_DELAY_SEC = 5
 
 
+def _is_expected_shutdown_rpc_error(e: BaseException) -> bool:
+    """
+    Returns True if this RpcError is consistent with the server shutting down
+    (or the channel being closed), in which case we should exit quietly.
+    """
+    try:
+        if isinstance(e, grpc.aio.AioRpcError):
+            code = e.code()
+            return code in (
+                grpc.aio.StatusCode.UNAVAILABLE,
+                grpc.aio.StatusCode.CANCELLED,
+            )
+    except Exception:
+        pass
+
+    msg = str(e)
+    return "Connection refused" in msg or "failed to connect to all addresses" in msg
+
+
 def _run_simulator(
     simulation_job,
     stop_flag: threading.Event | None = None,
@@ -128,18 +147,37 @@ async def handle_simulation_job(
     elif simulation_status == SimulationStatus.FAILED:
         status = sm.JobStatus.FAILED
         logger.error(f"Worker {worker_id}: Simulation {job_id} failed")
+    elif simulation_status == SimulationStatus.EXCEPTION:
+        status = sm.JobStatus.EXCEPTION
+        logger.exception(
+            f"Worker {worker_id}: Simulation {job_id} encountered an exception"
+        )
     else:
         status = sm.JobStatus.ERROR
         logger.error(
             f"Worker {worker_id}: Simulation {job_id} encountered an unknown status: {simulation_status}"
         )
 
-    response = await submit_simulation_job(
-        stub, simulation_job, simulation_result, status
-    )
-    logger.debug(
-        f"Worker {worker_id}: Job {job_id} result submitted. Server response: {response.message}"
-    )
+    try:
+        response = await submit_simulation_job(
+            stub, simulation_job, simulation_result, status
+        )
+        logger.debug(
+            f"Worker {worker_id}: Job {job_id} result submitted. Server response: {response.message}"
+        )
+    except grpc.aio.AioRpcError as e:
+        # If the server is shutting down, this is expected: don't spam error logs.
+        if (
+            stop_flag is not None and stop_flag.is_set()
+        ) or _is_expected_shutdown_rpc_error(e):
+            logger.info(
+                "Worker %s: submit failed because server is shutting down (code=%s). Exiting job handler.",
+                worker_id,
+                getattr(e, "code", lambda: None)(),
+            )
+            return
+        logger.error(f"Worker {worker_id}: submit failed due to gRPC error: {e}")
+        raise
 
 
 async def try_unpacking_model_archive(
@@ -248,7 +286,16 @@ async def ask_for_simulation_model(
                 if stop_flag is not None and stop_flag.is_set():
                     return
 
-        except grpc.RpcError as e:
+        except grpc.aio.AioRpcError as e:
+            if (
+                stop_flag is not None and stop_flag.is_set()
+            ) or _is_expected_shutdown_rpc_error(e):
+                logger.info(
+                    "Worker %s: server unavailable during model acquisition (code=%s). Exiting.",
+                    worker_id,
+                    e.code(),
+                )
+                return
             logger.error(
                 f"Worker {worker_id}: Unable to connect to server due to {e}. Retrying in {MODEL_RETRY_DELAY_SEC} seconds..."
             )
@@ -312,13 +359,33 @@ async def run_simulation_loop(
                     break
                 continue
 
+            elif simulation_job.status == sm.JobStatus.EXCEPTION:
+                logger.critical(
+                    f"Worker {worker_id}: Received EXCEPTION status. Shutting down..."
+                )
+                # Treat as cooperative shutdown rather than exploding the worker process.
+                if stop_flag is not None:
+                    stop_flag.set()
+                break
+
             # Process the job if a valid one is received
             logger.info(
                 f"Worker {worker_id}: Processing job {simulation_job.job_id}..."
             )
             await handle_simulation_job(stub, simulation_job, worker_id, stop_flag)
 
-        except grpc.RpcError as e:
+        except grpc.aio.AioRpcError as e:
+            # If the server is going down, don't retry for 5 seconds forever.
+            if (
+                stop_flag is not None and stop_flag.is_set()
+            ) or _is_expected_shutdown_rpc_error(e):
+                logger.info(
+                    "Worker %s: server unavailable (code=%s). Exiting loop.",
+                    worker_id,
+                    e.code(),
+                )
+                break
+
             logger.error(
                 f"Worker {worker_id}: gRPC error: {str(e)}. Retrying in {retry_delay} seconds..."
             )

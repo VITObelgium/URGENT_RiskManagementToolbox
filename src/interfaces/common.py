@@ -2,6 +2,7 @@ import json
 import os
 from typing import Any
 
+import grpc
 import numpy as np
 import numpy.typing as npt
 
@@ -57,8 +58,26 @@ def risk_management(
         )
         logger.info("Risk management process completed successfully.")
         return result
+    except grpc.RpcError as e:
+        code = None
+        details = None
+        try:
+            code = e.code()
+            details = e.details()
+        except Exception:
+            pass
+
+        if code == grpc.StatusCode.ABORTED:
+            logger.critical(
+                "Risk management stopped because simulation server aborted (details=%s).",
+                details,
+            )
+            return None
+
+        logger.error("An error occurred: %s", e)
+        raise
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
+        logger.error("An error occurred: %s", e)
         raise
     finally:
         try:

@@ -217,17 +217,26 @@ class SubprocessRunner:
                 logger.exception(
                     f"Broadcast results keys do not match user cost-function keys. {e}"
                 )
-                return SimulationStatus.FAILED, user_cost_function_with_default_values
+                return (
+                    SimulationStatus.EXCEPTION,
+                    user_cost_function_with_default_values,
+                )
             except FileNotFoundError:
                 logger.exception(
                     f"Failed to start subprocess. Command '{' '.join(command)}' not found."
                 )
-                return SimulationStatus.FAILED, user_cost_function_with_default_values
+                return (
+                    SimulationStatus.EXCEPTION,
+                    user_cost_function_with_default_values,
+                )
             except Exception as e:
                 logger.exception(
                     f"An error occurred while running the simulation subprocess: {e}"
                 )
-                return SimulationStatus.FAILED, user_cost_function_with_default_values
+                return (
+                    SimulationStatus.EXCEPTION,
+                    user_cost_function_with_default_values,
+                )
 
         return SimulationStatus.FAILED, user_cost_function_with_default_values
 
@@ -272,7 +281,7 @@ def _update_user_cost_function_with_simulation_results(
         extra_in_sim = sorted(sim_keys - user_keys)
         raise KeyError(
             "Broadcast results keys do not match user cost-function keys. "
-            f"missing_in_broadcast={missing_in_sim}, extra_in_broadcast={extra_in_sim}"
+            f"present in config and missing in connector={missing_in_sim}, present in connector and missing in config={extra_in_sim}"
         )
 
     updated = dict(user_cost_function_with_default_values)

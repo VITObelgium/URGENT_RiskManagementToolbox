@@ -239,7 +239,7 @@ def test_run_handles_no_output_lines(mock_popen: Mock) -> None:
     simulation_status, results = OpenDartsConnector.run(
         "test_config", expected_cost_function_with_default_values
     )
-    assert simulation_status == SimulationStatus.FAILED
+    assert simulation_status == SimulationStatus.EXCEPTION
     assert results == expected_cost_function_with_default_values
 
 
@@ -317,7 +317,7 @@ def test_run_handles_exception(mock_popen: Mock) -> None:
         status, results = OpenDartsConnector.run(
             "test_config", expected_cost_function_with_default_values
         )
-        assert status == SimulationStatus.FAILED
+        assert status == SimulationStatus.EXCEPTION
         assert results == expected_cost_function_with_default_values
 
 

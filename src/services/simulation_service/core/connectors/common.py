@@ -59,6 +59,7 @@ class SimulationStatus(Enum):
     SUCCESS = 0
     FAILED = 1
     TIMEOUT = 2
+    EXCEPTION = 3
 
 
 class ConnectorInterface(ABC):

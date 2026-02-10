@@ -8,6 +8,7 @@ import numpy.typing as npt
 
 from common import OptimizationStrategy
 from logger import get_csv_logger, get_logger
+from services.shared import Boundaries
 from services.solution_updater_service.core.engines import (
     GenerationSummary,
     OptimizationEngineFactory,
@@ -15,7 +16,6 @@ from services.solution_updater_service.core.engines import (
 )
 from services.solution_updater_service.core.models import (
     ControlVector,
-    OptimizationConstrains,
     OptimizationEngine,
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
@@ -93,16 +93,25 @@ class _Mapper:
     """
 
     @property
-    def parameters_name(self) -> list[str]:
+    def is_initialized(self) -> bool:
         if not self._state:
-            raise RuntimeError("Mapper state is not initialized.")
-        return list(self._state.control_vector_mapping.keys())
+            return False
+        return True
+
+    @property
+    def parameters_name(self) -> list[str]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return list(m.control_vector_mapping.keys())
+
+    @property
+    def control_vector_mapping(self) -> Mapping[str, int]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return m.control_vector_mapping
 
     @property
     def results_name(self) -> list[str]:
-        if not self._state:
-            raise RuntimeError("Mapper state is not initialized.")
-        return list(self._state.results_mapping.keys())
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return list(m.results_mapping.keys())
 
     def __init__(self) -> None:
         self._state: _MapperState | None = None
@@ -265,7 +274,7 @@ class _Mapper:
         ]
 
     def get_variables_lb_and_ub_boundary(
-        self, constraints: OptimizationConstrains | None
+        self, boundaries: dict[str, Boundaries]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Retrieves the lower and upper boundary values for control vector parameters
@@ -277,7 +286,7 @@ class _Mapper:
         for the lower bound and `np.inf` (positive infinity) for the upper bound.
 
         Args:
-            constraints (OptimizationConstrains | None):
+            boundaries (OptimizationConstrains | None):
                 An `OptimizationBoundaries` object containing boundary constraints for the
                 control vector parameters. The boundaries include per-parameter lower
                 and upper bounds structured as key-value pairs, where the key is the
@@ -308,17 +317,13 @@ class _Mapper:
             raise RuntimeError(
                 "Mapper state is not initialized, call 'to_numpy' first."
             )
-        if not constraints or not constraints.boundaries:
-            return np.full(self._state.control_vector_length, -np.inf), np.full(
-                self._state.control_vector_length, np.inf
-            )
 
         lb = np.full(self._state.control_vector_length, -np.inf)
         ub = np.full(self._state.control_vector_length, np.inf)
 
-        for k, (vlb, vub) in constraints.boundaries.items():
-            lb[self._state.control_vector_mapping[k]] = vlb
-            ub[self._state.control_vector_mapping[k]] = vub
+        for k, b in boundaries.items():
+            lb[self._state.control_vector_mapping[k]] = b.lb
+            ub[self._state.control_vector_mapping[k]] = b.ub
 
         return lb, ub
 
@@ -342,12 +347,11 @@ class _SolutionUpdaterServiceLoopController:
     def __init__(
         self,
         max_generations: int,
-        patience: int,
+        max_stall_generations: int,
         solution_updater_service: SolutionUpdaterService,
     ) -> None:
         """
         Helper class to control the loop of the solution updater service.
-        This class manages the number of iterations for the optimization process, and raises StopIteration exception when convergence fails.
         """
         self._info = "Loop controller running"
         self._solution_updater_service = solution_updater_service
@@ -355,66 +359,118 @@ class _SolutionUpdaterServiceLoopController:
         self._max_generations = max_generations
         self._current_generation = 0
 
-        self._base_patience, self._patience_left = patience, patience
+        self._base_stall, self._stall_left = (
+            max_stall_generations,
+            max_stall_generations,
+        )
 
-        self._last_run_global_best_result: float | None = None
+        # Track history for multi-objective
+        self._last_run_global_best_result: float | npt.NDArray[np.float64] | None = None
+        self._is_multi_objective: bool | None = None
+        self._pareto_front_history: list[npt.NDArray[np.float64]] = []
 
     @property
     def current_generation(self) -> int:
         return self._current_generation
 
     @property
+    def iteration_progress(self) -> float:
+        return self._current_generation / self._max_generations
+
+    @property
     def info(self) -> str:
         return self._info
 
     def running(self) -> bool:
-        """
-        Checks if the loop controller should run
-
-        Returns:
-            bool: True if the loop controller is running, False otherwise.
-        """
-
+        """Checks if the loop controller should run"""
         running = True
 
-        if self._max_generation_reached():
+        if self._is_max_generation_reached():
             self._info = f"Max Generation {self._max_generations} reached, stopping optimization loop."
             running = False
-
-        elif self._patience_reached():
-            self._info = (
-                f"Patience {self._base_patience} reached, stopping optimization loop."
-            )
+        elif self._is_max_stall_reached():
+            self._info = f"Maximum stall generations {self._base_stall} reached, stopping optimization loop."
             running = False
 
         return running
 
     def increment_generation(self) -> None:
         self._current_generation += 1
-        self._update_patience()
+        self._update_stall()
 
-    def _update_generation(self) -> None:
-        self._current_generation += 1
-
-    def _update_patience(self) -> None:
+    def _update_stall(self) -> None:
         if self._current_generation < 1:
             return
 
-        last_best = self._last_run_global_best_result
         current_best = self._solution_updater_service.global_best_result
 
-        if last_best == current_best:
-            self._patience_left -= 1
+        # Detect if multi-objective on first run
+        if self._is_multi_objective is None:
+            self._is_multi_objective = isinstance(current_best, np.ndarray)
+
+        if self._is_multi_objective:
+            # Multi-objective: use Pareto front convergence
+            has_improved = self._has_pareto_converged(current_best)
         else:
-            self._patience_left = self._base_patience
+            # Single-objective: direct comparison
+            last_best = self._last_run_global_best_result
+            has_improved = last_best != current_best if last_best is not None else True
 
-        self._last_run_global_best_result = current_best
+        if has_improved:
+            self._stall_left = self._base_stall
+        else:
+            self._stall_left -= 1
 
-    def _max_generation_reached(self) -> bool:
+        self._last_run_global_best_result = (
+            current_best.copy()
+            if isinstance(current_best, np.ndarray)
+            else current_best
+        )
+
+    def _has_pareto_converged(
+        self, current_best: float | npt.NDArray[np.float64]
+    ) -> bool:
+        """
+        Check if Pareto front has converged using a moving window approach.
+
+        Returns True if improvement detected (NOT converged yet).
+        """
+        # Store current front
+        if isinstance(current_best, np.ndarray):
+            self._pareto_front_history.append(current_best.copy())
+
+        # Need at least 2 iterations to compare
+        if len(self._pareto_front_history) < 2:
+            return True  # Still improving (not converged)
+
+        # Keep only recent history (e.g., last 5 iterations)
+        max_history = 5
+        if len(self._pareto_front_history) > max_history:
+            self._pareto_front_history.pop(0)
+
+        # Compare last two fronts
+        previous = self._pareto_front_history[-2]
+        current = self._pareto_front_history[-1]
+
+        # Simple metric: check if objectives changed significantly
+        threshold = 1e-4
+
+        for i in range(len(current)):
+            if previous[i] != 0:
+                relative_change = abs((current[i] - previous[i]) / previous[i])
+            else:
+                relative_change = abs(current[i] - previous[i])
+
+            if relative_change > threshold:
+                return True  # Significant change = still improving
+
+        return False  # No significant change = converged
+
+    def _is_max_generation_reached(self) -> bool:
         return self._current_generation >= self._max_generations
 
-    def _patience_reached(self) -> bool:
-        return self._patience_left <= 0
+    def _is_max_stall_reached(self) -> bool:
+        return self._stall_left <= 0
 
 
 class SolutionUpdaterService:
@@ -422,8 +478,8 @@ class SolutionUpdaterService:
         self,
         optimization_engine: OptimizationEngine,
         max_generations: int,
-        patience: int,
-        optimization_strategy: OptimizationStrategy = OptimizationStrategy.MINIMIZE,
+        max_stall_generations: int,
+        objectives: dict[str, OptimizationStrategy],
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
@@ -431,26 +487,25 @@ class SolutionUpdaterService:
         Args:
             optimization_engine (OptimizationEngine): The optimization algorithm to use.
             max_generations (int): Maximum number of optimization iterations to perform.
-            patience (int, optional): Number of consecutive iterations without improvement
+            max_stall_generations (int, optional): Number of consecutive iterations without improvement
                 before early stopping is triggered. Defaults to 10.
         """
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
-            OptimizationEngineFactory.get_engine(
-                optimization_engine, optimization_strategy
-            )
+            OptimizationEngineFactory.get_engine(optimization_engine)
         )
+        self._objectives = objectives
         self._logger = get_logger(__name__)
         self.loop_controller = _SolutionUpdaterServiceLoopController(
             max_generations=max_generations,
-            patience=patience,
+            max_stall_generations=max_stall_generations,
             solution_updater_service=self,
         )
 
         self._control_vector_logger: logging.Logger | None = None
 
     @property
-    def global_best_result(self) -> float:
+    def global_best_result(self) -> float | npt.NDArray[np.float64]:
         return self._engine.global_best_result
 
     @property
@@ -462,7 +517,7 @@ class SolutionUpdaterService:
 
     @property
     def parameters_name(self) -> list[str]:
-        return self._mapper.results_name
+        return self._mapper.parameters_name
 
     @property
     def results_name(self) -> list[str]:
@@ -474,55 +529,6 @@ class SolutionUpdaterService:
     def process_request(
         self, request_dict: dict[str, Any]
     ) -> SolutionUpdaterServiceResponse:
-        """
-        Updates the solution space for the next optimization iteration.
-
-        This method processes a configuration dictionary that contains candidate solutions,
-        optimization boundaries, and other necessary parameters, then interacts with the
-        optimization engine to compute the updated control vectors for the next iteration
-        in the optimization process.
-
-        Steps:
-        1. Converts the candidate solutions' control vectors and cost function values into
-           NumPy array representations.
-        2. Retrieves lower and upper boundaries for the control vector parameters.
-        3. Delegates the computation of the updated parameters to the optimization engine.
-        4. Maps the updated parameters from their NumPy array representations back to
-           structured control vector objects.
-        5. Packs the updated control vectors into an `OptimizationServiceResult` object.
-
-        Args:
-            request_dict (dict[str, Any]):
-                A dictionary containing optimization configuration parameters. It must
-                include the following:
-                - A sequence of `SolutionCandidate` objects (`solution_candidates`),
-                  representing the population of control vectors and their associated
-                  cost function results.
-                - `optimization_boundaries` (optional): An `OptimizationBoundaries`
-                  object defining the per-parameter lower and upper limits.
-                - An `optimization_engine` specification, which determines the optimization
-                  algorithm used.
-
-        Returns:
-            SolutionUpdaterServiceResponse:
-                An object containing the updated solution control vectors for the next
-                optimization iteration. It includes:
-                - `next_iter_solutions`: A list of updated `ControlVector` instances.
-                - `patience_exceeded`: A boolean flag indicating whether the optimization
-                  process has reached its patience limit due to lack of improvement.
-
-        Raises:
-            RuntimeError:
-                - If no solution candidates are provided in the configuration (`config_dict`).
-                - If an initialization issue occurs with the underlying optimization engine.
-
-        Notes:
-            - The `config_dict` is deserialized into an `OptimizationServiceConfig` object,
-              which provides structured access to all required optimization parameters.
-            - Internally, the NumPy-based representation of control vectors enables
-              efficient manipulation of large optimization data before it is re-structured
-              into higher-order `ControlVector` entities.
-        """
         self._logger.info("Processing control vectors update request...")
         config = SolutionUpdaterServiceRequest(**request_dict)
 
@@ -535,64 +541,49 @@ class SolutionUpdaterService:
 
         self._log_control_vector_and_values(control_vector, cost_function_values)
 
-        lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
-            config.optimization_constraints
-        )
-        A_np = None
-        b_np = None
+        indexed_objectives_strategy = self._get_indexed_strategy()
 
-        try:
-            if config.optimization_constraints and config.optimization_constraints.A:
-                self._logger.info("Linear inequalities provided, processing...")
-                simple_to_idx: dict[str, int] = {}
-                if not self._mapper._state:
-                    raise ValueError("Control vector mapping state is not initialized.")
-                for full_key, idx in self._mapper._state.control_vector_mapping.items():
-                    parts = full_key.split("#")
-                    if len(parts) >= 3:
-                        simple = f"{parts[1]}.{parts[-1]}"
-                        simple_to_idx[simple] = idx
-                A_rows = []
-                for row in config.optimization_constraints.A:
-                    dense = np.zeros(control_vector.shape[1], dtype=np.float64)
-                    for var, coef in zip(row.keys(), row.values()):
-                        if var not in simple_to_idx:
-                            raise ValueError(
-                                f"Linear inequality variable '{var}' not found in control vector mapping"
-                            )
-                        dense[simple_to_idx[var]] = float(coef)
-                    A_rows.append(dense)
-                A_np = np.vstack(A_rows) if A_rows else None
-                b_np = (
-                    np.array(config.optimization_constraints.b, dtype=np.float64)
-                    if config.optimization_constraints.b
-                    else None
-                )
-                # Apply sense transformation: convert any >, >= into <= by multiplying both sides by -1
-                senses = config.optimization_constraints.sense
-                if A_np is not None and b_np is not None and senses is not None:
-                    for i, s in enumerate(senses):
-                        if s in (">", ">="):
-                            A_np[i, :] *= -1.0
-                            b_np[i] *= -1.0
-        except ValueError as e:
-            self._logger.error(f"Error processing linear constraints: {e}")
-            raise RuntimeError(f"Failed to process linear constraints: {e}")
+        lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
+            config.optimization_constrains.boundaries
+        )
+
+        A_np, b_np = self._get_linear_inequalities_matrices(config, control_vector)
 
         engine = ensure_not_none(self._engine)
+        iteration_ratio = self.loop_controller.iteration_progress
         if A_np is not None and b_np is not None:
             try:
                 updated_params = engine.update_solution_to_next_iter(
-                    control_vector, cost_function_values, lb, ub, A=A_np, b=b_np
+                    control_vector,
+                    cost_function_values,
+                    lb,
+                    ub,
+                    indexed_objectives_strategy,
+                    A=A_np,
+                    b=b_np,
+                    iteration_ratio=iteration_ratio,
                 )
             except TypeError:
                 # Fallback if engine does not support A,b
+                self._logger.warning(
+                    "Engine does not support A,b, using default update_solution_to_next_iter"
+                )
                 updated_params = engine.update_solution_to_next_iter(
-                    control_vector, cost_function_values, lb, ub
+                    control_vector,
+                    cost_function_values,
+                    lb,
+                    ub,
+                    indexed_objectives_strategy,
+                    iteration_ratio=iteration_ratio,
                 )
         else:
             updated_params = engine.update_solution_to_next_iter(
-                control_vector, cost_function_values, lb, ub
+                control_vector,
+                cost_function_values,
+                lb,
+                ub,
+                indexed_objectives_strategy,
+                iteration_ratio=iteration_ratio,
             )
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
@@ -600,6 +591,61 @@ class SolutionUpdaterService:
         self._logger.info("Control vectors update request processed successfully.")
 
         return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
+
+    def _get_indexed_strategy(self) -> dict[int, OptimizationStrategy]:
+        indexed_objectives_strategy: dict[int, OptimizationStrategy] = {}
+        for obj_name, strategy in self._objectives.items():
+            # Find the index of this objective in the results
+            if obj_name in self._mapper.results_name:
+                idx = self._mapper.results_name.index(obj_name)
+                indexed_objectives_strategy[idx] = strategy
+            else:
+                raise ValueError(
+                    f"Objective '{obj_name}' not found in results {self._mapper.results_name}"
+                )
+        return indexed_objectives_strategy
+
+    def _get_linear_inequalities_matrices(
+        self,
+        config: SolutionUpdaterServiceRequest,
+        control_vector: npt.NDArray[np.float64],
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]] | tuple[None, None]:
+        if not config.optimization_constrains.linear_inequalities:
+            return None, None
+
+        if not self._mapper.is_initialized:
+            raise ValueError("Control vector mapping state is not initialized.")
+
+        self._logger.info("Linear inequalities provided, processing...")
+        simple_to_idx = {
+            fk: idx for fk, idx in self._mapper.control_vector_mapping.items()
+        }
+
+        A_rows = []
+        for row in config.optimization_constrains.linear_inequalities.A:
+            dense = np.zeros(control_vector.shape[1], dtype=np.float64)
+            for var, coef in row.items():
+                if var not in simple_to_idx:
+                    raise ValueError(
+                        f"Linear inequality variable '{var}' not found in control vector mapping {simple_to_idx}"
+                    )
+                dense[simple_to_idx[var]] = float(coef)
+            A_rows.append(dense)
+
+        A_np = np.vstack(A_rows)
+        b_np = np.array(
+            config.optimization_constrains.linear_inequalities.b,
+            dtype=np.float64,
+        )
+
+        senses = config.optimization_constrains.linear_inequalities.sense
+        if senses is not None:
+            for i, s in enumerate(senses):
+                if s in (">", ">="):
+                    A_np[i, :] *= -1.0
+                    b_np[i] *= -1.0
+
+        return A_np, b_np
 
     def _log_control_vector_and_values(
         self, control_vector, cost_function_values

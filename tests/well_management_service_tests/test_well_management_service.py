@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from services.well_management_service import WellManagementService
+from services.well_management_service import WellDesignService
 from services.well_management_service.core.models import (
     HWellModel,
     IWellModel,
@@ -614,9 +614,9 @@ def test_well_management_service(
 ) -> None:
     if expected_exception:
         with pytest.raises(expected_exception):
-            WellManagementService.process_request(input_data)
+            WellDesignService.process_request(input_data)
     else:
-        models = WellManagementService.process_request(input_data)
+        models = WellDesignService.process_request(input_data)
         assert all(isinstance(m, SimulationWellModel) for m in models.wells)
         for m, r in zip(models.wells, expected_output["results"]):
             assert m is not None

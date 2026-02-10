@@ -1,27 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from pydantic import BaseModel
 
-from pydantic import BaseModel, Field
-
-from services.well_management_service.core.models import WellManagementServiceResponse
-
-
-class SimulationResults(BaseModel, extra="forbid"):
-    """
-    NOTES:
-        please make sure that SimulationResults class implementation is aligned with:
-            - SimulationResultType from common.py
-            - SimulationResults from common.py
-    """
-
-    Heat: float | Sequence[float] | Sequence[Sequence[float] | float]
+from services.well_management_service import WellDesignServiceResponse
 
 
 class SimulationCase(BaseModel, extra="forbid"):
-    wells: WellManagementServiceResponse
+    wells: WellDesignServiceResponse
     control_vector: dict[str, float]
-    results: SimulationResults | None = Field(default=None)
+    results: dict[str, float]
 
 
 class SimulationServiceRequest(BaseModel, extra="forbid"):

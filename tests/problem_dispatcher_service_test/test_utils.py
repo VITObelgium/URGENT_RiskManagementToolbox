@@ -3,6 +3,7 @@ from services.problem_dispatcher_service.core.utils import (
     get_corresponding_initial_state_as_flat_dict,
     parse_flat_dict_to_nested,
 )
+from services.shared import Boundaries
 
 
 def test_parse_flat_dict_to_nested():
@@ -21,7 +22,7 @@ def test_parse_flat_dict_to_nested():
 
 def test_get_corresponding_initial_state_as_flat_dict():
     initial = {
-        "well_placement": {
+        "well_design": {
             "INJ": {
                 "md": 3000.0,
                 "md_step": 5.0,
@@ -41,17 +42,20 @@ def test_get_corresponding_initial_state_as_flat_dict():
         }
     }
 
-    variable_source = ["well_placement#INJ#md", "well_placement#PRO#wellhead#x"]
+    variable_source = ["well_design#INJ#md", "well_design#PRO#wellhead#x"]
 
     results = get_corresponding_initial_state_as_flat_dict(initial, variable_source)
     assert results == {
-        "well_placement#INJ#md": 3000.0,
-        "well_placement#PRO#wellhead#x": 700.0,
+        "well_design#INJ#md": 3000.0,
+        "well_design#PRO#wellhead#x": 700.0,
     }
 
 
 def test_candidate_generator():
-    constraints = {"a": (0.0, 1.0), "b": (10.0, 20.0)}
+    constraints = {
+        "a": Boundaries(**{"lb": 0.0, "ub": 1.0}),
+        "b": Boundaries(**{"lb": 10.0, "ub": 20.0}),
+    }
     initial_state = {"a": 0.5, "b": 15.0}
     candidates = CandidateGenerator.generate(
         constraints,

@@ -11,13 +11,12 @@ from services.simulation_service.core.infrastructure.generated import (
 )
 from services.simulation_service.core.models import (
     SimulationCase,
-    SimulationResults,
     SimulationServiceRequest,
     SimulationServiceResponse,
 )
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
 from services.simulation_service.core.utils.converters import json_to_str, str_to_json
-from services.well_management_service.core.models import WellManagementServiceResponse
+from services.well_management_service.core.models import WellDesignServiceResponse
 
 logger = get_logger(__name__)
 
@@ -144,7 +143,30 @@ class SimulationService:
                 cluster_response = stub.PerformSimulations(simulations_request)
                 logger.info("Simulations completed on the cluster.")
             except grpc.RpcError as e:
-                logger.error("Error performing simulations: %s", e)
+                code = None
+                details = None
+                try:
+                    if hasattr(e, "code"):
+                        code = e.code()
+                    if hasattr(e, "details"):
+                        details = e.details()
+                except Exception:
+                    pass
+
+                # ABORTED is what the server should return for "critical failure, shutting down".
+                if code == grpc.StatusCode.ABORTED:
+                    logger.critical(
+                        "Simulations aborted by server (code=%s, details=%s).",
+                        code,
+                        details,
+                    )
+                else:
+                    logger.error(
+                        "Error performing simulations (code=%s, details=%s): %s",
+                        code,
+                        details,
+                        e,
+                    )
                 raise
             except KeyboardInterrupt:
                 logger.warning("Simulation interrupted by user.")
@@ -168,6 +190,7 @@ class SimulationService:
         """
         return sm.Simulation(
             input=sm.SimulationInput(wells=case.wells.model_dump_json()),
+            result=sm.SimulationResult(result=json_to_str(case.results)),
             control_vector=sm.SimulationControlVector(
                 content=json_to_str(case.control_vector)
             ),
@@ -185,7 +208,7 @@ class SimulationService:
             SimulationCase: The simulation case object.
         """
         return SimulationCase(
-            wells=WellManagementServiceResponse(**str_to_json(simulation.input.wells)),
-            results=SimulationResults(**str_to_json(simulation.result.result)),
+            wells=WellDesignServiceResponse(**str_to_json(simulation.input.wells)),
+            results=str_to_json(simulation.result.result),
             control_vector=str_to_json(simulation.control_vector.content),
         )

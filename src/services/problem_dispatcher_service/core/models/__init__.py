@@ -1,23 +1,23 @@
 from services.problem_dispatcher_service.core.models.user import (
-    OptimizationConstrains,
+    LinearInequalities,
     OptimizationParameters,
+    ParameterBoundaries,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     RequestPayload,
     ServiceType,
     SolutionCandidateServicesTasks,
-    VariableBnd,
-    WellPlacementItem,
+    WellDesignItem,
 )
 
 __all__ = [
     "ProblemDispatcherDefinition",
     "ProblemDispatcherServiceResponse",
-    "WellPlacementItem",
-    "OptimizationConstrains",
-    "VariableBnd",
+    "WellDesignItem",
+    "ParameterBoundaries",
     "ServiceType",
     "SolutionCandidateServicesTasks",
     "RequestPayload",
     "OptimizationParameters",
+    "LinearInequalities",
 ]

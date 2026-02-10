@@ -162,18 +162,18 @@ class PSOEngine(OptimizationEngineInterface):
                 state.global_best_result = float(results[best_idx].item())
 
     @staticmethod
-    def _dominates(a, b, indexed_objectives_strategy) -> bool:
+    def _dominates(a, b, indexed_objectives_strategy, epsilon: float = EPS) -> bool:
         strictly_better = False
         for idx, strategy in indexed_objectives_strategy.items():
             if strategy == OptimizationStrategy.MINIMIZE:
-                if a[idx] > b[idx] + EPS:
+                if a[idx] > b[idx] + epsilon:
                     return False
-                if a[idx] < b[idx] - EPS:
+                if a[idx] < b[idx] - epsilon:
                     strictly_better = True
             else:
-                if a[idx] < b[idx] - EPS:
+                if a[idx] < b[idx] - epsilon:
                     return False
-                if a[idx] > b[idx] + EPS:
+                if a[idx] > b[idx] + epsilon:
                     strictly_better = True
         return strictly_better
 
@@ -238,12 +238,13 @@ class PSOEngine(OptimizationEngineInterface):
             if dominated[i]:
                 continue
             for j in range(n):
-                if i != j and not dominated[i]:
-                    if PSOEngine._dominates(
-                        results[j], results[i], indexed_objectives_strategy
-                    ):
-                        dominated[i] = True
-                        break
+                if i == j or dominated[j]:
+                    continue
+                if PSOEngine._dominates(
+                    results[j], results[i], indexed_objectives_strategy
+                ):
+                    dominated[i] = True
+                    break
 
         return ~dominated
 
@@ -327,13 +328,14 @@ class PSOEngine(OptimizationEngineInterface):
                     state.particles_best_results[i] = results[i]
         else:
             strategy = next(iter(indexed_objectives_strategy.values()))
-            mask = (
-                results < state.particles_best_results
-                if strategy == OptimizationStrategy.MINIMIZE
-                else results > state.particles_best_results
-            )
-            state.particles_best_positions[mask[:, 0]] = positions[mask[:, 0]]
-            state.particles_best_results[mask] = results[mask]
+            current = results.ravel()
+            best = state.particles_best_results.ravel()
+            if strategy == OptimizationStrategy.MINIMIZE:
+                improved = current < best
+            else:
+                improved = current > best
+            state.particles_best_positions[improved] = positions[improved]
+            state.particles_best_results[improved] = results[improved]
 
     def _update_external_archive(self, positions, results, indexed_objectives_strategy):
         state = ensure_not_none(self._state)
@@ -356,12 +358,6 @@ class PSOEngine(OptimizationEngineInterface):
         leader_idx = self._select_leader_from_archive(archive_results)
         state.global_best_position = archive_positions[leader_idx]
         state.global_best_result = archive_results[leader_idx]
-
-    def _prune_archive(self, archive_positions, archive_results):
-        """Legacy crowding-based pruning (kept for backward compatibility)."""
-        crowding = self._compute_crowding_distance(archive_results)
-        sorted_idx = np.argsort(-crowding)[: self.archive_size]
-        return archive_positions[sorted_idx], archive_results[sorted_idx]
 
     def _prune_archive_with_grid(self, archive_positions, archive_results):
         """Grid-based archive pruning for better diversity."""
@@ -496,37 +492,45 @@ class PSOEngine(OptimizationEngineInterface):
 
     def _apply_mutation(self, positions, lb, ub):
         """Apply polynomial mutation to maintain diversity."""
-        mutated = positions.copy()
         n_particles, n_dims = positions.shape
+        mutated = positions.copy()
 
-        for i in range(n_particles):
-            for j in range(n_dims):
-                if self._rng.random() < self.mutation_probability:
-                    y = positions[i, j]
-                    delta_max = ub[j] - lb[j]
+        # Determine which elements mutate
+        mutation_mask = (
+            self._rng.random((n_particles, n_dims)) < self.mutation_probability
+        )
 
-                    if delta_max < EPS:
-                        continue
+        delta_max = ub - lb
+        valid = delta_max > EPS
+        mutation_mask &= valid  # Skip dimensions with zero range
 
-                    r = self._rng.random()
+        if not np.any(mutation_mask):
+            return mutated
 
-                    delta_1 = (y - lb[j]) / delta_max
-                    delta_2 = (ub[j] - y) / delta_max
+        y = positions[mutation_mask]
+        d_max = np.broadcast_to(delta_max, positions.shape)[mutation_mask]
+        lb_flat = np.broadcast_to(lb, positions.shape)[mutation_mask]
+        ub_flat = np.broadcast_to(ub, positions.shape)[mutation_mask]
 
-                    if r < 0.5:
-                        xy = 1.0 - delta_1
-                        val = 2.0 * r + (1.0 - 2.0 * r) * (
-                            xy ** (self.mutation_eta + 1.0)
-                        )
-                        delta_q = val ** (1.0 / (self.mutation_eta + 1.0)) - 1.0
-                    else:
-                        xy = 1.0 - delta_2
-                        val = 2.0 * (1.0 - r) + 2.0 * (r - 0.5) * (
-                            xy ** (self.mutation_eta + 1.0)
-                        )
-                        delta_q = 1.0 - val ** (1.0 / (self.mutation_eta + 1.0))
+        delta_1 = (y - lb_flat) / d_max
+        delta_2 = (ub_flat - y) / d_max
 
-                    mutated[i, j] = y + delta_q * delta_max
+        r = self._rng.random(y.shape)
+        eta = self.mutation_eta
+
+        # Left mutation (r < 0.5)
+        left = r < 0.5
+        xy_l = 1.0 - delta_1
+        val_l = 2.0 * r + (1.0 - 2.0 * r) * (xy_l ** (eta + 1.0))
+        delta_q_l = val_l ** (1.0 / (eta + 1.0)) - 1.0
+
+        # Right mutation (r >= 0.5)
+        xy_r = 1.0 - delta_2
+        val_r = 2.0 * (1.0 - r) + 2.0 * (r - 0.5) * (xy_r ** (eta + 1.0))
+        delta_q_r = 1.0 - val_r ** (1.0 / (eta + 1.0))
+
+        delta_q = np.where(left, delta_q_l, delta_q_r)
+        mutated[mutation_mask] = y + delta_q * d_max
 
         return np.clip(mutated, lb, ub)
 

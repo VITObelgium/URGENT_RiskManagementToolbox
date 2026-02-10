@@ -1,10 +1,15 @@
 import copy
-from collections.abc import MutableMapping
-from typing import Any, Callable, Sequence
+from collections.abc import MutableMapping, Sequence
+from typing import Any, Callable
 
 import numpy as np
 
 from services.problem_dispatcher_service.core.models import LinearInequalities
+from services.problem_dispatcher_service.core.utils.keys import (
+    DEFAULT_SEPARATOR,
+    convert_key_separator,
+    split_key,
+)
 from services.shared import Boundaries, ServiceType
 from services.solution_updater_service.core.utils import (
     repair_against_linear_inequalities,
@@ -32,7 +37,8 @@ def update_initial_state(
 
 
 def parse_flat_dict_to_nested(
-    flat_dict: dict[str, float] | dict[str, None], separator: str = "#"
+    flat_dict: dict[str, float] | dict[str, None],
+    separator: str = DEFAULT_SEPARATOR,
 ) -> dict[str, Any]:
     def _merge_nested_dict(base: MutableMapping, keys: list[str], d_value: Any):
         current = base
@@ -42,13 +48,15 @@ def parse_flat_dict_to_nested(
 
     result: dict[str, Any] = {}
     for flat_key, value in flat_dict.items():
-        keys = flat_key.split(separator)
+        keys = split_key(flat_key, separator)
         _merge_nested_dict(result, keys, value)
     return result
 
 
 def get_corresponding_initial_state_as_flat_dict(
-    initial_state: dict[str, Any], variable_source: list[str], separator: str = "#"
+    initial_state: dict[str, Any],
+    variable_source: list[str],
+    separator: str = DEFAULT_SEPARATOR,
 ):
     template = {k: None for k in variable_source}
     nestest_template = parse_flat_dict_to_nested(template, separator)
@@ -74,7 +82,7 @@ def _fill_none(target, source):
     return target
 
 
-def _flatten_dict(d, parent_key="", separator="#"):
+def _flatten_dict(d, parent_key="", separator: str = DEFAULT_SEPARATOR):
     flat = {}
 
     for key, value in d.items():
@@ -96,7 +104,7 @@ class CandidateGenerator:
         random_fn: Callable[[float, float], float],
         initial_state: dict[str, Any],
         linear_inequalities: LinearInequalities | None = None,
-        separator: str = "#",
+        separator: str = DEFAULT_SEPARATOR,
         tol: float = 1e-3,
         max_repair_iter: int = 20,
     ) -> list[dict[str, float]]:
@@ -175,7 +183,7 @@ class CandidateGenerator:
 
         # Map "INJ.md" -> "well_design#INJ#md"
         def fk(var: str) -> str:
-            return var.replace(".", separator)
+            return convert_key_separator(var, output_separator=separator)
 
         full_keys = [fk(v) for v in sparse_vars]
         # Filter out vars not present in constraints

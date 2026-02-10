@@ -15,23 +15,19 @@ from services.well_management_service.core.models import (
     WellDesignServiceResponse,
 )
 
+logger = get_logger(__name__)
+
 
 class WellDesignService:
-    _logger = get_logger(__name__)
-
     @staticmethod
     def process_request(request_dict: dict[str, Any]) -> WellDesignServiceResponse:
         # Parse the incoming request
         request = WellDesignServiceRequest(**request_dict)
-        WellDesignService._logger.debug(
-            "Parsed request into WellManagementServiceRequest: %s", request
-        )
+        logger.debug("Parsed request into WellManagementServiceRequest: %s", request)
 
         # Build wells
         response = WellDesignService._build_wells(request)
-        WellDesignService._logger.debug(
-            "Built WellManagementServiceResponse: %s", response
-        )
+        logger.debug("Built WellManagementServiceResponse: %s", response)
 
         return response
 
@@ -39,32 +35,29 @@ class WellDesignService:
     def _build_wells(
         config: WellDesignServiceRequest,
     ) -> WellDesignServiceResponse:
-        WellDesignService._logger.debug("Building wells from configuration: %s", config)
+        logger.debug("Building wells from configuration: %s", config)
 
         wells: list[Well] = []
 
         for model in config.models:
-            if isinstance(model, IWellModel):
-                WellDesignService._logger.debug("Processing IWellModel: %s", model)
-                wells.append(well_templates.IWellTemplate.from_model(model).build())
-            elif isinstance(model, JWellModel):
-                WellDesignService._logger.debug("Processing JWellModel: %s", model)
-                wells.append(well_templates.JWellTemplate.from_model(model).build())
-            elif isinstance(model, SWellModel):
-                WellDesignService._logger.debug("Processing SWellModel: %s", model)
-                wells.append(well_templates.SWellTemplate.from_model(model).build())
-            elif isinstance(model, HWellModel):
-                WellDesignService._logger.debug("Processing HWellModel: %s", model)
-                wells.append(well_templates.HWellTemplate.from_model(model).build())
-            else:
-                WellDesignService._logger.warning(
-                    "Unrecognized model type: %s", type(model)
-                )
+            match model:
+                case IWellModel():
+                    logger.debug("Processing IWellModel: %s", model)
+                    wells.append(well_templates.IWellTemplate.from_model(model).build())
+                case JWellModel():
+                    logger.debug("Processing JWellModel: %s", model)
+                    wells.append(well_templates.JWellTemplate.from_model(model).build())
+                case SWellModel():
+                    logger.debug("Processing SWellModel: %s", model)
+                    wells.append(well_templates.SWellTemplate.from_model(model).build())
+                case HWellModel():
+                    logger.debug("Processing HWellModel: %s", model)
+                    wells.append(well_templates.HWellTemplate.from_model(model).build())
+                case _:
+                    logger.warning("Unrecognized model type: %s", type(model))
 
         response = WellDesignServiceResponse(
             wells=[SimulationWellModel.from_well(w) for w in wells]
         )
-        WellDesignService._logger.debug(
-            "Completed well building with response: %s", response
-        )
+        logger.debug("Completed well building with response: %s", response)
         return response

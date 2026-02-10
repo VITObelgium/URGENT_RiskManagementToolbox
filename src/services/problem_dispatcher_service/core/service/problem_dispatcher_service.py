@@ -14,7 +14,11 @@ from services.problem_dispatcher_service.core.service.handlers import (
     ProblemTypeHandler,
     WellDesignHandler,
 )
-from services.problem_dispatcher_service.core.utils import CandidateGenerator
+from services.problem_dispatcher_service.core.utils import (
+    DEFAULT_SEPARATOR,
+    CandidateGenerator,
+    convert_key_separator,
+)
 from services.shared import Boundaries
 from services.solution_updater_service import ControlVector
 
@@ -172,13 +176,15 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
-        separator = "#"
         if self._linear_inequalities is None:
             return None
         return LinearInequalities(
             **{
                 "A": [
-                    {k.replace(".", separator): v for (k, v) in row.items()}
+                    {
+                        convert_key_separator(k, output_separator=DEFAULT_SEPARATOR): v
+                        for (k, v) in row.items()
+                    }
                     for row in self._linear_inequalities.A
                 ],
                 "b": self._linear_inequalities.b,

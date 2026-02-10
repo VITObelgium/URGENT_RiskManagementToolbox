@@ -172,7 +172,6 @@ def run_risk_management(
             logger.warning("Risk management process interrupted by user.")
             return None
         except Exception as e:
-            # logger.error("Error in risk management process: %s", str(e), exc_info=True)
             logger.error("Error in risk management process: %s", str(e))
             raise
 

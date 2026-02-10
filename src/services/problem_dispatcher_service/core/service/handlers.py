@@ -4,6 +4,7 @@ from services.problem_dispatcher_service.core.models import (
     ParameterBoundaries,
     WellDesignItem,
 )
+from services.problem_dispatcher_service.core.utils import DEFAULT_SEPARATOR, join_key
 from services.shared import Boundaries, ServiceType
 
 
@@ -26,7 +27,7 @@ class ProblemTypeHandler(Protocol):
         ...
 
     def build_full_key_boundaries(
-        self, items: list[Any], separator: str = "#"
+        self, items: list[Any], separator: str = DEFAULT_SEPARATOR
     ) -> dict[str, Boundaries]:
         """
         Build the constraints for the optimization problem.
@@ -65,7 +66,7 @@ class WellDesignHandler(ProblemTypeHandler):
     def build_full_key_boundaries(
         self,
         items: list[WellDesignItem],
-        separator: str = "#",
+        separator: str = DEFAULT_SEPARATOR,
     ) -> dict[str, Boundaries]:
         """
         Build the constraints for the well placement optimization problem.
@@ -82,9 +83,13 @@ class WellDesignHandler(ProblemTypeHandler):
             # Add existing constraints (e.g., wellhead x, y)
             flattened = _flatten_optimization_parameters(item.parameter_bounds)
             for key, value in flattened.items():
-                result[
-                    f"{ServiceType.WellDesignService}#{item.well_name}{separator}{key}"
-                ] = Boundaries(**{"lb": value[0], "ub": value[1]})
+                full_key = join_key(
+                    str(ServiceType.WellDesignService),
+                    item.well_name,
+                    key,
+                    separator=separator,
+                )
+                result[full_key] = Boundaries(**{"lb": value[0], "ub": value[1]})
         return result
 
     def build_service_tasks(
@@ -96,7 +101,7 @@ class WellDesignHandler(ProblemTypeHandler):
 def _flatten_optimization_parameters(
     optimization_parameters: ParameterBoundaries,
     parent_key: str = "",
-    separator: str = "#",
+    separator: str = DEFAULT_SEPARATOR,
 ) -> dict[str, tuple[float, float]]:
     flat: dict[str, tuple[float, float]] = {}
     for key, value in optimization_parameters.items():

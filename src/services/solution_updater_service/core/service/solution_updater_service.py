@@ -517,7 +517,7 @@ class SolutionUpdaterService:
 
     @property
     def parameters_name(self) -> list[str]:
-        return self._mapper.results_name
+        return self._mapper.parameters_name
 
     @property
     def results_name(self) -> list[str]:
@@ -565,7 +565,7 @@ class SolutionUpdaterService:
                 )
             except TypeError:
                 # Fallback if engine does not support A,b
-                logging.warning(
+                self._logger.warning(
                     "Engine does not support A,b, using default update_solution_to_next_iter"
                 )
                 updated_params = engine.update_solution_to_next_iter(
@@ -610,47 +610,42 @@ class SolutionUpdaterService:
         config: SolutionUpdaterServiceRequest,
         control_vector: npt.NDArray[np.float64],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]] | tuple[None, None]:
-        try:
-            if (
-                config.optimization_constrains
-                and config.optimization_constrains.linear_inequalities
-            ):
-                self._logger.info("Linear inequalities provided, processing...")
-                simple_to_idx: dict[str, int] = {}
-                if not self._mapper.is_initialized:
-                    raise ValueError("Control vector mapping state is not initialized.")
-                simple_to_idx = {
-                    fk: idx for fk, idx in self._mapper.control_vector_mapping.items()
-                }
+        if not config.optimization_constrains.linear_inequalities:
+            return None, None
 
-                A_rows = []
-                for row in config.optimization_constrains.linear_inequalities.A:
-                    dense = np.zeros(control_vector.shape[1], dtype=np.float64)
-                    for var, coef in zip(row.keys(), row.values()):
-                        if var not in simple_to_idx:
-                            raise ValueError(
-                                f"Linear inequality variable '{var}' not found in control vector mapping {simple_to_idx}"
-                            )
-                        dense[simple_to_idx[var]] = float(coef)
-                    A_rows.append(dense)
-                A_np = np.vstack(A_rows)
-                b_np = np.array(
-                    config.optimization_constrains.linear_inequalities.b,
-                    dtype=np.float64,
-                )
-                # Apply sense transformation: convert any >, >= into <= by multiplying both sides by -1
-                senses = config.optimization_constrains.linear_inequalities.sense
-                if A_np is not None and b_np is not None and senses is not None:
-                    for i, s in enumerate(senses):
-                        if s in (">", ">="):
-                            A_np[i, :] *= -1.0
-                            b_np[i] *= -1.0
-                return A_np, b_np
-            else:
-                return None, None
-        except ValueError as e:
-            self._logger.error(f"Error processing linear constraints: {e}")
-            raise RuntimeError(f"Failed to process linear constraints: {e}")
+        if not self._mapper.is_initialized:
+            raise ValueError("Control vector mapping state is not initialized.")
+
+        self._logger.info("Linear inequalities provided, processing...")
+        simple_to_idx = {
+            fk: idx for fk, idx in self._mapper.control_vector_mapping.items()
+        }
+
+        A_rows = []
+        for row in config.optimization_constrains.linear_inequalities.A:
+            dense = np.zeros(control_vector.shape[1], dtype=np.float64)
+            for var, coef in row.items():
+                if var not in simple_to_idx:
+                    raise ValueError(
+                        f"Linear inequality variable '{var}' not found in control vector mapping {simple_to_idx}"
+                    )
+                dense[simple_to_idx[var]] = float(coef)
+            A_rows.append(dense)
+
+        A_np = np.vstack(A_rows)
+        b_np = np.array(
+            config.optimization_constrains.linear_inequalities.b,
+            dtype=np.float64,
+        )
+
+        senses = config.optimization_constrains.linear_inequalities.sense
+        if senses is not None:
+            for i, s in enumerate(senses):
+                if s in (">", ">="):
+                    A_np[i, :] *= -1.0
+                    b_np[i] *= -1.0
+
+        return A_np, b_np
 
     def _log_control_vector_and_values(
         self, control_vector, cost_function_values

@@ -452,6 +452,7 @@ TSWLatexianTemp*
 
 # csv log
 log/*.csv
+log/
 
 # orchestration files
 orchestration_files/

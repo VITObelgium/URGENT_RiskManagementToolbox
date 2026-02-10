@@ -73,19 +73,16 @@ def run_risk_management(
                 objectives=dispatcher.optimization_objectives,
             )
 
+            n_objectives = len(dispatcher.optimization_objectives)
+            population_size = dispatcher.population_size
+
             # Initialize generation summary logger
             generation_summary_logger = get_csv_logger(
                 "generation_summary.csv",
                 logger_name="generation_summary_logger",
-                columns=[
-                    "generation",
-                    "global_best",
-                    "min",
-                    "max",
-                    "avg",
-                    "std",
-                ]
-                + ["ind_" + str(idx) for idx in range(dispatcher.population_size)],
+                columns=_generation_csv_columns(
+                    dispatcher.expected_optimization_function_names, population_size
+                ),
             )
 
             logger.debug("Fetching full key boundaries from ProblemDispatcherService.")
@@ -151,7 +148,11 @@ def run_risk_management(
                 next_solutions = response.next_iter_solutions
 
                 _log_generation_summary(
-                    solution_updater, generation_summary_logger, loop_controller
+                    solution_updater,
+                    generation_summary_logger,
+                    loop_controller,
+                    n_objectives=n_objectives,
+                    population_size=population_size,
                 )
 
                 logger.info(
@@ -231,32 +232,77 @@ def _prepare_simulation_cases(
     return sim_cases
 
 
-def _configure_generation_summary_logger(generation_summary_logger) -> None:
-    generation_summary_logger.info("generation,global_best,min,max,avg,std,population")
-
-
 def _log_generation_summary(
-    solution_updater, generation_summary_logger, loop_controller
+    solution_updater,
+    generation_summary_logger,
+    loop_controller,
+    *,
+    n_objectives: int,
+    population_size: int,
 ) -> None:
     generation_summary = solution_updater.get_generation_summary()
 
+    def _to_obj_list(x: float | npt.NDArray[np.float64], *, name: str) -> list[float]:
+        arr = np.asarray(x, dtype=float).ravel()
+        if arr.size == 1 and n_objectives == 1:
+            return [float(arr[0])]
+        if arr.size != n_objectives:
+            raise ValueError(
+                f"Expected {name} to have {n_objectives} objective values, got {arr.size}: {arr!r}"
+            )
+        return [float(v) for v in arr.tolist()]
+
+    # Log to normal logger (compact but still numeric)
+    gb = _to_obj_list(generation_summary.global_best, name="global_best")
+    mn = _to_obj_list(generation_summary.min, name="min")
+    mx = _to_obj_list(generation_summary.max, name="max")
+    av = _to_obj_list(generation_summary.avg, name="avg")
+    sd = _to_obj_list(generation_summary.std, name="std")
+
     logger.info(
-        "Generation statistics: global_best=%.6f, min=%.6f, max=%.6f, avg=%.6f, std=%.6f",
-        generation_summary.global_best,
-        generation_summary.min,
-        generation_summary.max,
-        generation_summary.avg,
-        generation_summary.std,
+        "Generation statistics: global_best=%s, min=%s, max=%s, avg=%s, std=%s",
+        gb,
+        mn,
+        mx,
+        av,
+        sd,
     )
 
-    population_str = ",".join(f"{val:.9f}" for val in generation_summary.population)
+    pop = generation_summary.population
+    if len(pop) != population_size:
+        raise ValueError(f"Expected population_size={population_size}, got {len(pop)}")
 
-    generation_summary_logger.info(
-        f"{loop_controller.current_generation},"
-        f"{generation_summary.global_best:.9f},"
-        f"{generation_summary.min:.9f},"
-        f"{generation_summary.max:.9f},"
-        f"{generation_summary.avg:.9f},"
-        f"{generation_summary.std:.9f},"
-        f"{population_str}"
+    pop_values: list[float] = []
+    for idx, item in enumerate(pop):
+        item_vals = _to_obj_list(item, name=f"population[{idx}]")
+        pop_values.extend(item_vals)
+
+    row_values: list[float] = gb + mn + mx + av + sd + pop_values
+    row_str = ",".join(f"{v:.9f}" for v in row_values)
+
+    generation_summary_logger.info(f"{loop_controller.current_generation},{row_str}")
+
+
+def _sanitize_col(name: str) -> str:
+    # Keep CSV headers simple/stable (avoid commas/spaces)
+    return (
+        name.strip()
+        .replace(",", "_")
+        .replace(" ", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
     )
+
+
+def _generation_csv_columns(
+    expected_optimization_function_names: list[str],
+    pop_size: int,
+) -> list[str]:
+    metrics = ["global_best", "min", "max", "avg", "std"]
+    obj_cols = [_sanitize_col(o) for o in expected_optimization_function_names]
+
+    cols = ["generation"]
+    for metric in metrics:
+        cols += [f"{metric}_{obj}" for obj in obj_cols]
+    cols += [f"ind_{i}_{obj}" for i in range(pop_size) for obj in obj_cols]
+    return cols

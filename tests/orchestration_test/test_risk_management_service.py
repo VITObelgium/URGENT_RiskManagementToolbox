@@ -37,8 +37,17 @@ def test_run_risk_management_happy_path(
             )
         ]
     )
+
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
+    mock_dispatcher_inst.expected_optimization_function_names = ["r"]
+    mock_dispatcher_inst.optimization_objectives = {"r": "minimize"}
+    mock_dispatcher_inst.population_size = 1
+    mock_dispatcher_inst.max_generation = 1
+    mock_dispatcher_inst.max_stall_generations = 1
+    mock_dispatcher_inst.full_key_boundaries = {}
+    mock_dispatcher_inst.full_key_linear_inequalities = None
+
     mock_dispatcher_inst.process_iteration.side_effect = [
         MagicMock(
             solution_candidates=[
@@ -53,6 +62,7 @@ def test_run_risk_management_happy_path(
         ),
         MagicMock(solution_candidates=[]),
     ]
+
     mock_su_inst = MagicMock()
     mock_su.return_value = mock_su_inst
     mock_su_inst.loop_controller.running.side_effect = [True, False]
@@ -63,13 +73,18 @@ def test_run_risk_management_happy_path(
         max=2.0,
         avg=1.5,
         std=0.5,
+        population=[1.0],
     )
     mock_su_inst.process_request.return_value = MagicMock(
         next_iter_solutions=[{"a": 1}]
     )
-    mock_csv_logger.return_value = MagicMock(info=MagicMock())
+
+    csv_logger_inst = MagicMock()
+    mock_csv_logger.return_value = csv_logger_inst
+
     mock_su_inst.global_best_result = 1.23
     mock_su_inst.global_best_control_vector = MagicMock(items={"x": 5})
+
     with patch(
         "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
         return_value={"x": 5},
@@ -80,14 +95,19 @@ def test_run_risk_management_happy_path(
         mock_problem_def.optimization_parameters.max_stall_generations = 1
         mock_problem_def.optimization_parameters.max_generations = 1
 
-        rms.run_risk_management(
-            mock_problem_def,
-            b"model",
-        )
+        rms.run_risk_management(mock_problem_def, b"model")
+
     mock_sim_service.transfer_simulation_model.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1
     mock_su_inst.process_request.assert_called()
-    mock_csv_logger.return_value.info.assert_called()
+
+    # CSV logger: one numeric row logged for the generation
+    csv_logger_inst.info.assert_called()
+    logged_message = csv_logger_inst.info.call_args[0][0]
+    assert logged_message.startswith("1,")
+
+    # generation + (global_best,min,max,avg,std) + population => 1 + 5 + 1 = 7 fields
+    assert len(logged_message.split(",")) == 7
 
 
 def test_prepare_simulation_cases_basic():

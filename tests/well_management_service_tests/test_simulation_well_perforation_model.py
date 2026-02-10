@@ -5,7 +5,7 @@ import pytest
 from services.well_management_service.core.models import (
     SimulationWellModel,
     SimulationWellPerforationModel,
-    WellManagementServiceResponse,
+    WellDesignServiceResponse,
 )
 
 
@@ -36,7 +36,7 @@ def test_well_management_service_result_unique_names():
             name="Well2", trajectory=((0.0, 0.0, 0.0),), completion=None
         ),
     ]
-    result = WellManagementServiceResponse(wells=wells)
+    result = WellDesignServiceResponse(wells=wells)
     assert result.wells == wells
 
 
@@ -59,4 +59,4 @@ def test_well_management_service_result_duplicate_names():
         ValueError,
         match=re.escape("Well names must be unique. Duplicate:['Well1', 'Well2']"),
     ):
-        WellManagementServiceResponse(wells=wells)
+        WellDesignServiceResponse(wells=wells)

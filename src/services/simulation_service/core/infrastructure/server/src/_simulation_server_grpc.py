@@ -30,6 +30,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._job_event = asyncio.Event()  # Event to signal job completion
         self._simulation_model_archive: bytes | None = None
         self._job_timeout_seconds = get_simulation_config().job_timeout_seconds
+        self._critical_error: RuntimeError | None = None  # fail-fast signal
 
     async def TransferSimulationModel(self, request, context):
         archive_size_bytes = len(getattr(request, "package_archive", b""))
@@ -56,6 +57,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._running_jobs.clear()
         self._job_start_times.clear()
         self._completed_jobs.clear()
+        self._critical_error = None
 
         for i, sim in enumerate(request.simulations, start=1):
             self._jobs.put((i, sim))
@@ -72,6 +74,15 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
         # Wait for all jobs to complete with regular progress updates
         while self._running_jobs:
+            if self._critical_error is not None:
+                details = str(self._critical_error) or "Critical worker exception"
+                logger.critical(
+                    "Critical worker exception received; aborting RPC and requesting server shutdown. Details=%s",
+                    details,
+                )
+                request_server_shutdown(timeout=2.0)
+                await context.abort(grpc.StatusCode.ABORTED, details)
+
             current_time = time.time()
             time_since_last_log = current_time - last_log_time
 
@@ -203,33 +214,49 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         return sm.Simulations(simulations=simulations)
 
     async def RequestSimulationJob(self, request, context):
-        worker_id = request.worker_id
+        try:
+            worker_id = request.worker_id
 
-        if self._jobs.empty():
-            logger.info(f"Worker {worker_id}: No jobs available in queue")
-            if self._running_jobs:
-                logger.info(
-                    f"Following jobs are still running: {[job for job in self._running_jobs]}"
+            if self._jobs.empty():
+                logger.info(f"Worker {worker_id}: No jobs available in queue")
+                if self._running_jobs:
+                    logger.info(
+                        f"Following jobs are still running: {[job for job in self._running_jobs]}"
+                    )
+                return sm.SimulationJob(
+                    simulation=sm.Simulation(),
+                    status=sm.JobStatus.NO_JOB_AVAILABLE,
+                    worker_id=request.worker_id,
+                    simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
                 )
+
+            job_id, simulation = self._jobs.get()
+            logger.info(f"Worker {worker_id}: Assigned job {job_id}")
+
+            self._running_jobs[job_id] = simulation
+            self._job_start_times[job_id] = time.time()
+
+            return sm.SimulationJob(
+                simulation=simulation,
+                status=sm.JobStatus.NEW,
+                worker_id=request.worker_id,
+                simulator=sm.Simulator.OPENDARTS,
+                job_id=job_id,
+            )
+
+        except asyncio.CancelledError:
+            # Expected during server shutdown: don't let it bubble into gRPC internals as an "unhandled exception".
+            try:
+                context.set_code(grpc.StatusCode.CANCELLED)
+                context.set_details("Server shutting down")
+            except Exception:
+                pass
             return sm.SimulationJob(
                 simulation=sm.Simulation(),
                 status=sm.JobStatus.NO_JOB_AVAILABLE,
-                worker_id=request.worker_id,
+                worker_id=getattr(request, "worker_id", ""),
                 simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
             )
-        job_id, simulation = self._jobs.get()
-        logger.info(f"Worker {worker_id}: Assigned job {job_id}")
-
-        self._running_jobs[job_id] = simulation  # Mark job as running
-        self._job_start_times[job_id] = time.time()  # Track start time
-
-        return sm.SimulationJob(
-            simulation=simulation,
-            status=sm.JobStatus.NEW,
-            worker_id=request.worker_id,
-            simulator=sm.Simulator.OPENDARTS,
-            job_id=job_id,
-        )
 
     async def SubmitSimulationJob(self, request, context):
         simulation_job = request
@@ -248,6 +275,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             sm.JobStatus.FAILED,
             sm.JobStatus.TIMEOUT,
             sm.JobStatus.ERROR,
+            sm.JobStatus.EXCEPTION,
         ]:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(
@@ -268,6 +296,14 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         logger.info(
             f"Worker {worker_id}: Returned job {job_id} with status {status_name}"
         )
+
+        if simulation_job.status == sm.JobStatus.EXCEPTION:
+            msg = f"Critical worker EXCEPTION from worker={worker_id} job_id={job_id}"
+            logger.critical(msg)
+            if self._critical_error is None:
+                self._critical_error = RuntimeError(msg)
+            self._job_event.set()  # wake PerformSimulations immediately
+            request_server_shutdown(timeout=2.0)  # best-effort graceful stop
 
         self._completed_jobs[job_id] = request
         del self._running_jobs[job_id]
@@ -401,10 +437,12 @@ def request_server_shutdown(timeout: float | None = 2.0) -> None:
                 logger.info(
                     "request_server_shutdown: initiating graceful server.stop()"
                 )
+                # Use an explicit grace period value; 0.0 means "stop quickly"
+                # while still going through gRPC's normal shutdown path.
                 if _SERVER_LOOP is not None:
-                    _SERVER_LOOP.create_task(_SERVER.stop(grace=None))
+                    _SERVER_LOOP.create_task(_SERVER.stop(grace=0.0))
                 else:
-                    asyncio.create_task(_SERVER.stop(grace=None))
+                    asyncio.create_task(_SERVER.stop(grace=0.0))
         except Exception:
             logger.exception("Error while requesting server shutdown")
 

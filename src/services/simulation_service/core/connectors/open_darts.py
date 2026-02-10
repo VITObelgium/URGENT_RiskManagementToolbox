@@ -26,7 +26,6 @@ from .common import (
     JsonPath,
     Point,
     SimulationResults,
-    SimulationResultType,
     SimulationStatus,
     WellManagementServiceResultSchema,
     WellName,
@@ -111,8 +110,8 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
                     config = json.load(f)
                 if isinstance(config, str):
                     config = json.loads(config)
-            except Exception:
-                logger.error("Failed to read configuration file.")
+            except Exception as e:
+                logger.error(f"Failed to read configuration file: {e}.")
                 sys.exit(1)
         else:
             # For legacy reason, allowing passing json string directly
@@ -149,6 +148,7 @@ class OpenDartsConnector(ConnectorInterface):
     @staticmethod
     def run(
         config_path: JsonPath,
+        user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         # Choose runner implementation via environment. Default uses subprocess runner.
@@ -163,9 +163,13 @@ class OpenDartsConnector(ConnectorInterface):
 
         if runner_mode == "thread":
             thread_runner = ThreadRunner(subprocess_runner)
-            return thread_runner.run(config_path, stop)
+            return thread_runner.run(
+                config_path, user_cost_function_with_default_values, stop
+            )
 
-        return subprocess_runner.run(config_path, stop)
+        return subprocess_runner.run(
+            config_path, user_cost_function_with_default_values, stop
+        )
 
     @staticmethod
     def _get_broadcast_results(
@@ -173,33 +177,24 @@ class OpenDartsConnector(ConnectorInterface):
     ) -> SimulationResults:
         template = OpenDartsConnector.MsgTemplate
         re_key = r"(\w+)"  # str
-        re_value = r"\[?([\d.,\s]+)\]?"  # float or sequence of floats
+        re_value = r"([+-]?\d+(?:\.\d+)?)"  # float
         pattern = template.format(re_key, re_value)
         matches = re.findall(pattern, stdout)
-
-        results = defaultdict(list)
-        value: float | Sequence[float]
+        results: dict[str, float] = {}
         for key, raw_value in matches:
-            raw_value = raw_value.strip()
-            if any(x in raw_value for x in [",", " "]):
-                value = [float(v) for v in re.split(r"[,\s]+", raw_value) if v]
-            else:
-                value = float(raw_value)
-            results[key].append(value)
-
-        # Simplify output if single values per key
-        return {k: v[0] if len(v) == 1 else v for k, v in results.items()}
+            results[key] = float(raw_value.strip())
+        return results
 
     @staticmethod
-    def broadcast_result(
-        key: SimulationResultType, value: float | Sequence[float]
-    ) -> None:
+    def broadcast_result(key: str, value: float) -> None:
         """
         Use for broadcast given simulation results to stdout
             key: SimulationResultsType
-            value: float or sequence of floats
+            value: float
         """
-        broadcast_template = OpenDartsConnector.MsgTemplate.format(key, value)
+        if not isinstance(value, (int, float)):
+            raise ValueError(f"Value must be a number, got {type(value).__name__}")
+        broadcast_template = OpenDartsConnector.MsgTemplate.format(key, float(value))
         print(broadcast_template)
 
     @staticmethod

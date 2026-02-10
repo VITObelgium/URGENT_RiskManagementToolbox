@@ -14,8 +14,9 @@ if _missing_dependencies:
 del _hard_dependencies, _dependency, _missing_dependencies
 
 from services.well_management_service.core.api import (  # noqa: F401, E402
-    WellManagementService,
+    WellDesignService,
+    WellDesignServiceResponse,
     WellModel,
 )
 
-__all__ = ["WellManagementService", "WellModel"]
+__all__ = ["WellDesignService", "WellModel", "WellDesignServiceResponse"]

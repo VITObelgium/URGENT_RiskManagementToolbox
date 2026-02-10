@@ -5,23 +5,25 @@ from common import OptimizationStrategy
 from logger import get_logger
 from services.problem_dispatcher_service.core.builder import TaskBuilder
 from services.problem_dispatcher_service.core.models import (
+    LinearInequalities,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     ServiceType,
 )
 from services.problem_dispatcher_service.core.service.handlers import (
     ProblemTypeHandler,
-    WellPlacementHandler,
+    WellDesignHandler,
 )
-from services.problem_dispatcher_service.core.utils import CandidateGenerator
+from services.problem_dispatcher_service.core.utils import (
+    DEFAULT_SEPARATOR,
+    CandidateGenerator,
+    convert_key_separator,
+)
+from services.shared import Boundaries
 from services.solution_updater_service import ControlVector
 
-PROBLEM_TYPE_HANDLERS: dict[str, ProblemTypeHandler] = {
-    "well_placement": WellPlacementHandler(),
-}
-
-PROBLEM_TYPE_TO_SERVICE_TYPE: dict[str, ServiceType] = {
-    "well_placement": ServiceType.WellManagementService,
+PROBLEM_TYPE_HANDLERS: dict[ServiceType, ProblemTypeHandler] = {
+    ServiceType.WellDesignService: WellDesignHandler(),
 }
 
 
@@ -42,16 +44,17 @@ class ProblemDispatcherService:
                 self._problem_definition.optimization_parameters.population_size
             )
             self._handlers = PROBLEM_TYPE_HANDLERS
-            self._service_type_map = PROBLEM_TYPE_TO_SERVICE_TYPE
             self._initial_state = self._build_initial_state()
-            self._boundaries = self._build_boundaries()
-            opt_params = self._problem_definition.optimization_parameters
-            self._linear_inequalities: dict[str, list] | None = getattr(
-                opt_params, "linear_inequalities", None
+
+            self._linear_inequalities = (
+                self._problem_definition.optimization_parameters.linear_inequalities
             )
-            self._task_builder = TaskBuilder(
-                self._initial_state, self._handlers, self._service_type_map
+            self._task_builder = TaskBuilder(self._initial_state, self._handlers)
+            self._full_key_boundaries = self._build_full_key_boundaries()
+            self._full_key_linear_inequalities = (
+                self._build_full_key_linear_inequalities()
             )
+
             self.logger.debug("ProblemDispatcherService initialized successfully.")
         except Exception as e:
             self.logger.error(
@@ -60,8 +63,12 @@ class ProblemDispatcherService:
             raise
 
     @property
-    def optimization_strategy(self) -> OptimizationStrategy:
-        return self._problem_definition.optimization_parameters.optimization_strategy
+    def optimization_objectives(self) -> dict[str, OptimizationStrategy]:
+        return self._problem_definition.optimization_parameters.objectives
+
+    @property
+    def expected_optimization_function_names(self) -> list[str]:
+        return list(self.optimization_objectives.keys())
 
     @property
     def max_generation(self) -> int:
@@ -72,29 +79,20 @@ class ProblemDispatcherService:
         return self._n_size
 
     @property
-    def patience(self) -> int:
-        return self._problem_definition.optimization_parameters.patience
+    def max_stall_generations(self) -> int:
+        return self._problem_definition.optimization_parameters.max_stall_generations
 
     @property
-    def boundaries(self) -> dict[str, tuple[float, float]]:
-        return self._boundaries
+    def full_key_boundaries(self) -> dict[str, Boundaries]:
+        return self._full_key_boundaries
 
     @property
-    def linear_inequalities(self) -> dict[str, list] | None:
-        return self._linear_inequalities
+    def full_key_linear_inequalities(self) -> LinearInequalities | None:
+        return self._full_key_linear_inequalities
 
     def process_iteration(
         self, next_iter_solutions: list[ControlVector] | None = None
     ) -> ProblemDispatcherServiceResponse:
-        """
-        Process one iteration of generating or processing solutions.
-
-        Args:
-            next_iter_solutions: Existing solutions from the previous iteration, if any.
-
-        Returns:
-            ProblemDispatcherServiceResponse: Response containing solution candidates.
-        """
         self.logger.debug("Processing iteration.")
         self.logger.debug(
             "Processing iteration. next_iter_solutions: %s",
@@ -104,7 +102,7 @@ class ProblemDispatcherService:
         try:
             if next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
-                    self._boundaries,
+                    self._full_key_boundaries,
                     self._n_size,
                     random.uniform,
                     self._initial_state,
@@ -133,14 +131,6 @@ class ProblemDispatcherService:
         log_message: str,
         merge_results: bool = False,
     ) -> dict[str, Any]:
-        """
-        Shared logic to process problem items for state building or constraints.
-
-        Args:
-            process_func (Callable): Function to process the problem items.
-            log_message (str): Log message indicating the operation.
-            merge_results (bool): If True, merge the processed results into one dictionary.
-        """
         self.logger.debug(f"Processing problem items: {log_message}")
         try:
             # Add type annotation for the result variable
@@ -170,27 +160,34 @@ class ProblemDispatcherService:
             raise
 
     def _build_initial_state(self) -> dict[str, Any]:
-        """
-        Build the initial state for the problem handler.
-
-        Returns:
-            dict[str, Any]: Initial state based on the problem definition.
-        """
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_initial_state(items),
             log_message="Building initial state",
             merge_results=False,
         )
 
-    def _build_boundaries(self) -> dict[str, tuple[float, float]]:
-        """
-        Build problem constraints.
-
-        Returns:
-            dict[str, tuple[float, float]]: Boundaries of the problem.
-        """
+    def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
         return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_boundaries(items),
+            process_func=lambda handler, items: handler.build_full_key_boundaries(
+                items
+            ),
             log_message="Building boundaries",
             merge_results=True,
+        )
+
+    def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
+        if self._linear_inequalities is None:
+            return None
+        return LinearInequalities(
+            **{
+                "A": [
+                    {
+                        convert_key_separator(k, output_separator=DEFAULT_SEPARATOR): v
+                        for (k, v) in row.items()
+                    }
+                    for row in self._linear_inequalities.A
+                ],
+                "b": self._linear_inequalities.b,
+                "sense": self._linear_inequalities.sense,
+            }
         )

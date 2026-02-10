@@ -2,6 +2,10 @@ import json
 import os
 from typing import Any
 
+import grpc
+import numpy as np
+import numpy.typing as npt
+
 from logger import configure_logger, get_logger
 from logger.utils import zip_results
 from orchestration.risk_management_service import run_risk_management
@@ -10,7 +14,7 @@ from services.problem_dispatcher_service.core.models import ProblemDispatcherDef
 
 def risk_management(
     config_file: str, model_file: str, use_docker: bool = False
-) -> tuple[float, dict[str, Any]] | None:
+) -> tuple[float | npt.NDArray[np.float64], dict[str, Any]] | None:
     """
     Run risk management with specified parameters without using argparse.
 
@@ -54,8 +58,26 @@ def risk_management(
         )
         logger.info("Risk management process completed successfully.")
         return result
+    except grpc.RpcError as e:
+        code = None
+        details = None
+        try:
+            code = e.code()
+            details = e.details()
+        except Exception:
+            pass
+
+        if code == grpc.StatusCode.ABORTED:
+            logger.critical(
+                "Risk management stopped because simulation server aborted (details=%s).",
+                details,
+            )
+            return None
+
+        logger.error("An error occurred: %s", e)
+        raise
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
+        logger.error("An error occurred: %s", e)
         raise
     finally:
         try:

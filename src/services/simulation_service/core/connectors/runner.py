@@ -17,7 +17,6 @@ from logger import get_logger, stream_reader
 from .common import (
     JsonPath,
     SimulationResults,
-    SimulationResultType,
     SimulationStatus,
 )
 from .conn_utils import ManagedSubprocess, get_timeout_value
@@ -36,7 +35,10 @@ def _get_base_environ() -> dict[str, str]:
 
 class SimulationRunner(Protocol):
     def run(
-        self, config: JsonPath, stop: threading.Event | None = None
+        self,
+        config: JsonPath,
+        user_cost_function_with_default_values: SimulationResults,
+        stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]: ...
 
 
@@ -57,7 +59,10 @@ class SubprocessRunner:
         self._timeout_duration = get_timeout_value()
 
     def run(
-        self, config: JsonPath, stop: threading.Event | None = None
+        self,
+        config: JsonPath,
+        user_cost_function_with_default_values: SimulationResults,
+        stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         managed_factory = self._managed_subprocess_factory
         if managed_factory is None:
@@ -67,11 +72,6 @@ class SubprocessRunner:
             raise RuntimeError(
                 "SubprocessRunner requires a broadcast_results_parser to be provided"
             )
-
-        default_failed_value: float = float("nan")
-        default_failed_results: SimulationResults = {
-            k: default_failed_value for k in SimulationResultType
-        }
 
         if self._repo_root_getter and self._worker_id_getter:
             try:
@@ -144,7 +144,10 @@ class SubprocessRunner:
                                     except subprocess.TimeoutExpired:
                                         process.kill()
                                         process.wait()
-                                return SimulationStatus.FAILED, default_failed_results
+                                return (
+                                    SimulationStatus.FAILED,
+                                    user_cost_function_with_default_values,
+                                )
                             try:
                                 process.wait(timeout=poll_step)
                                 break
@@ -173,7 +176,10 @@ class SubprocessRunner:
                             manager.stdout_thread.join(timeout=2)
                         if manager.stderr_thread and manager.stderr_thread.is_alive():
                             manager.stderr_thread.join(timeout=2)
-                        return SimulationStatus.TIMEOUT, default_failed_results
+                        return (
+                            SimulationStatus.TIMEOUT,
+                            user_cost_function_with_default_values,
+                        )
 
                     if process.returncode != 0:
                         stderr_tail = "\n".join(manager.stderr_lines[-100:])
@@ -201,7 +207,10 @@ class SubprocessRunner:
                                 logger.error(
                                     "Detected HDF5 file locking error from h5py. The worker sets HDF5_USE_FILE_LOCKING=FALSE,\nbut if the error persists, ensure each worker runs in an isolated directory and no other process\nholds the same HDF5 file open."
                                 )
-                        return SimulationStatus.FAILED, default_failed_results
+                        return (
+                            SimulationStatus.FAILED,
+                            user_cost_function_with_default_values,
+                        )
 
                     if manager.stdout_thread and manager.stdout_thread.is_alive():
                         manager.stdout_thread.join(timeout=5)
@@ -210,21 +219,45 @@ class SubprocessRunner:
 
                     full_stdout = "\n".join(manager.stdout_lines)
                     broadcast_results = self._broadcast_results_parser(full_stdout)
-                    return SimulationStatus.SUCCESS, broadcast_results
 
+                    user_cost_function_with_simulation_results = (
+                        _update_user_cost_function_with_simulation_results(
+                            user_cost_function_with_default_values, broadcast_results
+                        )
+                    )
+
+                    return (
+                        SimulationStatus.SUCCESS,
+                        user_cost_function_with_simulation_results,
+                    )
+
+            except KeyError as e:
+                logger.exception(
+                    f"Broadcast results keys do not match user cost-function keys. {e}"
+                )
+                return (
+                    SimulationStatus.EXCEPTION,
+                    user_cost_function_with_default_values,
+                )
             except FileNotFoundError:
                 logger.exception(
                     "Failed to start subprocess. Command '%s' not found.",
                     " ".join(command),
                 )
-                return SimulationStatus.FAILED, default_failed_results
+                return (
+                    SimulationStatus.EXCEPTION,
+                    user_cost_function_with_default_values,
+                )
             except Exception as e:
                 logger.exception(
                     "An error occurred while running the simulation subprocess: %s", e
                 )
-                return SimulationStatus.FAILED, default_failed_results
+                return (
+                    SimulationStatus.EXCEPTION,
+                    user_cost_function_with_default_values,
+                )
 
-        return SimulationStatus.FAILED, default_failed_results
+        return SimulationStatus.FAILED, user_cost_function_with_default_values
 
     def _default_managed_subprocess_factory(*a, **k):
         return ManagedSubprocess(*a, **k)
@@ -239,7 +272,37 @@ class ThreadRunner:
         self._subprocess_runner = subprocess_runner or SubprocessRunner()
 
     def run(
-        self, config: JsonPath, stop: threading.Event | None = None
+        self,
+        config: JsonPath,
+        user_cost_function_with_default_values: SimulationResults,
+        stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         os.environ.setdefault("OPEN_DARTS_THREAD_MODE", "1")
-        return self._subprocess_runner.run(config, stop)
+        return self._subprocess_runner.run(
+            config, user_cost_function_with_default_values, stop
+        )
+
+
+def _update_user_cost_function_with_simulation_results(
+    user_cost_function_with_default_values: SimulationResults,
+    simulation_results: SimulationResults,
+) -> SimulationResults:
+    """
+    Compare keys of user_cost_function_with_default_values and simulation_results.
+    If keys mismatch -> raise.
+    Else -> return user_cost updated with values from simulation_results.
+    """
+    user_keys = set(user_cost_function_with_default_values.keys())
+    sim_keys = set(simulation_results.keys())
+
+    if user_keys != sim_keys:
+        missing_in_sim = sorted(user_keys - sim_keys)
+        extra_in_sim = sorted(sim_keys - user_keys)
+        raise KeyError(
+            "Broadcast results keys do not match user cost-function keys. "
+            f"present in config and missing in connector={missing_in_sim}, present in connector and missing in config={extra_in_sim}"
+        )
+
+    updated = dict(user_cost_function_with_default_values)
+    updated.update(simulation_results)
+    return updated

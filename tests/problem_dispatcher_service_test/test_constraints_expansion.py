@@ -1,13 +1,16 @@
+import numpy as np
 import pytest
 
+from common import OptimizationStrategy
 from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
+from services.shared import Boundaries
 
 
 @pytest.fixture
 def md_problem_definition():
     return {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "INJ",
                 "initial_state": {
@@ -16,7 +19,7 @@ def md_problem_definition():
                     "md": 2500,
                     "perforations": {"p1": {"start_md": 2100, "end_md": 2400.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "wellhead": {
                         "x": {"lb": 10, "ub": 3190},
                         "y": {"lb": 10, "ub": 3190},
@@ -38,7 +41,7 @@ def md_problem_definition():
                     "md": 2500,
                     "perforations": {"p1": {"start_md": 0.0, "end_md": 2500.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "wellhead": {
                         "x": {"lb": 10, "ub": 3190},
                         "y": {"lb": 10, "ub": 3190},
@@ -48,10 +51,10 @@ def md_problem_definition():
             },
         ],
         "optimization_parameters": {
-            "optimization_strategy": "minimize",
+            "objectives": {"metrics1": "minimize"},
             "population_size": 10,
             "linear_inequalities": {
-                "A": [{"INJ.md": 1.0, "PRO.md": 1.0}],
+                "A": [{"well_design.INJ.md": 1.0, "well_design.PRO.md": 1.0}],
                 "b": [5000.0],
                 "sense": ["<="],
             },
@@ -60,18 +63,25 @@ def md_problem_definition():
 
 
 def test_boundaries_include_md(md_problem_definition):
-    md_problem_definition["optimization_parameters"]["population_size"] = 1
+    md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
-    boundaries = svc.boundaries
-    assert boundaries["well_placement#INJ#md"] == (2000.0, 2700.0)
-    assert boundaries["well_placement#PRO#md"] == (2000.0, 2700.0)
-    assert boundaries["well_placement#INJ#perforations#p1#start_md"] == (2100.0, 2500.0)
+    boundaries = svc.full_key_boundaries
+    assert boundaries["well_design#INJ#md"] == Boundaries(
+        **{"lb": 2000.0, "ub": 2700.0}
+    )
+    assert boundaries["well_design#PRO#md"] == Boundaries(
+        **{"lb": 2000.0, "ub": 2700.0}
+    )
+    assert boundaries["well_design#INJ#perforations#p1#start_md"] == Boundaries(
+        **{"lb": 2100.0, "ub": 2500.0}
+    )
 
 
 def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
+    np.random.seed(42)
     md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition
@@ -81,8 +91,8 @@ def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
     assert len(resp.solution_candidates) == 2
     for idx, sc in enumerate(resp.solution_candidates):
         task = next(iter(sc.tasks.values()))
-        md_inj = task.control_vector.items["well_placement#INJ#md"]
-        md_pro = task.control_vector.items["well_placement#PRO#md"]
+        md_inj = task.control_vector.items["well_design#INJ#md"]
+        md_pro = task.control_vector.items["well_design#PRO#md"]
         assert 2000.0 <= md_inj <= 2700.0
         assert 2000.0 <= md_pro <= 2700.0
 
@@ -95,15 +105,17 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
 
     from services.solution_updater_service.core.engines.pso import PSOEngine
 
-    md_problem_definition["optimization_parameters"]["population_size"] = 1
+    md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition
     )
     svc = ProblemDispatcherService(problem_definition=problem_definition)
-    boundaries = svc.boundaries
-    lb, ub = boundaries["well_placement#INJ#md"]
+    boundaries = svc.full_key_boundaries
+    bnd = boundaries["well_design#INJ#md"]
+    lb = bnd.lb
+    ub = bnd.ub
 
-    engine = PSOEngine(svc.optimization_strategy, seed=42)
+    engine = PSOEngine(seed=42)
 
     parameters = np.array([[2500.0], [2400.0], [2600.0]], dtype=float)
 
@@ -114,7 +126,7 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
     ub_arr = np.array([ub], dtype=float)
 
     new_positions = engine.update_solution_to_next_iter(
-        parameters, results, lb_arr, ub_arr
+        parameters, results, lb_arr, ub_arr, {0: OptimizationStrategy.MINIMIZE}
     )
 
     # Final positions must be within bounds
@@ -138,8 +150,8 @@ def test_initial_generation_respects_linear_inequalities(md_problem_definition):
     for sc in resp.solution_candidates:
         payload = next(iter(sc.tasks.values()))
         cv = payload.control_vector.items
-        inj = cv["well_placement#INJ#md"]
-        pro = cv["well_placement#PRO#md"]
+        inj = cv["well_design#INJ#md"]
+        pro = cv["well_design#PRO#md"]
 
         assert 2000.0 <= inj <= 2700.0
         assert 2000.0 <= pro <= 2700.0
@@ -149,7 +161,7 @@ def test_initial_generation_respects_linear_inequalities(md_problem_definition):
 
 def test_jwell_constraints_respected():
     problem_definition = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "J1",
                 "initial_state": {
@@ -163,14 +175,14 @@ def test_jwell_constraints_respected():
                     "md_step": 20.0,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "md_linear1": {"lb": 400, "ub": 600},
                     "azimuth": {"lb": 0, "ub": 180},
                 },
             }
         ],
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
     }
@@ -182,8 +194,8 @@ def test_jwell_constraints_respected():
         task = next(iter(sc.tasks.values()))
         cv = task.control_vector.items
 
-        md_l1 = cv["well_placement#J1#md_linear1"]
-        azi = cv["well_placement#J1#azimuth"]
+        md_l1 = cv["well_design#J1#md_linear1"]
+        azi = cv["well_design#J1#azimuth"]
 
         assert 400 <= md_l1 <= 600
         assert 0 <= azi <= 180
@@ -191,7 +203,7 @@ def test_jwell_constraints_respected():
 
 def test_hwell_constraints_respected():
     problem_definition = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "H1",
                 "initial_state": {
@@ -203,14 +215,14 @@ def test_hwell_constraints_respected():
                     "md_step": 10.0,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "TVD": {"lb": 900, "ub": 1100},
                     "md_lateral": {"lb": 1400, "ub": 1600},
                 },
             }
         ],
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
     }
@@ -223,8 +235,8 @@ def test_hwell_constraints_respected():
         task = next(iter(sc.tasks.values()))
         cv = task.control_vector.items
 
-        tvd = cv["well_placement#H1#TVD"]
-        lat = cv["well_placement#H1#md_lateral"]
+        tvd = cv["well_design#H1#TVD"]
+        lat = cv["well_design#H1#md_lateral"]
 
         assert 900 <= tvd <= 1100
         assert 1400 <= lat <= 1600
@@ -233,7 +245,7 @@ def test_hwell_constraints_respected():
 def test_linear_inequalities_mixed_wells():
     # Constraint: J1.md_linear1 + I1.md <= 1000
     problem_definition = {
-        "well_placement": [
+        "well_design": [
             {
                 "well_name": "J1",
                 "initial_state": {
@@ -247,7 +259,7 @@ def test_linear_inequalities_mixed_wells():
                     "md_step": 20.0,
                     "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "md_linear1": {"lb": 400, "ub": 600},
                 },
             },
@@ -259,15 +271,15 @@ def test_linear_inequalities_mixed_wells():
                     "md": 500.0,
                     "perforations": {"p1": {"start_md": 0.0, "end_md": 500.0}},
                 },
-                "optimization_constraints": {
+                "parameter_bounds": {
                     "md": {"lb": 400, "ub": 600},
                 },
             },
         ],
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "linear_inequalities": {
-                "A": [{"J1.md_linear1": 1.0, "I1.md": 1.0}],
+                "A": [{"well_design.J1.md_linear1": 1.0, "well_design.I1.md": 1.0}],
                 "b": [1000.0],
                 "sense": ["<="],
             },
@@ -281,7 +293,7 @@ def test_linear_inequalities_mixed_wells():
         task = next(iter(sc.tasks.values()))
         cv = task.control_vector.items
 
-        j1_md = cv["well_placement#J1#md_linear1"]
-        i1_md = cv["well_placement#I1#md"]
+        j1_md = cv["well_design#J1#md_linear1"]
+        i1_md = cv["well_design#I1#md"]
 
         assert j1_md + i1_md <= 1000.0 + 1e-6

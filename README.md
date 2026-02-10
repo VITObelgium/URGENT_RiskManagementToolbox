@@ -208,15 +208,15 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    from connectors.open_darts import OpenDartsConnector
 
    OpenDartsConnector.broadcast_result(
-       SimulationResultType.Heat,
+       "Heat",
        heat_value
    )
    ```
 
-   The result is transmitted back to the Toolbox with the corresponding `SimulationResultType`.
+   The result is transmitted back to the Toolbox with the corresponding name as ex.: "HEAT"".
+> Note: The parameters name must be the same as the one defined in the run configuration file.
 
-   > **Note:**
-   > Currently, only `SimulationResultType.Heat` is supported.
+
 
 6. **Optimization readiness**
 
@@ -239,38 +239,41 @@ Global toolbox settings are defined in `pyproject.toml` under the `[toolbox-conf
 ### 5. Run configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s), initial state, and variable constraints.
 
-#### 5.1 Well placement, trajectory and perforation
+Configuration file define services to be used for simulation and optimization as well as the global optimization parameters as objectives or linear inequality constraints.
+
 The toolbox expects **one JSON file** that defines:
 
-1. What wells exist and how they are initialized
-2. Which parameters are optimized (and their bounds)
+1. Services name and parameters for optimization (with their bounds)
 3. How the optimization algorithm is configured
+
 
 ### Top-level structure:
 
 ```json
 {
-  "well_placement": [...],
+  "=== SERVICE NAME ===": service item(s),
   "optimization_parameters": { ... }
 }
 ```
 
-#### Mandatory top-level fields
+#### Implemented services
 
-| Field | Type | Required | Description |
-|-----|----|----|----|
-| `well_placement` | array | ✅ | List of wells participating placement, trajectory and perforation optimization |
-| `optimization_parameters` | object | ✅ | Global optimization settings |
+| Service name  | Description                                                            |
+|---------------|------------------------------------------------------------------------|
+| `well_design` | Service sesponsible for well(s) placement, trajectory and completion.  |
 
-### Well Placement Section
 
-`well_placement` is an array of objects:
+
+
+### Well design service
+
+`well_design` expecting is an array of objects (service items):
 
 ```json
 {
   "well_name": "INJ",
   "initial_state": { ... },
-  "optimization_constraints": { ... }
+  "parameter_bounds": { ... }
 }
 ```
 
@@ -280,7 +283,7 @@ The toolbox expects **one JSON file** that defines:
 |----|----|----|
 | `well_name` | ✅ | Unique identifier used across the configuration |
 | `initial_state` | ✅ | Defines well initial (user defined) geometry and completion |
-| `optimization_constraints` | ✅ | Selects which parameters (from initial state) are optimized, with the lower and upper range |
+| `parameter_bounds` | ✅ | Selects which parameters (from initial state) are optimized, with the lower and upper range |
 
 ### Initial state
 The `initial_state` defines the **baseline geometry** of a well.
@@ -468,7 +471,7 @@ Example:
 ### Optimization constraints
 
 
-Optimization constraints (`optimization_constraints`) define the boundaries for individual well parameters
+Optimization constraints (`parameter_bounds`) define the boundaries for individual well parameters
 
 ####  Parameter Boundaries
 Boundaries define the search space (Lower Bound and Upper Bound) for specific well attributes.
@@ -477,7 +480,7 @@ Boundaries define the search space (Lower Bound and Upper Bound) for specific we
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `optimization_constraints` | Dictionary | Maps a variable name to a `[Min, Max]` tuple. |
+| `parameter_bounds` | Dictionary | Maps a variable name to a {"lb": float, "ub": float} |
 
 > Important!
 >> For nested parameters like wellhead coordinates or perforations, the following naming convention is used:
@@ -486,7 +489,7 @@ Boundaries define the search space (Lower Bound and Upper Bound) for specific we
 
 Example:
 ```JSON
-  "optimization_constraints": {
+  "parameter_bounds": {
     "wellhead": {
       "x": {
         "lb": 10,
@@ -519,17 +522,17 @@ The toolbox uses the `optimization_parameters` block to define how the optimizat
 ####
 These settings control the execution and termination of the optimization process.
 
-| Parameter | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `optimization_strategy` | String | `maximize` | Direction of the objective function: `maximize` or `minimize`. |
-| `max_generations` | Integer | `10` | Maximum number of iterations for the algorithm. |
-| `population_size` | Integer | `10` | Number of solution candidates to evaluate per generation. |
-| `patience` | Integer | `10` | Generations to wait for improvement before early stopping. |
-| `worker_count` | Integer | `4` | Number of parallel simulation workers (limited by physical CPU cores). |
+| Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
+| :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `objectives` | dict[str, str] | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength: "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
+| `max_generations` | Integer        | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
+| `population_size` | Integer        | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
+| `max_stall_generations` | Integer        | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
+| `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
 
 #### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 
-- **A**: List of coefficient maps. Variables must be named as `WellName.attribute` (e.g., `PRO.md` or `INJ.perforations.p1.start_md`).
+- **A**: List of coefficient maps. Variables must be named as `service_name.attribute.subattribute` (e.g., `well_design.PRO.md` or `well_design.INJ.perforations.p1.start_md`).
 - **b**: List of constant values (right-hand side of the inequality).
 - **sense**: List of operators (`<=`, `>=`, `<`, `>`). Defaults to `<=` if omitted.
 
@@ -543,12 +546,12 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
 
 ```json
 "optimization_parameters": {
-  "optimization_strategy": "maximize",
+  "objectives": {"HEAT": "maximize"},
   "population_size": 20,
   "linear_inequalities": {
     "A": [
-      { "INJ.md": 1.0, "PRO.md": 1.0 },
-      { "INJ.md": 1.0, "PRO.md": 1.0 }
+      { "well_design.INJ.md": 1.0, "well_design.PRO.md": 1.0 },
+      { "well_design.INJ.md": 1.0, "well_design.PRO.md": 1.0 }
     ],
     "b": [1200.0, 5000.0],
     "sense": [">=", "<="]
@@ -557,6 +560,9 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
 ```
 ## Configuration example
 ### **Case Summary:**
+
+The Well design service will be use to determine the optimal wells placement and trajectory for maximizing the heat production.
+
 1. **Search Space**:
     - The injector (`INJ`) is confined to a 900m x 900m square in the bottom-left area.
     - The producer (`PRO`) is confined to a 1500m x 1500m square in the top-right area.
@@ -567,10 +573,12 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
 4. **Completions**:
     - `INJ` has a fixed 500m perforation at the toe.
     - `PRO` has no perforations defined in , so the system will default to perforating its entire length. `initial_state`
+5. **Optimization strategy**:
+	User defined parameter "HEAT" should be "maximized"
 
 ```json
 {
-  "well_placement": [
+  "well_design": [
     {
       "well_name": "INJ",
       "initial_state": {
@@ -589,7 +597,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           }
         }
       },
-      "optimization_constraints": {
+      "parameter_bounds": {
         "wellhead": {
           "x": {
             "lb": 100.0,
@@ -624,7 +632,7 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
           }
         }
       },
-      "optimization_constraints": {
+      "parameter_bounds": {
         "wellhead": {
           "x": {
             "lb": 1000.0,
@@ -643,16 +651,16 @@ To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5
     }
   ],
   "optimization_parameters": {
-    "optimization_strategy": "maximize",
+  "objectives": {"HEAT": "maximize"},
     "max_generations": 50,
     "population_size": 20,
-    "patience": 5,
+    "max_stall_generations": 5,
     "worker_count": 4,
     "linear_inequalities": {
       "A": [
         {
-          "INJ.md": 1.0,
-          "PRO.md": 1.0
+          "well_design.INJ.md": 1.0,
+          "well_design.PRO.md": 1.0
         }
       ],
       "b": [

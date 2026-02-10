@@ -1,5 +1,6 @@
 import pytest
 
+from services.solution_updater_service.core.models import OptimizationConstrains
 from services.solution_updater_service.core.models.user import (
     ControlVector,
     CostFunctionResults,
@@ -89,11 +90,14 @@ from services.solution_updater_service.core.models.user import (
     ],
 )
 def test_solution_candidates_params_in_order(solution_candidates, expected_exception):
+    oc = OptimizationConstrains(
+        boundaries={"param1": {"lb": -1, "ub": 1}, "param2": {"lb": 0, "ub": 2}}
+    )
     if expected_exception:
         with pytest.raises(expected_exception):
             # Create the OptimizationServiceConfig instance
             config = SolutionUpdaterServiceRequest(
-                solution_candidates=solution_candidates
+                solution_candidates=solution_candidates, optimization_constrains=oc
             )
             # Extract sorted keys from the first candidate's control vector
             sorted_keys = sorted(
@@ -107,7 +111,7 @@ def test_solution_candidates_params_in_order(solution_candidates, expected_excep
     else:
         # Create the OptimizationServiceConfig instance
         config = SolutionUpdaterServiceRequest(
-            solution_candidates=solution_candidates,
+            solution_candidates=solution_candidates, optimization_constrains=oc
         )
         # Extract sorted keys from the first candidate's control vector
         sorted_keys = sorted(config.solution_candidates[0].control_vector.items.keys())

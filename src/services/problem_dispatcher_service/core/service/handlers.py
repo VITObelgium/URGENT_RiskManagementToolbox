@@ -1,10 +1,11 @@
 from typing import Any, Protocol
 
 from services.problem_dispatcher_service.core.models import (
-    OptimizationConstrains,
-    VariableBnd,
-    WellPlacementItem,
+    ParameterBoundaries,
+    WellDesignItem,
 )
+from services.problem_dispatcher_service.core.utils import DEFAULT_SEPARATOR, join_key
+from services.shared import Boundaries, ServiceType
 
 
 class ProblemTypeHandler(Protocol):
@@ -25,16 +26,16 @@ class ProblemTypeHandler(Protocol):
 
         ...
 
-    def build_boundaries(
-        self, items: list[Any], *args: Any, **kwargs: Any
-    ) -> dict[str, tuple[float, float]]:
+    def build_full_key_boundaries(
+        self, items: list[Any], separator: str = DEFAULT_SEPARATOR
+    ) -> dict[str, Boundaries]:
         """
         Build the constraints for the optimization problem.
 
         Args:
             items (list[Any]): A list of items to build constraints from.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
+            separator (str): Separator used to construct constraint keys.
+
 
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
@@ -58,30 +59,37 @@ class ProblemTypeHandler(Protocol):
         ...
 
 
-class WellPlacementHandler(ProblemTypeHandler):
-    def build_initial_state(self, items: list[WellPlacementItem]) -> dict[str, Any]:
+class WellDesignHandler(ProblemTypeHandler):
+    def build_initial_state(self, items: list[WellDesignItem]) -> dict[str, Any]:
         return {item.well_name: item.initial_state.model_dump() for item in items}
 
-    def build_boundaries(
+    def build_full_key_boundaries(
         self,
-        items: list[WellPlacementItem],
-        separator: str = "#",
-    ) -> dict[str, tuple[float, float]]:
+        items: list[WellDesignItem],
+        separator: str = DEFAULT_SEPARATOR,
+    ) -> dict[str, Boundaries]:
         """
         Build the constraints for the well placement optimization problem.
         Args:
-            items (list[WellPlacementItem]): A list of well placement items.
+            items (list[WellDesignItem]): A list of well placement items.
             separator (str): Separator used to construct constraint keys.
         Returns:
             dict[str, tuple[float, float]]: A dictionary of constraints with keys as identifiers
             and values as the bounds (lower, upper).
         """
+
         result = {}
         for item in items:
             # Add existing constraints (e.g., wellhead x, y)
-            flattened = _flatten_optimization_parameters(item.optimization_constraints)
+            flattened = _flatten_optimization_parameters(item.parameter_bounds)
             for key, value in flattened.items():
-                result[f"well_placement#{item.well_name}{separator}{key}"] = value
+                full_key = join_key(
+                    str(ServiceType.WellDesignService),
+                    item.well_name,
+                    key,
+                    separator=separator,
+                )
+                result[full_key] = Boundaries(**{"lb": value[0], "ub": value[1]})
         return result
 
     def build_service_tasks(
@@ -91,14 +99,14 @@ class WellPlacementHandler(ProblemTypeHandler):
 
 
 def _flatten_optimization_parameters(
-    optimization_parameters: OptimizationConstrains,
+    optimization_parameters: ParameterBoundaries,
     parent_key: str = "",
-    separator: str = "#",
+    separator: str = DEFAULT_SEPARATOR,
 ) -> dict[str, tuple[float, float]]:
     flat: dict[str, tuple[float, float]] = {}
     for key, value in optimization_parameters.items():
         full_key = f"{parent_key}{separator}{key}" if parent_key else key
-        if isinstance(value, VariableBnd):
+        if isinstance(value, Boundaries):
             flat[full_key] = (value.lb, value.ub)
         elif isinstance(value, dict):
             nested_flat = _flatten_optimization_parameters(value, full_key, separator)

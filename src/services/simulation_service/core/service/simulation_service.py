@@ -207,22 +207,6 @@ class SimulationService:
         Returns:
             SimulationCase: The simulation case object.
         """
-        # Handle empty or invalid results (e.g., from failed/timed-out simulations)
-        result_str = simulation.result.result
-        if result_str:
-            result_dict = str_to_json(result_str)
-            if not result_dict or "Heat" not in result_dict:
-                logger.warning(
-                    "Simulation result missing required 'Heat' field, using NaN. Result: %s",
-                    result_dict,
-                )
-                results = SimulationResults(Heat=float("nan"))
-            else:
-                results = SimulationResults(**result_dict)
-        else:
-            logger.warning("Simulation has empty result, using NaN")
-            results = SimulationResults(Heat=float("nan"))
-
         return SimulationCase(
             wells=WellDesignServiceResponse(**str_to_json(simulation.input.wells)),
             results=str_to_json(simulation.result.result),

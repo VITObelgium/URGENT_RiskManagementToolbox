@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import grpc
 import pytest
 
+from services.simulation_service.core.models.user import SimulationCase
 from services.simulation_service.core.service.simulation_service import (
     SimulationService,
 )
@@ -147,15 +148,13 @@ def test__to_grpc(mock_json_to_str, mock_control_vec, mock_input, mock_sim):
 
 @patch("services.simulation_service.core.service.simulation_service.str_to_json")
 def test__from_grpc(mock_str_to_json):
-    from services.simulation_service.core.models import SimulationCase
-
     # Order of str_to_json calls:
-    # 1. Parse result.result -> {"Heat": 0.0}
-    # 2. Parse input.wells -> {"wells": []}
+    # 1. Parse input.wells -> {"wells": []}
+    # 2. Parse result.result -> {"Heat": 0.0}
     # 3. Parse control_vector.content -> {"x": 1}
     mock_str_to_json.side_effect = [
-        {"Heat": 0.0},
         {"wells": []},
+        {"Heat": 0.0},
         {"x": 1},
     ]
 

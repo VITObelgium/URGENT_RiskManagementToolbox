@@ -8,8 +8,6 @@ import os
 import re
 import sys
 import threading
-from collections import defaultdict
-from collections.abc import Sequence
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Callable, Protocol, TypedDict

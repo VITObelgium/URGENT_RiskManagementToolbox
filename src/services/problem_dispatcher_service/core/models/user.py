@@ -106,6 +106,11 @@ UniqueWellList = Annotated[list[WellDesignItem], AfterValidator(_unique_items)]
 
 
 class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
+    """
+    Services
+    Optimization parameters
+    """
+
     well_design: UniqueWellList
     optimization_parameters: OptimizationParameters
 

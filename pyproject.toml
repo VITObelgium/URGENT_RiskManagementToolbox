@@ -1,9 +1,19 @@
 [project]
 name = "urgent-riskmanagementtoolbox"
-version = "0.1.0"
-description = ""
+version = "0.2.0"
 readme = "README.md"
 requires-python = "==3.12.*"
+authors = [
+    { name = "Damian Janiga", email = "janiga@agh.edu.pl" },
+    { name = "Tomasz Kawiak", email = "tkawiak@agh.edu.pl" },
+    { name = "Marcin Stolarczyk", email = "m.stolar2001@gmail.com"},
+    { name = "Jakub Wojnarowski", email = "wojnarow111@gmail.com"}
+]
+
+maintainers = [
+    { name = "Damian Janiga" },
+    { name = "Tomasz Kawiak" }
+]
 
 [logging.output]
 log_to_console = true
@@ -176,12 +186,12 @@ worker = { features = ["py310"], solve-group = "worker", no-default-feature = tr
 clean-logs = { cmd = "python -c \"import shutil; shutil.rmtree('log', ignore_errors=True)\"" }
 clean-orchestration = { cmd = "python -c \"import shutil; shutil.rmtree('orchestration_files', ignore_errors=True)\"" }
 clean-htmlcov = { cmd = "python -c \"import shutil; shutil.rmtree('htmlcov', ignore_errors=True)\"" }
-clean-all= { depends-on = ["clean-logs", "clean-orchestration", "clean-htmlcov"] }
+clean-all = { depends-on = ["clean-logs", "clean-orchestration", "clean-htmlcov"] }
 
 mypy = { cmd = "mypy" }
 ruff-fix = { cmd = "ruff check --fix ." }
-ruff-format-check =  { cmd = "ruff format ." }
+ruff-format-check = { cmd = "ruff format ." }
 
 lint = { depends-on = ["ruff-fix", "ruff-format-check", "mypy"] }
 
-pytest = {cmd= "pytest ."}
+pytest = { cmd = "pytest ." }

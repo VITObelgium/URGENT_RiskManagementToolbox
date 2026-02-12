@@ -1,5 +1,6 @@
 import json
 import os
+from pprint import pprint
 from typing import Any
 
 import grpc
@@ -9,7 +10,7 @@ import numpy.typing as npt
 from logger import configure_logger, get_logger
 from logger.utils import zip_results
 from orchestration.risk_management_service import run_risk_management
-from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
+from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
 
 def risk_management(
@@ -40,6 +41,7 @@ def risk_management(
             problem_definition = ProblemDispatcherDefinition.model_validate(
                 json.load(file)
             )
+            pprint(ProblemDispatcherDefinition.model_json_schema(mode="serialization"))
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
         # Always attempt to zip (even on failure)

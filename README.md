@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/Version-0.1.0-orange">
+  <img alt="Version" src="https://img.shields.io/badge/Version-0.2.0-orange">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
   <img alt="Code Quality" src="https://img.shields.io/badge/Code%20Quality-80%25%2B-yellow">
@@ -13,6 +13,25 @@
 </p>
 
 # URGENT Risk Management Toolbox
+
+## Table of Contents
+- [Introduction](#introduction)
+- [Core components](#core-components)
+- [Development Requirements](#development-requirements)
+- [Environment Installation](#environment-installation)
+- [Getting started](#getting-started)
+  - [Supported Reservoir Simulators](#supported-reservoir-simulators)
+  - [Execution modes](#execution-modes)
+  - [Reservoir simulation interoperability](#reservoir-simulation-interoperability)
+    - [OpenDarts Connector](#opendarts-connector)
+  - [Global Configuration](#global-configuration)
+  - [Run configuration file](#run-configuration-file)
+    - [Input file schemas](#input-file-schemas)
+- [Implemented services](#implemented-services)
+   - [Well design service](#well-design-service)
+- [Configuration example](#configuration-example)
+- [Known issues](#known-issues)
+- [Contact](#contact)
 
 ## Introduction
 
@@ -213,7 +232,7 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    )
    ```
 
-   The result is transmitted back to the Toolbox with the corresponding name as ex.: "HEAT"".
+   The result is transmitted back to the Toolbox with the corresponding name as ex.: "HEAT".
 > Note: The parameters name must be the same as the one defined in the run configuration file.
 
 
@@ -246,6 +265,9 @@ The toolbox expects **one JSON file** that defines:
 1. Services name and parameters for optimization (with their bounds)
 3. How the optimization algorithm is configured
 
+### Input file schemas
+
+Input configuration file is a JSON file with the structures presented in `schemas/x.y.z.json`
 
 ### Top-level structure:
 
@@ -256,7 +278,7 @@ The toolbox expects **one JSON file** that defines:
 }
 ```
 
-#### Implemented services
+## Implemented services
 
 | Service name  | Description                                                            |
 |---------------|------------------------------------------------------------------------|
@@ -524,7 +546,7 @@ These settings control the execution and termination of the optimization process
 
 | Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
 | :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `objectives` | dict[str, str] | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength: "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
+| `objectives` | dict[str, str] | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength": "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
 | `max_generations` | Integer        | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
 | `population_size` | Integer        | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
 | `max_stall_generations` | Integer        | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
@@ -675,6 +697,9 @@ The Well design service will be use to determine the optimal wells placement and
 
 
 ```
+
+## Known Issues
+ - DRMT with docker backend cannot start simulation server
 
 ## Contact
 For issues or contributions, please open a GitHub issue or contact the maintainers.

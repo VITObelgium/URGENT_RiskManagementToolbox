@@ -14,8 +14,9 @@ if _missing_dependencies:
 del _hard_dependencies, _dependency, _missing_dependencies
 
 from services.problem_dispatcher_service.core.api import (  # noqa: F401, E402
+    ProblemDispatcherDefinition,
     ProblemDispatcherService,
     ServiceType,
 )
 
-__all__ = ["ProblemDispatcherService", "ServiceType"]
+__all__ = ["ProblemDispatcherService", "ServiceType", "ProblemDispatcherDefinition"]

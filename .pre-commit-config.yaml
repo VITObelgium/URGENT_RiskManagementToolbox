@@ -37,5 +37,5 @@ repos:
         name: Run tests with coverage
         entry: bash -c "pixi run -e dev coverage run -m pytest && pixi run -e dev coverage html && pixi run -e dev coverage report"
         language: system
-        always_run: true
+        stages: [pre-push]
         pass_filenames: false

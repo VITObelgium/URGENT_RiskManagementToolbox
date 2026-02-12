@@ -1,0 +1,19 @@
+name: "PR to main only possible via dev"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify source branch
+        if: github.head_ref != 'dev'
+        run: |
+          echo "ERROR: Merges into 'main' are only allowed from 'dev'."
+          exit 1

@@ -1,16 +1,27 @@
-name: tests
+name: ci
 
 on:
   push:
     branches:
       - main
+      - dev
   pull_request:
     branches:
       - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  quality-and-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -26,11 +37,11 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-      - name: Install dependencies with pipx
+      - name: Install dependencies
         run: pixi install -e dev
-
-      - name: Install pre-commit hooks
-        run:  pixi run -e dev pre-commit install
 
       - name: Run pre-commit hooks
         run: pixi run -e dev pre-commit run -a
+
+      - name: Run tests with coverage threshold
+        run: pixi run -e dev coverage run -m pytest && pixi run -e dev coverage report

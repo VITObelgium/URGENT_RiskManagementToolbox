@@ -1,0 +1,28 @@
+name: "sync dev with main"
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: ${{ github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Sync dev with main
+        run: |
+          git fetch origin main dev
+          git checkout dev
+          git merge --no-edit origin/main
+          git push origin dev

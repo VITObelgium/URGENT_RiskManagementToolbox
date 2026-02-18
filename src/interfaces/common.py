@@ -1,6 +1,5 @@
 import json
 import os
-from pprint import pprint
 from typing import Any
 
 import grpc
@@ -41,7 +40,7 @@ def risk_management(
             problem_definition = ProblemDispatcherDefinition.model_validate(
                 json.load(file)
             )
-            pprint(ProblemDispatcherDefinition.model_json_schema(mode="serialization"))
+
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
         # Always attempt to zip (even on failure)

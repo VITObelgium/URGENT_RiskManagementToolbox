@@ -9,9 +9,10 @@ class OptimizationEngineFactory:
     @staticmethod
     def get_engine(
         engine: OptimizationEngine,
+        seed: int | None = None,
     ) -> OptimizationEngineInterface:
         match engine:
             case OptimizationEngine.PSO:
-                return PSOEngine()
+                return PSOEngine(seed=seed)
             case _:
                 raise NotImplementedError()

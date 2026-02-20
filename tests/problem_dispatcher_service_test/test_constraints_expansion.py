@@ -81,7 +81,6 @@ def test_boundaries_include_md(md_problem_definition):
 
 
 def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
-    np.random.seed(42)
     md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
         md_problem_definition
@@ -101,7 +100,6 @@ def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
 
 def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition):
     """Ensure PSO tries to move towards the unconstrained optimum (2800) but respects ub=2700."""
-    import numpy as np
 
     from services.solution_updater_service.core.engines.pso import PSOEngine
 
@@ -115,7 +113,7 @@ def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition)
     lb = bnd.lb
     ub = bnd.ub
 
-    engine = PSOEngine(seed=42)
+    engine = PSOEngine()
 
     parameters = np.array([[2500.0], [2400.0], [2600.0]], dtype=float)
 

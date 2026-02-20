@@ -71,6 +71,7 @@ def run_risk_management(
                 max_generations=dispatcher.max_generation,
                 max_stall_generations=dispatcher.max_stall_generations,
                 objectives=dispatcher.optimization_objectives,
+                seed=problem_definition.optimization_parameters.seed,
             )
 
             n_objectives = len(dispatcher.optimization_objectives)

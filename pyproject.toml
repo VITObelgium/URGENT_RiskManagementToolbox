@@ -124,6 +124,7 @@ plugins = [
 ]
 
 [tool.pytest.ini_options]
+addopts = "--randomly-seed=42"
 retries = 2
 retry_delay = 0.1
 pythonpath = "src"
@@ -164,6 +165,7 @@ pre-commit = "==4.0.1"
 protoletariat = "==3.3.9"
 pytest = "==8.3.4"
 pytest-mypy = "==0.10.3"
+pytest-randomly = ">=3.15.0"
 pytest-retry = "==1.7.0"
 ruff = "==0.14.14"
 

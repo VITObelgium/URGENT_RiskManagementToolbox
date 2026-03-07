@@ -501,10 +501,8 @@ def test_optimization_service_full_round(test_case):
     lb, ub = bounds[0], bounds[1]
     param_names = [f"x{i}" for i in range(dim)]
     num_particles = 200
-    iterations = 100
+    iterations = 200
     max_stall_generations = 1001  # infinite max_stall_generations
-
-    np.random.seed(42)
 
     # Initialize particle positions
     positions = np.random.uniform(lb, ub, (num_particles, dim))
@@ -809,8 +807,6 @@ def test_maximization_service_full_round(test_case):
     iterations = 1000
     max_stall_generations = 1001  # infinite max_stall_generations
 
-    np.random.seed(42)
-
     # Initialize particle positions
     positions = np.random.uniform(lb, ub, (num_particles, dim))
     results = evaluate_function(positions, function)
@@ -911,8 +907,6 @@ def test_pareto_optimization_zdt1():
     num_particles = 100
     iterations = 500
     max_stall_generations = 501
-
-    np.random.seed(42)
 
     positions = np.random.uniform(lb, ub, (num_particles, dim))
     results = evaluate_zdt1_population(positions)
@@ -1029,8 +1023,6 @@ def test_pareto_optimization_schaffer_n1():
     iterations = 50
     max_stall_generations = 51
 
-    np.random.seed(123)
-
     positions = np.random.uniform(lb, ub, (num_particles, dim))
     results = evaluate_schaffer_population(positions)
 
@@ -1141,8 +1133,6 @@ def test_pareto_optimization_zdt3():
     num_particles = 200
     iterations = 500
     max_stall_generations = 501
-
-    np.random.seed(100)
 
     positions = np.zeros((num_particles, dim))
     positions[:, 0] = np.random.uniform(lb, ub, num_particles)
@@ -1269,11 +1259,9 @@ def test_pareto_optimization_kursawe():
     dim = 3
     lb, ub = -5.0, 5.0
     param_names = [f"x{i}" for i in range(dim)]
-    num_particles = 80
-    iterations = 300
-    max_stall_generations = 301
-
-    np.random.seed(200)
+    num_particles = 100
+    iterations = 400
+    max_stall_generations = 401
 
     positions = np.random.uniform(lb, ub, (num_particles, dim))
     results = evaluate_kursawe_population(positions)

@@ -69,6 +69,7 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     max_stall_generations: PositiveInt = Field(default=10, ge=1)
     worker_count: PositiveInt = Field(default=4, ge=1)
     linear_inequalities: LinearInequalities | None = Field(default=None)
+    seed: int | None = Field(default=None)
 
     @field_validator("worker_count", mode="before")
     @classmethod

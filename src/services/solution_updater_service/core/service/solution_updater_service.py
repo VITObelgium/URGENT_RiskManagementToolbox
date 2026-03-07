@@ -480,6 +480,7 @@ class SolutionUpdaterService:
         max_generations: int,
         max_stall_generations: int,
         objectives: dict[str, OptimizationStrategy],
+        seed: int | None = None,
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
@@ -489,10 +490,11 @@ class SolutionUpdaterService:
             max_generations (int): Maximum number of optimization iterations to perform.
             max_stall_generations (int, optional): Number of consecutive iterations without improvement
                 before early stopping is triggered. Defaults to 10.
+            seed (int, optional): Random seed for the optimization engine.
         """
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
-            OptimizationEngineFactory.get_engine(optimization_engine)
+            OptimizationEngineFactory.get_engine(optimization_engine, seed=seed)
         )
         self._objectives = objectives
         self._logger = get_logger(__name__)

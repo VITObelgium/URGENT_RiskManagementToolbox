@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
+from typing import MutableMapping
 
 import numpy as np
 
@@ -30,7 +31,7 @@ class WellBuilder:
         self._translation: Point = Point(0, 0, 0)
         self._step: float = 0.5  # m
         self._sections: tuple[SectionInterface, ...] | None = None
-        self._perforations: tuple[PerforationRange, ...] | None = None
+        self._perforations: MutableMapping[str, PerforationRange] | None = None
 
         self.__logger = get_logger(__name__)
 
@@ -62,13 +63,13 @@ class WellBuilder:
         return self
 
     def perforations(
-        self, perforations: Sequence[PerforationRange] | None
+        self, perforations: MutableMapping[str, PerforationRange] | None
     ) -> WellBuilder:
         self.__logger.debug("Setting up well perforation intervals...")
         if not perforations:
             self.__logger.debug("Perforation intervals are empty, skipping...")
             return self
-        self._perforations = tuple([p for p in perforations])
+        self._perforations = perforations
         return self
 
     def build(self) -> Well:
@@ -145,19 +146,20 @@ def _move(translation: Point, trajectory: Trajectory) -> Trajectory:
 
 
 def _build_completion(
-    trajectory: Trajectory,
-    perforations: Sequence[PerforationRange] | None,
+    trajectory: Trajectory, perforations: MutableMapping[str, PerforationRange] | None
 ) -> Completion | None:
     if not perforations:
         return None
 
     completion_perforations = []
-    for p_range in perforations:
+    for p_name, p_range in perforations.items():
         perforation_points = trajectory.get_points_in_md_range(
             p_range.start_md, p_range.end_md
         )
         if perforation_points:
-            completion_perforations.append(Perforation(p_range, perforation_points))
+            completion_perforations.append(
+                Perforation(p_name, p_range, perforation_points)
+            )
 
     if not completion_perforations:
         return None

@@ -1,9 +1,19 @@
 [project]
 name = "urgent-riskmanagementtoolbox"
-version = "0.1.0"
-description = ""
+version = "0.2.0"
 readme = "README.md"
 requires-python = "==3.12.*"
+authors = [
+    { name = "Damian Janiga", email = "janiga@agh.edu.pl" },
+    { name = "Tomasz Kawiak", email = "tkawiak@agh.edu.pl" },
+    { name = "Marcin Stolarczyk", email = "m.stolar2001@gmail.com"},
+    { name = "Jakub Wojnarowski", email = "wojnarow111@gmail.com"}
+]
+
+maintainers = [
+    { name = "Damian Janiga" },
+    { name = "Tomasz Kawiak" }
+]
 
 [logging.output]
 log_to_console = true
@@ -80,11 +90,15 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "src/logger/*",
+    "src/main.py",
+    "src/interfaces/*",
+    "benchmarks/*",
     "*_pb2.py",
     "*_pb2_grpc.py",
     "_build_proto.py",
     "_test_.py",
-    "*/worker/src/*"
+    "*/worker/src/*",
+    "*/server/src/*",
 ]
 exclude_lines = [
     "if __name__ == '__main__':"
@@ -110,12 +124,16 @@ plugins = [
 ]
 
 [tool.pytest.ini_options]
+addopts = "--randomly-seed=42"
 retries = 2
-retry_delay = 0.5
+retry_delay = 0.1
 pythonpath = "src"
 log_file = "log/pytest_log.log"
 log_file_format = "%(process)d %(thread)d %(asctime)s %(module)s:%(lineno)d %(levelname)s - %(message)s"
 log_level = "INFO"
+
+[toolbox-config]
+simulation_timeout_seconds = 900
 
 [build-system]
 requires = ["setuptools>=42"]
@@ -137,6 +155,7 @@ psutil = ">=7.0.0"
 pydantic = "==2.10.4"
 scipy = "==1.15.2"
 tomli = "==2.2.1"
+pydantic-settings = ">=2.12.0,<3"
 
 [tool.pixi.feature.dev.dependencies]
 coverage = "==7.6.10"
@@ -146,7 +165,9 @@ pre-commit = "==4.0.1"
 protoletariat = "==3.3.9"
 pytest = "==8.3.4"
 pytest-mypy = "==0.10.3"
+pytest-randomly = ">=3.15.0"
 pytest-retry = "==1.7.0"
+ruff = "==0.14.14"
 
 
 [tool.pixi.feature.py312.dependencies]
@@ -164,6 +185,15 @@ dev = { features = ["dev"], solve-group = "default" }
 worker = { features = ["py312"], solve-group = "worker", no-default-feature = true }
 
 [tool.pixi.tasks]
+clean-logs = { cmd = "python -c \"import shutil; shutil.rmtree('log', ignore_errors=True)\"" }
+clean-orchestration = { cmd = "python -c \"import shutil; shutil.rmtree('orchestration_files', ignore_errors=True)\"" }
+clean-htmlcov = { cmd = "python -c \"import shutil; shutil.rmtree('htmlcov', ignore_errors=True)\"" }
+clean-all = { depends-on = ["clean-logs", "clean-orchestration", "clean-htmlcov"] }
 
-[toolbox-config]
-simulation_timeout_seconds = 900
+mypy = { cmd = "mypy" }
+ruff-fix = { cmd = "ruff check --fix ." }
+ruff-format-check = { cmd = "ruff format ." }
+
+lint = { depends-on = ["ruff-fix", "ruff-format-check", "mypy"] }
+
+pytest = { cmd = "pytest ." }

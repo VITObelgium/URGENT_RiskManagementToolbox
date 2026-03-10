@@ -13,19 +13,19 @@ repos:
         args: [ '--fix=lf' ]
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.28.0
+    rev: v8.30.0
     hooks:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.2
+    rev: v0.15.0
     hooks:
-      - id: ruff
+      - id: ruff-check
         entry: ruff check --extend-select I --fix
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.18.2'
+    rev: 'v1.19.1'
     hooks:
       - id: mypy
         pass_filenames: false
@@ -37,5 +37,4 @@ repos:
         name: Run tests with coverage
         entry: bash -c "pixi run -e dev coverage run -m pytest && pixi run -e dev coverage html && pixi run -e dev coverage report"
         language: system
-        always_run: true
         pass_filenames: false

@@ -27,12 +27,15 @@ channel_options = [
 ]
 
 
-def _run_simulator(simulation_job) -> tuple[SimulationStatus, SimulationResults]:
+def _run_simulator(simulation_job) -> tuple[SimulationStatus, SimulationResults | None]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tf:
+        user_cost_function_with_default_values = json.loads(
+            simulation_job.simulation.result.result
+        )
         json.dump(simulation_job.simulation.input.wells, tf)
         tf_path = tf.name
-    return connector.run(tf_path)
+    return connector.run(tf_path, user_cost_function_with_default_values)
 
 
 async def request_simulation_job(stub, worker_id):

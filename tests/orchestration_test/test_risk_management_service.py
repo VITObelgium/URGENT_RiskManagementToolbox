@@ -20,11 +20,7 @@ import orchestration.risk_management_service.core.service.risk_management_servic
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.get_csv_logger"
 )
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.ControlVectorMapper"
-)
 def test_run_risk_management_happy_path(
-    mock_cvm,
     mock_csv_logger,
     mock_dispatcher,
     mock_su,
@@ -41,8 +37,17 @@ def test_run_risk_management_happy_path(
             )
         ]
     )
+
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
+    mock_dispatcher_inst.expected_optimization_function_names = ["r"]
+    mock_dispatcher_inst.optimization_objectives = {"r": "minimize"}
+    mock_dispatcher_inst.population_size = 1
+    mock_dispatcher_inst.max_generation = 1
+    mock_dispatcher_inst.max_stall_generations = 1
+    mock_dispatcher_inst.full_key_boundaries = {}
+    mock_dispatcher_inst.full_key_linear_inequalities = None
+
     mock_dispatcher_inst.process_iteration.side_effect = [
         MagicMock(
             solution_candidates=[
@@ -57,24 +62,29 @@ def test_run_risk_management_happy_path(
         ),
         MagicMock(solution_candidates=[]),
     ]
+
     mock_su_inst = MagicMock()
     mock_su.return_value = mock_su_inst
     mock_su_inst.loop_controller.running.side_effect = [True, False]
     mock_su_inst.loop_controller.current_generation = 1
-    mock_su_inst.get_optimization_metrics.return_value = MagicMock(
+    mock_su_inst.get_generation_summary.return_value = MagicMock(
         global_best=1.0,
-        last_population_min=1.0,
-        last_population_max=2.0,
-        last_population_avg=1.5,
-        last_population_std=0.5,
+        min=1.0,
+        max=2.0,
+        avg=1.5,
+        std=0.5,
+        population=[1.0],
     )
     mock_su_inst.process_request.return_value = MagicMock(
         next_iter_solutions=[{"a": 1}]
     )
-    mock_cvm.convert_su_to_pd.return_value = None
-    mock_csv_logger.return_value = MagicMock(info=MagicMock())
+
+    csv_logger_inst = MagicMock()
+    mock_csv_logger.return_value = csv_logger_inst
+
     mock_su_inst.global_best_result = 1.23
-    mock_su_inst.global_best_controll_vector = MagicMock(items={"x": 5})
+    mock_su_inst.global_best_control_vector = MagicMock(items={"x": 5})
+
     with patch(
         "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
         return_value={"x": 5},
@@ -82,17 +92,22 @@ def test_run_risk_management_happy_path(
         mock_problem_def = MagicMock()
         mock_problem_def.optimization_parameters.worker_count = 1
         mock_problem_def.optimization_parameters.population_size = 1
-        mock_problem_def.optimization_parameters.patience = 1
+        mock_problem_def.optimization_parameters.max_stall_generations = 1
         mock_problem_def.optimization_parameters.max_generations = 1
 
-        rms.run_risk_management(
-            mock_problem_def,
-            b"model",
-        )
+        rms.run_risk_management(mock_problem_def, b"model")
+
     mock_sim_service.transfer_simulation_model.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1
     mock_su_inst.process_request.assert_called()
-    mock_csv_logger.return_value.info.assert_called()
+
+    # CSV logger: one numeric row logged for the generation
+    csv_logger_inst.info.assert_called()
+    logged_message = csv_logger_inst.info.call_args[0][0]
+    assert logged_message.startswith("1,")
+
+    # generation + (global_best,min,max,avg,std) + population => 1 + 5 + 1 = 7 fields
+    assert len(logged_message.split(",")) == 7
 
 
 def test_prepare_simulation_cases_basic():
@@ -100,13 +115,16 @@ def test_prepare_simulation_cases_basic():
     fake_task.request = [1]
     fake_task.control_vector = MagicMock(items={"a": 1})
     fake_solution = MagicMock()
-    fake_solution.tasks = {rms.ServiceType.WellManagementService: fake_task}
+    fake_solution.tasks = {rms.ServiceType.WellDesignService: fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
     with patch(
-        "orchestration.risk_management_service.core.service.risk_management_service.WellManagementService.process_request"
+        "orchestration.risk_management_service.core.service.risk_management_service.WellDesignService.process_request"
     ) as mock_well:
         mock_well.return_value.model_dump.return_value = {"well": 1}
-        sim_cases = rms._prepare_simulation_cases(solutions)
+        fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
+        sim_cases = rms._prepare_simulation_cases(
+            solutions, fake_expected_cost_function_names
+        )
         assert isinstance(sim_cases, list)
         assert sim_cases[0]["wells"] == {"well": 1}
         assert sim_cases[0]["control_vector"] == {"a": 1}
@@ -117,8 +135,11 @@ def test_prepare_simulation_cases_unhandled_service():
     fake_solution = MagicMock()
     fake_solution.tasks = {"UnknownService": fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
+    fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
 
-    sim_cases = rms._prepare_simulation_cases(solutions)
+    sim_cases = rms._prepare_simulation_cases(
+        solutions, fake_expected_cost_function_names
+    )
     assert isinstance(sim_cases, list)
     assert "control_vector" in sim_cases[0]
 
@@ -138,11 +159,7 @@ def test_prepare_simulation_cases_unhandled_service():
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.get_csv_logger"
 )
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.ControlVectorMapper"
-)
 def test_run_risk_management_exception(
-    _mock_cvm,
     _mock_csv_logger,
     _mock_dispatcher,
     _mock_su,

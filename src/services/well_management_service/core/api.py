@@ -1,7 +1,9 @@
+from services.well_management_service.core.models import (
+    WellDesignServiceResponse,
+    WellModel,
+)
 from services.well_management_service.core.service import (
-    WellManagementService,
+    WellDesignService,
 )
 
-__all__ = [
-    "WellManagementService",
-]
+__all__ = ["WellDesignService", "WellModel", "WellDesignServiceResponse"]

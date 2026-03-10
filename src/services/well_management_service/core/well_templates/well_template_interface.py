@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Sequence
+from typing import MutableMapping
 
 from services.well_management_service.core.models import (
     PerforationRange,
@@ -16,7 +16,7 @@ class WellTemplateInterface(ABC):
         md_step: float,
         wellhead: TrajectoryPoint,
         azimuth: float,
-        perforations: Sequence[PerforationRange] | None,
+        perforations: MutableMapping[str, PerforationRange] | None = None,
     ):
         self._well_builder = (
             WellBuilder()

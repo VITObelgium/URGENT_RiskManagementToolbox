@@ -5,26 +5,23 @@ from typing import Any
 import grpc
 
 from logger import get_logger
+from services.simulation_service.core.config import get_simulation_config
 from services.simulation_service.core.infrastructure.generated import (
     simulation_messaging_pb2 as sm,
 )
 from services.simulation_service.core.models import (
     SimulationCase,
-    SimulationResults,
     SimulationServiceRequest,
     SimulationServiceResponse,
-    WellManagementServiceResult,
 )
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
 from services.simulation_service.core.utils.converters import json_to_str, str_to_json
+from services.well_management_service.core.models import WellDesignServiceResponse
 
 logger = get_logger(__name__)
 
 
 class SimulationService:
-    _SERVER_HOST = "localhost"
-    _SERVER_PORT = 50051
-
     @staticmethod
     def process_request(request_dict: dict[str, Any]) -> SimulationServiceResponse:
         """
@@ -79,9 +76,11 @@ class SimulationService:
         Args:
             simulation_model_archive (bytes): The archive content as bytes.
         """
+        _config = get_simulation_config()
+
         with GrpcStubManager.get_stub(
-            SimulationService._SERVER_HOST,
-            SimulationService._SERVER_PORT,
+            _config.server_host,
+            _config.server_port,
         ) as stub:
             try:
                 logger.info("Sending simulation model archive to the cluster...")
@@ -128,10 +127,11 @@ class SimulationService:
             Sequence[SimulationCase]: The processed simulation cases.
         """
         logger.info("Processing %d simulation cases on the cluster...", len(cases))
+        _config = get_simulation_config()
 
         with GrpcStubManager.get_stub(
-            SimulationService._SERVER_HOST,
-            SimulationService._SERVER_PORT,
+            _config.server_host,
+            _config.server_port,
         ) as stub:
             simulations_inputs = [SimulationService._to_grpc(case) for case in cases]
             simulations_request = sm.Simulations(simulations=simulations_inputs)
@@ -143,7 +143,30 @@ class SimulationService:
                 cluster_response = stub.PerformSimulations(simulations_request)
                 logger.info("Simulations completed on the cluster.")
             except grpc.RpcError as e:
-                logger.error("Error performing simulations: %s", e)
+                code = None
+                details = None
+                try:
+                    if hasattr(e, "code"):
+                        code = e.code()
+                    if hasattr(e, "details"):
+                        details = e.details()
+                except Exception:
+                    pass
+
+                # ABORTED is what the server should return for "critical failure, shutting down".
+                if code == grpc.StatusCode.ABORTED:
+                    logger.critical(
+                        "Simulations aborted by server (code=%s, details=%s).",
+                        code,
+                        details,
+                    )
+                else:
+                    logger.error(
+                        "Error performing simulations (code=%s, details=%s): %s",
+                        code,
+                        details,
+                        e,
+                    )
                 raise
             except KeyboardInterrupt:
                 logger.warning("Simulation interrupted by user.")
@@ -167,6 +190,7 @@ class SimulationService:
         """
         return sm.Simulation(
             input=sm.SimulationInput(wells=case.wells.model_dump_json()),
+            result=sm.SimulationResult(result=json_to_str(case.results)),
             control_vector=sm.SimulationControlVector(
                 content=json_to_str(case.control_vector)
             ),
@@ -184,7 +208,7 @@ class SimulationService:
             SimulationCase: The simulation case object.
         """
         return SimulationCase(
-            wells=WellManagementServiceResult(**str_to_json(simulation.input.wells)),
-            results=SimulationResults(**str_to_json(simulation.result.result)),
+            wells=WellDesignServiceResponse(**str_to_json(simulation.input.wells)),
+            results=str_to_json(simulation.result.result),
             control_vector=str_to_json(simulation.control_vector.content),
         )

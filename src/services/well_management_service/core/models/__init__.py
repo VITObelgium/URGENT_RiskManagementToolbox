@@ -17,8 +17,8 @@ from services.well_management_service.core.models.user import (
     SimulationWellModel,
     SimulationWellPerforationModel,
     SWellModel,
-    WellManagementServiceRequest,
-    WellManagementServiceResponse,
+    WellDesignServiceRequest,
+    WellDesignServiceResponse,
     WellModel,
 )
 from services.well_management_service.core.models.well import Completion, Well
@@ -37,8 +37,8 @@ __all__ = [
     "Perforation",
     "PerforationRange",
     "TrajectoryPoint",
-    "WellManagementServiceRequest",
-    "WellManagementServiceResponse",
+    "WellDesignServiceRequest",
+    "WellDesignServiceResponse",
     "SimulationWellPerforationModel",
     "SimulationWellCompletionModel",
     "SimulationWellModel",

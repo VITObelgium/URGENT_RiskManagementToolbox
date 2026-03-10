@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import MutableMapping
 
 import numpy as np
 import pytest
@@ -13,21 +13,21 @@ from services.well_management_service.core.sections.perforation_md_provider impo
     "perforation_range, section_range , expected_result",
     [
         (
-            [PerforationRange(1.0, 3.0), PerforationRange(6.0, 10.0)],
+            {"p1": PerforationRange(1.0, 3.0), "p2": PerforationRange(6.0, 10.0)},
             (0, 11),
             (1.0, 3.0, 6.0, 10.0, np.inf),
         ),
         (
-            [PerforationRange(1.0, 3.0), PerforationRange(6.0, 10.0)],
+            {"p1": PerforationRange(1.0, 3.0), "p2": PerforationRange(6.0, 10.0)},
             (2.0, 7.0),
             (3.0, 6.0, np.inf),
         ),
-        ([], (0.0, 10.0), (np.inf, np.inf)),
-        ([PerforationRange(0, 10)], (20.0, 100.0), (np.inf, np.inf)),
+        ({}, (0.0, 10.0), (np.inf, np.inf)),
+        ({"p1": PerforationRange(0, 10)}, (20.0, 100.0), (np.inf, np.inf)),
     ],
 )
 def test_perforation_md_provider(
-    perforation_range: Sequence[PerforationRange],
+    perforation_range: MutableMapping[str, PerforationRange],
     section_range: tuple[float, ...],
     expected_result: tuple[float, ...],
 ) -> None:

@@ -1,17 +1,24 @@
 import copy
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Sequence
 from typing import Any, Callable
 
 import numpy as np
 
+from services.problem_dispatcher_service.core.models import LinearInequalities
+from services.problem_dispatcher_service.core.utils.keys import (
+    DEFAULT_SEPARATOR,
+    convert_key_separator,
+    split_key,
+)
+from services.shared import Boundaries, ServiceType
 from services.solution_updater_service.core.utils import (
     repair_against_linear_inequalities,
 )
 
 
 def update_initial_state(
-    initial_state: dict[str, Any], update_dict: dict[str, Any]
-) -> dict[str, Any]:
+    initial_state: dict[str | ServiceType, Any], update_dict: dict[str, Any]
+) -> dict[str | ServiceType, Any]:
     """
     Recursively updates a deep copy of the initial_state dictionary with values
     from update_dict. If a value in update_dict is a dictionary, the function
@@ -30,7 +37,8 @@ def update_initial_state(
 
 
 def parse_flat_dict_to_nested(
-    flat_dict: dict[str, float], separator: str = "#"
+    flat_dict: dict[str, float] | dict[str, None],
+    separator: str = DEFAULT_SEPARATOR,
 ) -> dict[str, Any]:
     def _merge_nested_dict(base: MutableMapping, keys: list[str], d_value: Any):
         current = base
@@ -40,19 +48,63 @@ def parse_flat_dict_to_nested(
 
     result: dict[str, Any] = {}
     for flat_key, value in flat_dict.items():
-        keys = flat_key.split(separator)
+        keys = split_key(flat_key, separator)
         _merge_nested_dict(result, keys, value)
     return result
+
+
+def get_corresponding_initial_state_as_flat_dict(
+    initial_state: dict[str, Any],
+    variable_source: list[str],
+    separator: str = DEFAULT_SEPARATOR,
+):
+    template = {k: None for k in variable_source}
+    nestest_template = parse_flat_dict_to_nested(template, separator)
+    template_with_initial_state = _fill_none(nestest_template, initial_state)
+    return _flatten_dict(template_with_initial_state, separator=separator)
+
+
+def _fill_none(target, source):
+    """
+    Recursively replace None values in `target` with values from `source`.
+    Modifies `target` in place and also returns it.
+    """
+    for key, value in target.items():
+        if key not in source:
+            continue
+
+        if value is None:
+            target[key] = source[key]
+
+        elif isinstance(value, dict) and isinstance(source[key], dict):
+            _fill_none(value, source[key])
+
+    return target
+
+
+def _flatten_dict(d, parent_key="", separator: str = DEFAULT_SEPARATOR):
+    flat = {}
+
+    for key, value in d.items():
+        new_key = f"{parent_key}{separator}{key}" if parent_key else key
+
+        if isinstance(value, dict):
+            flat.update(_flatten_dict(value, new_key, separator))
+        else:
+            flat[new_key] = value
+
+    return flat
 
 
 class CandidateGenerator:
     @staticmethod
     def generate(
-        constraints: dict[str, tuple[float, float]],
+        full_key_boundaries: dict[str, Boundaries],
         n_size: int,
         random_fn: Callable[[float, float], float],
-        linear_inequalities: dict[str, list] | None = None,
-        separator: str = "#",
+        initial_state: dict[str, Any],
+        linear_inequalities: LinearInequalities | None = None,
+        separator: str = DEFAULT_SEPARATOR,
         tol: float = 1e-3,
         max_repair_iter: int = 20,
     ) -> list[dict[str, float]]:
@@ -63,9 +115,10 @@ class CandidateGenerator:
 
 
         Parameters:
-            constraints: A mapping of fully-qualified flat keys to (lb, ub) tuples, e.g."well_placement#INJ#md": (2000, 2700)
+            full_key_boundaries: A mapping of fully-qualified flat keys to (lb, ub) tuples, e.g."well_design#INJ#md": (2000, 2700)
             n_size: The number of candidate solutions to generate.
             random_fn: A function to generate random numbers within a given range.
+            initial_state: The initial state of the problem.
             linear_inequalities: Optional linear inequality constraints. See README.md for declaration and usage.
             separator: The separator used in the fully-qualified keys.
             tol: Tolerance for constraint satisfaction.
@@ -75,24 +128,51 @@ class CandidateGenerator:
             A list of candidate solutions, each represented as a dictionary of variable assignments.
         """
 
+        for key, bnd in full_key_boundaries.items():
+            if bnd.lb > bnd.ub:
+                raise ValueError(
+                    f"Invalid boundary for {key}: lower bound ({bnd.lb}) > upper bound ({bnd.ub})"
+                )
+            if not (np.isfinite(bnd.lb) and np.isfinite(bnd.ub)):
+                raise ValueError(
+                    f"Invalid boundary for {key}: bounds must be finite. Got lb={bnd.lb}, ub={bnd.ub}"
+                )
+
+        user_initial_candidate = get_corresponding_initial_state_as_flat_dict(
+            initial_state, list(full_key_boundaries.keys()), separator=separator
+        )
+
+        for key, val in user_initial_candidate.items():
+            bnd = full_key_boundaries[key]
+            lb, ub = bnd.lb, bnd.ub
+            if not (lb - tol <= val <= ub + tol):
+                raise ValueError(
+                    f"Initial user state for {key} is out of bounds: {val} (Bounds: [{lb}, {ub}])"
+                )
+
         # No linear constraints scenario
         if not linear_inequalities:
-            return [
-                {key: random_fn(lb, ub) for key, (lb, ub) in constraints.items()}
-                for _ in range(n_size)
-            ]
+            if not linear_inequalities:
+                random_candidates = [
+                    {
+                        key: random_fn(b.lb, b.ub)
+                        for key, b in full_key_boundaries.items()
+                    }
+                    for _ in range(n_size - 1)
+                ]
+                return [user_initial_candidate] + random_candidates
 
         # Scenario with linear constraints provided
-        keys = list(constraints.keys())
-        lbs = {k: float(constraints[k][0]) for k in keys}
-        ubs = {k: float(constraints[k][1]) for k in keys}
+        keys = list(full_key_boundaries.keys())
+        lbs = {k: float(full_key_boundaries[k].lb) for k in keys}
+        ubs = {k: float(full_key_boundaries[k].ub) for k in keys}
 
         def sample_one() -> dict[str, float]:
             return {k: float(random_fn(lbs[k], ubs[k])) for k in keys}
 
-        A_rows: list[dict[str, float]] = linear_inequalities["A"]
-        b_vals: list[float] = linear_inequalities["b"]
-        senses: list[str] = linear_inequalities.get("sense", ["<="] * len(A_rows))
+        A_rows: list[dict[str, float]] = linear_inequalities.A
+        b_vals: list[float] = linear_inequalities.b
+        senses: Sequence[str] = linear_inequalities.sense
 
         # Extract involved sparse variable names like "INJ.md", "PRO.md"
         sparse_vars: list[str] = []
@@ -101,14 +181,13 @@ class CandidateGenerator:
                 if v not in sparse_vars:
                     sparse_vars.append(v)
 
-        # Map "INJ.md" -> "well_placement#INJ#md"
+        # Map "INJ.md" -> "well_design#INJ#md"
         def fk(var: str) -> str:
-            well, attr = var.split(".", 1)
-            return f"well_placement{separator}{well}{separator}{attr}"
+            return convert_key_separator(var, output_separator=separator)
 
         full_keys = [fk(v) for v in sparse_vars]
         # Filter out vars not present in constraints
-        valid_mask = [k in constraints for k in full_keys]
+        valid_mask = [k in full_key_boundaries for k in full_keys]
         sparse_vars = [v for v, m in zip(sparse_vars, valid_mask) if m]
         full_keys = [k for k, m in zip(full_keys, valid_mask) if m]
 
@@ -146,9 +225,15 @@ class CandidateGenerator:
         lb_vec = np.array([lbs[k] for k in full_keys], dtype=float)
         ub_vec = np.array([ubs[k] for k in full_keys], dtype=float)
 
+        x_user = np.array([user_initial_candidate[k] for k in full_keys], dtype=float)
+        if np.any((A.dot(x_user) - b) > tol):
+            raise ValueError(
+                "User provided initial state violates linear inequality constraints."
+            )
+
         # Generate candidate solutions
         candidates: list[dict[str, float]] = []
-        for _ in range(n_size):
+        for _ in range(n_size - 1):
             c = sample_one()
             x0 = np.array([c[k] for k in full_keys], dtype=float)
             xr = repair_against_linear_inequalities(
@@ -163,4 +248,4 @@ class CandidateGenerator:
                 c[kf] = float(xr[idx])
             candidates.append(c)
 
-        return candidates
+        return [user_initial_candidate] + candidates

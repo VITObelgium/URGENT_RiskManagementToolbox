@@ -22,6 +22,7 @@ enum JobStatus{
   NO_JOB_AVAILABLE = 4;       // When no job is available for a worker.
   ERROR = 5;                  // Represents an internal server error or failure.
   TIMEOUT = 6;                // Job has timeout
+  EXCEPTION = 7;              // Job has thrown an exception/
 }
 
 enum Simulator{

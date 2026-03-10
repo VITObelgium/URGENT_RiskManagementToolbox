@@ -1,4 +1,3 @@
-from common import OptimizationStrategy
 from services.solution_updater_service.core.engines.common import (
     OptimizationEngineInterface,
 )
@@ -10,10 +9,10 @@ class OptimizationEngineFactory:
     @staticmethod
     def get_engine(
         engine: OptimizationEngine,
-        strategy: OptimizationStrategy = OptimizationStrategy.MINIMIZE,
+        seed: int | None = None,
     ) -> OptimizationEngineInterface:
         match engine:
             case OptimizationEngine.PSO:
-                return PSOEngine(strategy)
+                return PSOEngine(seed=seed)
             case _:
                 raise NotImplementedError()

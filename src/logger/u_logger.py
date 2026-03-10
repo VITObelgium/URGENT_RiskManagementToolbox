@@ -49,7 +49,7 @@ def configure_logger() -> None:
     _logger_configured = True
 
 
-def get_logger(name: str | None = "", filename: str | None = None) -> Logger:
+def get_logger(name: str | None = None, filename: str | None = None) -> Logger:
     """Return a named logger; config is applied on first use.
 
     - Names like "threading-worker" and "threading-server" are preserved.

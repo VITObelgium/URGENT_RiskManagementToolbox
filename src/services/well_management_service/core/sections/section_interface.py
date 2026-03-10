@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Sequence
+from typing import MutableMapping
 
 from services.well_management_service.core.models import PerforationRange, Trajectory
 
@@ -19,7 +19,7 @@ class SectionInterface(ABC):
         self,
         trajectory: Trajectory,
         md_step: float,
-        perforations: Sequence[PerforationRange] | None = None,
+        perforations: MutableMapping[str, PerforationRange] | None = None,
     ) -> Trajectory:
         """
         Append section partial trajectory to well trajectory

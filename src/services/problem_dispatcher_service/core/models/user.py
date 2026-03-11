@@ -73,6 +73,16 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     linear_inequalities: LinearInequalities | None = Field(default=None)
     seed: int | None = Field(default=None)
 
+    @model_validator(mode="after")
+    def apply_eval_mode_overrides(self) -> Self:
+        """When task is 'eval', collapse all loop-control parameters to 1."""
+        if self.task == "eval":
+            self.population_size = 1
+            self.max_generations = 1
+            self.max_stall_generations = 1
+            self.worker_count = 1
+        return self
+
     @field_validator("worker_count", mode="before")
     @classmethod
     def validate_worker_count(cls, value: int) -> int:

@@ -46,6 +46,7 @@ class ProblemDispatcherService:
             self._handlers = PROBLEM_TYPE_HANDLERS
             self._initial_state = self._build_initial_state()
 
+            self._task_type = self._problem_definition.optimization_parameters.task
             self._linear_inequalities = (
                 self._problem_definition.optimization_parameters.linear_inequalities
             )
@@ -63,6 +64,10 @@ class ProblemDispatcherService:
             raise
 
     @property
+    def task_type(self) -> str:
+        return self._task_type
+
+    @property
     def optimization_objectives(self) -> dict[str, OptimizationStrategy]:
         return self._problem_definition.optimization_parameters.objectives
 
@@ -72,6 +77,8 @@ class ProblemDispatcherService:
 
     @property
     def max_generation(self) -> int:
+        if self.task_type == "eval":
+            return 1
         return self._problem_definition.optimization_parameters.max_generations
 
     @property
@@ -80,6 +87,8 @@ class ProblemDispatcherService:
 
     @property
     def max_stall_generations(self) -> int:
+        if self.task_type == "eval":
+            return 1
         return self._problem_definition.optimization_parameters.max_stall_generations
 
     @property

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Self
+from typing import Literal, Self
 
 import psutil
 from pydantic import (
@@ -49,6 +49,7 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Represents the optimization parameters for the problem dispatcher service.
 
     Attributes:
+        task (str): Either eval or train. Defaults to train.
         objective (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
         max_generations (int): The maximum number of generations for the optimization algorithm.
         population_size (int): The size of the population in each generation.
@@ -63,6 +64,7 @@ class OptimizationParameters(BaseModel, extra="forbid"):
                 "sense": [">=", "<="]
     """
 
+    task: Literal["eval", "train"] = Field(default="train")
     objectives: dict[ObjectiveFnName, OptimizationStrategy]
     max_generations: PositiveInt = Field(default=10, ge=1)
     population_size: PositiveInt = Field(default=10, ge=2, le=200)

@@ -1,0 +1,154 @@
+###############
+## Production model run
+###############
+
+import os
+
+import helpers.helper_modelling as func
+
+# import other libraries
+import numpy as np
+import pandas as pd
+
+# import RMT modules
+# from connectors.common import SimulationResultType
+from connectors.open_darts import (
+    OpenDartsConnector,
+    open_darts_input_configuration_injector,
+)
+
+# import DARTS libraries
+from darts.physics.properties.iapws.iapws_property_vec import _Backward1_T_Ph_vec
+
+# import helper functions
+from helpers.helper_heatproduction import cumulative_heat
+
+# import DARTS model
+from model_PROD import ProductionModel
+
+
+@open_darts_input_configuration_injector
+def run_darts(well_data) -> None:
+    # output file location
+    out_root = os.path.join(os.getcwd(), "output_PROD")
+    vtk_dir = os.path.join(out_root, "vtk_PROD")
+    os.makedirs(
+        vtk_dir, exist_ok=True
+    )  # creates both output_PROD and vtk_PROD if needed
+
+    # input file location
+    mesh_file = "input/mesh_with_properties.vtu"
+    restart_file = "input/initial_condition.csv"
+    stress_file = "input/stress_state.csv"
+    fault_file = "input/faults.csv"
+
+    # Simulation time
+    Dtimes = [
+        1 * 365,
+        1 * 365,
+        1 * 365,
+        1 * 365,
+        1 * 365,
+    ]  # 5 years period with fault reactivation check every year
+
+    # well names
+    PROD = "PROD"
+    INJ = "INJ"
+
+    # Well control parameters
+    Qinj = 600.0  # ton/day
+    Tinj = 30 + 273.15  # K    - reference temperature (injection temperature)
+    Qprod = Qinj  # ton/day   -- assuming balanced doublet for simplicity, but it can be different
+
+    # model run
+    m = ProductionModel(
+        well_data=well_data,
+        mesh_file=mesh_file,
+        restart_file=restart_file,
+        Qinj=Qinj,
+        Tinj=Tinj,
+        Qprod=Qprod,
+    )
+    m.init(
+        verbose=True,
+        output_folder=out_root,
+    )
+    m.params.max_ts = 365.0
+
+    # Geomechanics initialization
+    stress_df = pd.read_csv(stress_file, sep=",")
+    fault_df = pd.read_csv(fault_file, sep=",")
+    depth_reservoir = m.reservoir.global_data["depth"]
+
+    initcond_df = pd.read_csv(
+        restart_file, sep=",", index_col=0
+    )  # restart file contains only P and H with cell ID as index
+    initcond_df["T"] = _Backward1_T_Ph_vec(
+        initcond_df["P"].to_numpy() / 10, initcond_df["H"].to_numpy() / 18.015
+    )
+
+    fault_stress_df = func.stress_fault_df(
+        fault_df, depth_reservoir, initcond_df, stress_df=stress_df
+    )
+
+    mu_crit = 0.6  # critical friction coefficient for fault reactivation
+    flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
+    t_cum = 0.0  # cumulative time tracker for reporting
+
+    for i, t in enumerate(Dtimes):
+        m.run(days=t, restart_dt=0, verbose=True)
+        m.output_to_vtk(
+            ith_step=i + 1,
+            output_directory=vtk_dir,
+            output_properties=["temperature"],
+        )  # pressure/enthalpy are primary vars
+
+        # Getting primary variables
+        P = np.array(m.physics.engine.X[0::2], copy=False)  # pressure in bar
+        H = np.array(m.physics.engine.X[1::2], copy=False)  # enthalpy in kJ/kmol
+        T = _Backward1_T_Ph_vec(P / 10, H / 18.015)  # temperature in K
+        solution_df = pd.DataFrame({"P": P, "H": H, "T": T})
+        solution_df.to_csv(
+            os.path.join(out_root, f"solution_PROD_{i + 1}.csv"), sep=","
+        )
+
+        # Computing stress state on faults
+        mu_vec = m.compute_analytical_stress_vect(
+            fault_stress_df, stress_df=stress_df, solution_df=solution_df
+        )
+        Max_mu = mu_vec.max()
+        t_cum += t
+        print(f"Time {t_cum} days: Max friction coefficient on faults = {Max_mu:.3f}")
+
+        # Check failure criteria
+        if Max_mu >= mu_crit:
+            print(
+                f"FAULT REACTIVATION DETECTED at time {t_cum} days with max mu={Max_mu:.3f} >= mu_crit={mu_crit:.3f}"
+            )
+            Qinj = flow_rate_chop * Qinj
+            m.Qinj = Qinj
+            print(f"New injection rate: {Qinj:.2f} ton/day")
+            m.set_well_controls()
+
+    # Get and writting well vectors
+    td = pd.DataFrame.from_dict(m.physics.engine.time_data)
+    address = out_root + os.sep + "well_data_volumetric_mass_control.xlsx"
+    writer = pd.ExcelWriter(address)
+    td.to_excel(excel_writer=writer, sheet_name="Sheet1")
+    writer.close()
+
+    ## Cumulative heat production (MWy)
+    Heat = cumulative_heat(
+        td, PROD, INJ
+    )  # cumulative heat for a specific doublet: requires accurate well names for producers and injectors
+    address = out_root + os.sep + "indicators.txt"
+    Indicators = pd.DataFrame(
+        {"Heat[MWy]": [Heat]}
+    )  # We can store here different indicators
+    np.savetxt(address, Indicators.values, fmt="%.1f", header="Heat[MWy]")
+
+    OpenDartsConnector.broadcast_result("Heat", Heat)
+
+
+if __name__ == "__main__":
+    run_darts()

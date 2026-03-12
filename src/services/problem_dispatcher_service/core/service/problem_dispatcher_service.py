@@ -100,7 +100,7 @@ class ProblemDispatcherService:
         )
 
         try:
-            if self._problem_definition.optimization_parameters.task == "eval":
+            if self._problem_definition.task == "eval":
                 if next_iter_solutions and len(next_iter_solutions) > 1:
                     self.logger.warning(
                         "Eval task received %d control vectors; only the first will be used.",
@@ -177,7 +177,7 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
-        if self._problem_definition.optimization_parameters.task == "eval":
+        if self._problem_definition.task == "eval":
             return {}
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_full_key_boundaries(
@@ -188,10 +188,7 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
-        if (
-            self._problem_definition.optimization_parameters.task == "eval"
-            or self._linear_inequalities is None
-        ):
+        if self._problem_definition.task == "eval" or self._linear_inequalities is None:
             return None
         return LinearInequalities(
             **{

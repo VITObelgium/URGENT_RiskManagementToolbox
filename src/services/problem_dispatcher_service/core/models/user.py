@@ -49,7 +49,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Represents the optimization parameters for the problem dispatcher service.
 
     Attributes:
-        task (str): Either eval or train. Defaults to train.
         objective (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
         max_generations (int): The maximum number of generations for the optimization algorithm.
         population_size (int): The size of the population in each generation.
@@ -64,7 +63,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
                 "sense": [">=", "<="]
     """
 
-    task: Literal["eval", "train"] = Field(default="train")
     objectives: dict[ObjectiveFnName, OptimizationStrategy] | None = Field(default=None)
     max_generations: PositiveInt = Field(default=10, ge=1)
     population_size: PositiveInt = Field(default=10, ge=2, le=200)
@@ -72,22 +70,6 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     worker_count: PositiveInt = Field(default=4, ge=1)
     linear_inequalities: LinearInequalities | None = Field(default=None)
     seed: int | None = Field(default=None)
-
-    @model_validator(mode="after")
-    def apply_eval_mode_overrides(self) -> Self:
-        """When task is 'eval', collapse all loop-control parameters to 1."""
-        if self.task == "eval":
-            self.population_size = 1
-            self.max_generations = 1
-            self.max_stall_generations = 1
-            self.worker_count = 1
-        return self
-
-    @model_validator(mode="after")
-    def validate_objectives_for_task(self) -> Self:
-        if self.task == "train" and not self.objectives:
-            raise ValueError("objectives are required during training.")
-        return self
 
     @field_validator("worker_count", mode="before")
     @classmethod
@@ -130,25 +112,42 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     Optimization parameters
     """
 
+    task: Literal["eval", "train"] = Field(default="train")
     well_design: UniqueWellList
-    optimization_parameters: OptimizationParameters
+    optimization_parameters: OptimizationParameters = Field(
+        default_factory=OptimizationParameters
+    )
+
+    @model_validator(mode="after")
+    def apply_task_overrides(self) -> Self:
+        """When task is 'eval', collapse all loop-control parameters to 1."""
+        if self.task == "eval":
+            self.optimization_parameters.population_size = 1
+            self.optimization_parameters.max_generations = 1
+            self.optimization_parameters.max_stall_generations = 1
+            self.optimization_parameters.worker_count = 1
+        return self
+
+    @model_validator(mode="after")
+    def validate_objectives_for_task(self) -> Self:
+        if self.task == "train" and not self.optimization_parameters.objectives:
+            raise ValueError("objectives are required during training.")
+        return self
 
     @model_validator(mode="after")
     def validate_parameter_bounds_for_task(self) -> Self:
-        if self.optimization_parameters.task == "train":
+        if self.task == "train":
             missing = [w.well_name for w in self.well_design if not w.parameter_bounds]
             if missing:
                 raise ValueError(
-                    "parameter_bounds are required for training!"
+                    "parameter_bounds are required when task is 'train' "
                     f"(missing for wells: {', '.join(missing)})"
                 )
         return self
 
     @model_validator(mode="after")
     def check_linear_inequalities_constraints_compliance(self) -> Self:
-        if self.optimization_parameters.task == "eval":
-            return self
-        if not self.optimization_parameters.linear_inequalities:
+        if self.task == "eval" or not self.optimization_parameters.linear_inequalities:
             return self
 
         def _has_nested_path(d: dict, path: list[str]) -> bool:

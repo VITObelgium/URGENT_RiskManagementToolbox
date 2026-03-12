@@ -65,7 +65,7 @@ def run_risk_management(
             )
 
             dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
-            task = problem_definition.optimization_parameters.task
+            task = problem_definition.task
 
             if task == "eval":
                 logger.info("Eval task: Running a single validation simulation.")

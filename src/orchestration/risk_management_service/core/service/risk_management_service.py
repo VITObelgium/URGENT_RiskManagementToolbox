@@ -65,6 +65,23 @@ def run_risk_management(
             )
 
             dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
+            task = problem_definition.optimization_parameters.task
+
+            if task == "eval":
+                logger.info("Eval task: Running a single validation simulation.")
+                solutions = dispatcher.process_iteration(None)
+                expected_cost_function_names = (
+                    dispatcher.expected_optimization_function_names
+                )
+                sim_cases = _prepare_simulation_cases(
+                    solutions, expected_cost_function_names
+                )
+                logger.info("Submitting eval simulation case to SimulationService.")
+                completed_cases = SimulationService.process_request(
+                    {"simulation_cases": sim_cases}
+                )
+                logger.info("Eval simulation completed successfully.")
+                return None
 
             solution_updater = SolutionUpdaterService(
                 optimization_engine=OptimizationEngine.PSO,

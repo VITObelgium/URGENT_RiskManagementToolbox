@@ -35,7 +35,7 @@ type ParameterBoundaries = dict[VariableName, Boundaries | ParameterBoundaries]
 class WellDesignItem(BaseModel, extra="forbid"):
     well_name: str
     initial_state: WellModel
-    parameter_bounds: ParameterBoundaries
+    parameter_bounds: ParameterBoundaries | None = Field(default=None)
 
     @model_validator(mode="before")
     @classmethod
@@ -65,7 +65,7 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     """
 
     task: Literal["eval", "train"] = Field(default="train")
-    objectives: dict[ObjectiveFnName, OptimizationStrategy]
+    objectives: dict[ObjectiveFnName, OptimizationStrategy] | None = Field(default=None)
     max_generations: PositiveInt = Field(default=10, ge=1)
     population_size: PositiveInt = Field(default=10, ge=2, le=200)
     max_stall_generations: PositiveInt = Field(default=10, ge=1)
@@ -81,6 +81,12 @@ class OptimizationParameters(BaseModel, extra="forbid"):
             self.max_generations = 1
             self.max_stall_generations = 1
             self.worker_count = 1
+        return self
+
+    @model_validator(mode="after")
+    def validate_objectives_for_task(self) -> Self:
+        if self.task == "train" and not self.objectives:
+            raise ValueError("objectives are required during training.")
         return self
 
     @field_validator("worker_count", mode="before")
@@ -128,7 +134,20 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     optimization_parameters: OptimizationParameters
 
     @model_validator(mode="after")
+    def validate_parameter_bounds_for_task(self) -> Self:
+        if self.optimization_parameters.task == "train":
+            missing = [w.well_name for w in self.well_design if not w.parameter_bounds]
+            if missing:
+                raise ValueError(
+                    "parameter_bounds are required for training!"
+                    f"(missing for wells: {', '.join(missing)})"
+                )
+        return self
+
+    @model_validator(mode="after")
     def check_linear_inequalities_constraints_compliance(self) -> Self:
+        if self.optimization_parameters.task == "eval":
+            return self
         if not self.optimization_parameters.linear_inequalities:
             return self
 

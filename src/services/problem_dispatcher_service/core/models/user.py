@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Literal, Self
+from typing import Self
 
 import psutil
 from pydantic import (
@@ -15,6 +15,7 @@ from pydantic.functional_validators import AfterValidator
 from typing_extensions import Annotated
 
 from common import OptimizationStrategy
+from common.models import RunMode
 from logger import get_logger
 from services.shared import (
     Boundaries,
@@ -49,7 +50,7 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     Represents the optimization parameters for the problem dispatcher service.
 
     Attributes:
-        objective (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
+        objectives (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
         max_generations (int): The maximum number of generations for the optimization algorithm.
         population_size (int): The size of the population in each generation.
         max_stall_generations (int): The number of generations to wait for improvement before stopping.
@@ -87,10 +88,10 @@ class OptimizationParameters(BaseModel, extra="forbid"):
         self,
     ) -> Self:
         if self.worker_count > self.population_size:
-            self.worker_count = self.population_size
             logger.warning(
                 f"Worker_count {self.worker_count} exceeds population_size {self.population_size}. Setting worker_count to population_size."
             )
+            self.worker_count = self.population_size
         return self
 
 
@@ -112,7 +113,7 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     Optimization parameters
     """
 
-    task: Literal["eval", "train"] = Field(default="train")
+    run_mode: RunMode = Field(default=RunMode.Optimization)
     well_design: UniqueWellList
     optimization_parameters: OptimizationParameters = Field(
         default_factory=OptimizationParameters
@@ -120,8 +121,8 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def apply_task_overrides(self) -> Self:
-        """When task is 'eval', collapse all loop-control parameters to 1."""
-        if self.task == "eval":
+        """When run-mode is 'evaluation', collapse all loop-control parameters to 1."""
+        if self.run_mode == RunMode.Evaluation:
             self.optimization_parameters.population_size = 1
             self.optimization_parameters.max_generations = 1
             self.optimization_parameters.max_stall_generations = 1
@@ -130,24 +131,30 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
 
     @model_validator(mode="after")
     def validate_objectives_for_task(self) -> Self:
-        if self.task == "train" and not self.optimization_parameters.objectives:
-            raise ValueError("objectives are required during training.")
+        if (
+            self.run_mode == RunMode.Optimization
+            and not self.optimization_parameters.objectives
+        ):
+            raise ValueError("objectives are required during optimization run.")
         return self
 
     @model_validator(mode="after")
     def validate_parameter_bounds_for_task(self) -> Self:
-        if self.task == "train":
+        if self.run_mode == RunMode.Optimization:
             missing = [w.well_name for w in self.well_design if not w.parameter_bounds]
             if missing:
                 raise ValueError(
-                    "parameter_bounds are required when task is 'train' "
+                    "parameter_bounds are required when run-model is 'optimization' "
                     f"(missing for wells: {', '.join(missing)})"
                 )
         return self
 
     @model_validator(mode="after")
     def check_linear_inequalities_constraints_compliance(self) -> Self:
-        if self.task == "eval" or not self.optimization_parameters.linear_inequalities:
+        if (
+            self.run_mode == RunMode.Evaluation
+            or not self.optimization_parameters.linear_inequalities
+        ):
             return self
 
         def _has_nested_path(d: dict, path: list[str]) -> bool:

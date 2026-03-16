@@ -2,6 +2,7 @@ import random
 from typing import Any, Callable
 
 from common import OptimizationStrategy
+from common.models import RunMode
 from logger import get_logger
 from services.problem_dispatcher_service.core.builder import TaskBuilder
 from services.problem_dispatcher_service.core.models import (
@@ -100,16 +101,18 @@ class ProblemDispatcherService:
         )
 
         try:
-            if self._problem_definition.task == "eval":
+            if self._problem_definition.run_mode == RunMode.Evaluation:
                 if next_iter_solutions and len(next_iter_solutions) > 1:
                     self.logger.warning(
-                        "Eval task received %d control vectors; only the first will be used.",
+                        "Evaluation run-mode received %d control vectors; only the first will be used.",
                         len(next_iter_solutions),
                     )
                 control_vectors = (
                     [next_iter_solutions[0].items] if next_iter_solutions else [{}]
                 )
-                self.logger.debug("Eval mode control vectors: %s", control_vectors)
+                self.logger.debug(
+                    "Evaluation mode control vectors: %s", control_vectors
+                )
             elif next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
                     self._full_key_boundaries,
@@ -177,7 +180,7 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
-        if self._problem_definition.task == "eval":
+        if self._problem_definition.run_mode == RunMode.Evaluation:
             return {}
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_full_key_boundaries(
@@ -188,7 +191,10 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
-        if self._problem_definition.task == "eval" or self._linear_inequalities is None:
+        if (
+            self._problem_definition.run_mode == RunMode.Evaluation
+            or self._linear_inequalities is None
+        ):
             return None
         return LinearInequalities(
             **{

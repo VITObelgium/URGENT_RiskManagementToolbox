@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from common.models import RunMode
 from logger import get_csv_logger, get_logger
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
@@ -65,10 +66,12 @@ def run_risk_management(
             )
 
             dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
-            task = problem_definition.task
+            run_mode = problem_definition.run_mode
 
-            if task == "eval":
-                logger.info("Eval task: Running a single validation simulation.")
+            if run_mode == RunMode.Evaluation:
+                logger.info(
+                    "Run in evaluation mode: Running a single validation simulation."
+                )
                 solutions = dispatcher.process_iteration(None)
                 expected_cost_function_names = (
                     dispatcher.expected_optimization_function_names
@@ -76,11 +79,15 @@ def run_risk_management(
                 sim_cases = _prepare_simulation_cases(
                     solutions, expected_cost_function_names
                 )
-                logger.info("Submitting eval simulation case to SimulationService.")
+                logger.info(
+                    "Submitting evaluation simulation case to SimulationService."
+                )
                 completed_cases = SimulationService.process_request(
                     {"simulation_cases": sim_cases}
                 )
-                logger.info("Eval simulation completed successfully.")
+                logger.info(
+                    f"Evaluation simulation completed successfully with results: {completed_cases.simulation_cases[0].results}"
+                )
                 return None
 
             solution_updater = SolutionUpdaterService(

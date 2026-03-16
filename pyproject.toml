@@ -116,12 +116,19 @@ exclude = [
     "_model",
     "simulation_service.py",
     "_test_.py",
-    "test_"
+    "test_",
+    "examples/*"
 ]
 
 plugins = [
     "pydantic.mypy",
 ]
+
+[tool.ruff]
+exclude = [
+    "examples/*"
+]
+
 
 [tool.pytest.ini_options]
 addopts = "--randomly-seed=42"

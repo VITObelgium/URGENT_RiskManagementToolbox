@@ -273,16 +273,28 @@ Input configuration file is a JSON file with the structures presented in `schema
 
 ```json
 {
+  "run_mode": "optimization",
   "=== SERVICE NAME ===": service item(s),
   "optimization_parameters": { ... }
 }
 ```
 
+#### Run Mode
+
+The optional `run_mode` field controls how the toolbox executes. It accepts two values:
+
+| Value | Description |
+|-------|-------------|
+| `optimization` | *(Default)* Runs the full iterative optimization loop using the configured algorithm. `objectives` and `parameter_bounds` are required. |
+| `evaluation` | Runs a single simulation using the `initial_state` values without optimization. Useful for validating that the simulation model and connector are correctly configured before committing to a full optimization run. In this mode `objectives` and `parameter_bounds` are not required, and all loop-control parameters (`population_size`, `max_generations`, `max_stall_generations`, `worker_count`) are automatically set to `1`. |
+
+> **Note:** Omitting `run_mode` is equivalent to `"run_mode": "optimization"`.
+
 ## Implemented services
 
 | Service name  | Description                                                            |
 |---------------|------------------------------------------------------------------------|
-| `well_design` | Service sesponsible for well(s) placement, trajectory and completion.  |
+| `well_design` | Service responsible for well(s) placement, trajectory and completion.  |
 
 
 
@@ -305,7 +317,7 @@ Input configuration file is a JSON file with the structures presented in `schema
 |----|----|----|
 | `well_name` | ✅ | Unique identifier used across the configuration |
 | `initial_state` | ✅ | Defines well initial (user defined) geometry and completion |
-| `parameter_bounds` | ✅ | Selects which parameters (from initial state) are optimized, with the lower and upper range |
+| `parameter_bounds` | ✅ (optimization mode) | Selects which parameters (from initial state) are optimized, with the lower and upper range. Not required in `evaluation` mode. |
 
 ### Initial state
 The `initial_state` defines the **baseline geometry** of a well.
@@ -551,6 +563,7 @@ These settings control the execution and termination of the optimization process
 | `population_size` | Integer        | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
 | `max_stall_generations` | Integer        | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
 | `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
+| `seed` | Integer \| null | `null`   | Random seed for the optimization algorithm. Set to an integer value to make runs reproducible. When `null`, results will vary between runs.                                                                                                                                                                              |
 
 #### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 

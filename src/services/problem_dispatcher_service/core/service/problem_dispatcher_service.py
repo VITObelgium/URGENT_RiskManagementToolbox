@@ -2,6 +2,7 @@ import random
 from typing import Any, Callable
 
 from common import OptimizationStrategy
+from common.models import RunMode
 from logger import get_logger
 from services.problem_dispatcher_service.core.builder import TaskBuilder
 from services.problem_dispatcher_service.core.models import (
@@ -40,7 +41,7 @@ class ProblemDispatcherService:
 
         try:
             self._problem_definition = problem_definition
-            self._n_size = (
+            self._population_size = (
                 self._problem_definition.optimization_parameters.population_size
             )
             self._handlers = PROBLEM_TYPE_HANDLERS
@@ -64,7 +65,7 @@ class ProblemDispatcherService:
 
     @property
     def optimization_objectives(self) -> dict[str, OptimizationStrategy]:
-        return self._problem_definition.optimization_parameters.objectives
+        return self._problem_definition.optimization_parameters.objectives or {}
 
     @property
     def expected_optimization_function_names(self) -> list[str]:
@@ -76,7 +77,7 @@ class ProblemDispatcherService:
 
     @property
     def population_size(self) -> int:
-        return self._n_size
+        return self._population_size
 
     @property
     def max_stall_generations(self) -> int:
@@ -100,10 +101,22 @@ class ProblemDispatcherService:
         )
 
         try:
-            if next_iter_solutions is None:
+            if self._problem_definition.run_mode == RunMode.Evaluation:
+                if next_iter_solutions and len(next_iter_solutions) > 1:
+                    self.logger.warning(
+                        "Evaluation run-mode received %d control vectors; only the first will be used.",
+                        len(next_iter_solutions),
+                    )
+                control_vectors = (
+                    [next_iter_solutions[0].items] if next_iter_solutions else [{}]
+                )
+                self.logger.debug(
+                    "Evaluation mode control vectors: %s", control_vectors
+                )
+            elif next_iter_solutions is None:
                 control_vectors = CandidateGenerator.generate(
                     self._full_key_boundaries,
-                    self._n_size,
+                    self.population_size,
                     random.uniform,
                     self._initial_state,
                     self._linear_inequalities,
@@ -167,6 +180,8 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
+        if self._problem_definition.run_mode == RunMode.Evaluation:
+            return {}
         return self._process_problem_items(
             process_func=lambda handler, items: handler.build_full_key_boundaries(
                 items
@@ -176,7 +191,10 @@ class ProblemDispatcherService:
         )
 
     def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
-        if self._linear_inequalities is None:
+        if (
+            self._problem_definition.run_mode == RunMode.Evaluation
+            or self._linear_inequalities is None
+        ):
             return None
         return LinearInequalities(
             **{

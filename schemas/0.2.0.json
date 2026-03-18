@@ -272,14 +272,22 @@
       "additionalProperties": false,
       "properties": {
         "objectives": {
-          "additionalProperties": {
-            "$ref": "#/$defs/OptimizationStrategy"
-          },
-          "propertyNames": {
-            "$ref": "#/$defs/ObjectiveFnName"
-          },
-          "title": "Objectives",
-          "type": "object"
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/OptimizationStrategy"
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/ObjectiveFnName"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Objectives"
         },
         "max_generations": {
           "default": 10,
@@ -320,11 +328,20 @@
             }
           ],
           "default": null
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
         }
       },
-      "required": [
-        "objectives"
-      ],
       "title": "OptimizationParameters",
       "type": "object"
     },
@@ -536,13 +553,20 @@
           "title": "Initial State"
         },
         "parameter_bounds": {
-          "$ref": "#/$defs/ParameterBoundaries"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterBoundaries"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
         "well_name",
-        "initial_state",
-        "parameter_bounds"
+        "initial_state"
       ],
       "title": "WellDesignItem",
       "type": "object"
@@ -550,6 +574,15 @@
   },
   "additionalProperties": false,
   "properties": {
+    "task": {
+      "default": "train",
+      "enum": [
+        "eval",
+        "train"
+      ],
+      "title": "Task",
+      "type": "string"
+    },
     "well_design": {
       "items": {
         "$ref": "#/$defs/WellDesignItem"
@@ -562,8 +595,7 @@
     }
   },
   "required": [
-    "well_design",
-    "optimization_parameters"
+    "well_design"
   ],
   "title": "ProblemDispatcherDefinition",
   "type": "object"

@@ -80,6 +80,8 @@ class WellDesignHandler(ProblemTypeHandler):
 
         result = {}
         for item in items:
+            if not item.parameter_bounds:
+                continue
             # Add existing constraints (e.g., wellhead x, y)
             flattened = _flatten_optimization_parameters(item.parameter_bounds)
             for key, value in flattened.items():

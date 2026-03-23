@@ -11,7 +11,6 @@ def cli():
         description="CLI to run risk management simulations."
     )
 
-    # Adding arguments for CLI
     parser.add_argument(
         "--config-file",
         type=str,

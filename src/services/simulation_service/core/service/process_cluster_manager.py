@@ -54,6 +54,8 @@ class ProcessClusterManager(ClusterManager):
         self.host = config.server_host
         self.port = config.server_port
 
+        self._cleanup_worker_directories()
+
     def _wait_for_server_readiness(self, timeout=None, interval=0.25):
         if timeout is None:
             timeout = get_simulation_config().server_startup_timeout

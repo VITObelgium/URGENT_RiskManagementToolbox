@@ -49,7 +49,6 @@ class ProcessClusterManager(ClusterManager):
         self._stopping = threading.Event()
 
         config = get_simulation_config()
-        print(config.run_mode)
 
         self.run_mode = config.run_mode
         self.host = config.server_host

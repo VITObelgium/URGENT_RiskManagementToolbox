@@ -32,7 +32,7 @@ def cli():
     args = parser.parse_args()
 
     try:
-        _ = risk_management(
+        risk_management(
             config_file=args.config_file,
             model_file=args.model_file,
             use_docker=args.use_docker,

@@ -1,7 +1,7 @@
-from functools import lru_cache
-
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from common.models import RunMode
 
 
 class SimulationServiceConfig(BaseSettings):
@@ -35,6 +35,8 @@ class SimulationServiceConfig(BaseSettings):
         case_sensitive=False,
     )
 
+    run_mode: RunMode = Field(default=RunMode.Optimization)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def grpc_target(self) -> str:
@@ -49,10 +51,8 @@ class SimulationServiceConfig(BaseSettings):
         ]
 
 
-@lru_cache
 def get_simulation_config() -> SimulationServiceConfig:
     """
     Factory function to get the singleton configuration instance.
-    Uses @lru_cache to ensure only one instance is created per process.
     """
     return SimulationServiceConfig()

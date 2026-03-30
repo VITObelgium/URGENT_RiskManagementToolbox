@@ -85,15 +85,19 @@ def test_run_risk_management_happy_path(
     mock_su_inst.global_best_result = 1.23
     mock_su_inst.global_best_control_vector = MagicMock(items={"x": 5})
 
-    with patch(
-        "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
-        return_value={"x": 5},
+    with (
+        patch(
+            "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
+            return_value={"x": 5},
+        ),
+        patch.dict("os.environ", {"OPEN_DARTS_RUNNER": "docker"}),
     ):
         mock_problem_def = MagicMock()
         mock_problem_def.optimization_parameters.worker_count = 1
         mock_problem_def.optimization_parameters.population_size = 1
         mock_problem_def.optimization_parameters.max_stall_generations = 1
         mock_problem_def.optimization_parameters.max_generations = 1
+        mock_problem_def.run_mode.value = "optimization"
 
         rms.run_risk_management(mock_problem_def, b"model")
 

@@ -9,6 +9,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from common.models import RunMode
 from logger import (
     configure_server_logger,
     configure_worker_logger,
@@ -48,6 +49,9 @@ class ProcessClusterManager(ClusterManager):
         self._stopping = threading.Event()
 
         config = get_simulation_config()
+        print(config.run_mode)
+
+        self.run_mode = config.run_mode
         self.host = config.server_host
         self.port = config.server_port
 
@@ -180,7 +184,8 @@ class ProcessClusterManager(ClusterManager):
         self._worker_threads.clear()
         self._worker_stops.clear()
 
-        self._cleanup_worker_directories()
+        if self.run_mode == RunMode.Optimization:
+            self._cleanup_worker_directories()
 
         try:
             request_server_shutdown(timeout=1.0)

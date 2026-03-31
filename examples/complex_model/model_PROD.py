@@ -33,7 +33,7 @@ class ProductionModel(DartsModel):
         restart_file="",
         Qinj=0.0,
         Tinj=66 + 273.15,
-        Qprod=0.0,
+        Qprod=None,
     ):
 
         super().__init__()
@@ -54,6 +54,8 @@ class ProductionModel(DartsModel):
         self.mesh_file = mesh_file
         self.restart_file = restart_file
 
+        if Qprod is None:
+            Qprod = Qinj  # Default set to balanced operation
         self.Qinj = Qinj
         self.Tinj = Tinj
         self.Qprod = Qprod
@@ -148,6 +150,7 @@ class ProductionModel(DartsModel):
         rcond_raw = (
             np.asarray(mesh.cell_data["cond"][blk], dtype=float) * 24 * 3600 / 1000
         )  # Unit conversion for cond * 24*3600/1000 [[kJ/(m-d-K)]]
+        rocknum_raw = np.asarray(mesh.cell_data["num"][blk], dtype=int)
 
         # property mapping from vtu to DARTS structure grid
         i = np.searchsorted(x_cent, self.centroids[:, 0])
@@ -165,6 +168,7 @@ class ProductionModel(DartsModel):
         poro = np.empty(nx * ny * nz, dtype=float)
         hcap = np.empty(nx * ny * nz, dtype=float)
         rcond = np.empty(nx * ny * nz, dtype=float)
+        rocknum = np.empty(nx * ny * nz, dtype=int)
 
         depth[flat] = depth_raw
         permx[flat] = permx_raw
@@ -173,6 +177,7 @@ class ProductionModel(DartsModel):
         poro[flat] = poro_raw
         hcap[flat] = hcap_raw
         rcond[flat] = rcond_raw
+        rocknum[flat] = rocknum_raw
 
         self.reservoir = StructReservoir(
             self.timer,
@@ -193,14 +198,18 @@ class ProductionModel(DartsModel):
         )
         self.reservoir.global_data["depth"] = depth
         self.reservoir.global_data["start_z"] = self.ztop
+        self.reservoir.global_data["rocknum"] = rocknum
 
         # init_reservoir does self.discretize() as well but also stores the mesh as self.reservoir.mesh
-        # self.reservoir.discretize()
         self.reservoir.init_reservoir(verbose=True)
 
         # set boundary volumes to large value to simulate no-flow boundaries on top and bottom sides
-        self.reservoir.boundary_volumes["xy_minus"] = 1e25
-        self.reservoir.boundary_volumes["xy_plus"] = 1e25
+        # self.reservoir.boundary_volumes["xy_minus"] = 1e25
+        # self.reservoir.boundary_volumes["xy_plus"] = 1e25
+        self.reservoir.boundary_volumes["yz_minus"] = 1e25  # open flow boundary at x=0
+        self.reservoir.boundary_volumes["yz_plus"] = (
+            1e25  # open flow boundary at x=xmax
+        )
         return
 
     ## Setup physics (geothermal)
@@ -274,7 +283,7 @@ class ProductionModel(DartsModel):
         solution_df="",
     ):
         # orientation of MIN PRINCIPAL STRESS (CLOCKWISE FROM NORTH)
-        orientation_degrees = 45.0
+        orientation_degrees = 120.0
         orientation_rad = orientation_degrees * np.pi / 180.0
 
         dff["P"] = solution_df.loc[dff["ID"], "P"].values * 1e5

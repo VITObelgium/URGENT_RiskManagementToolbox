@@ -4,7 +4,11 @@ Utility functions for DARTS model setup.
 @author: KURGYIS
 """
 
+import os
+import xml.etree.ElementTree as ET
+
 import numpy as np
+import pandas as pd
 
 # from iapws.iapws97 import _Region1  #IAPWS97
 # from iapws.iapws95 import IAPWS95
@@ -141,7 +145,7 @@ def points_to_ijk_structured(points, x_faces, y_faces, z_faces):
     return ijk, inside
 
 
-def linear_to_ijk_1based(idx, nx, ny, nz):
+def linear_to_ijk_1based(idx, nx, ny):
     """
     Convert linear cell index (0..nx*ny*nz-1) to (i,j,k) 1-based,
     assuming i fastest, then j, then k.
@@ -265,6 +269,22 @@ def get_perforation_cells_for_well(
     return perf
 
 
+def fix_pvd_paths(pvd_path):
+    tree = ET.parse(pvd_path)
+    root = tree.getroot()
+    collection = root.find("Collection")
+
+    if collection is None:
+        raise ValueError("No Collection element found in PVD file")
+
+    for ds in collection.findall("DataSet"):
+        file_attr = ds.get("file")
+        if file_attr:
+            ds.set("file", os.path.basename(file_attr))
+
+    tree.write(pvd_path, encoding="utf-8", xml_declaration=True)
+
+
 # TODO: move to helper_geomechanics.py
 
 
@@ -380,6 +400,113 @@ def stress_fault_df(faults, depth_reservoir, df_inc, stress_df=""):
     dff["Sp1"] = np.zeros(len(dff))  # Final MAX principal effective stress
     dff["Sp2"] = np.zeros(len(dff))  # Final INT principal effective stress
     dff["Sp3"] = np.zeros(len(dff))  # Final MIN principal effective stress
-    dff["mu"] = np.zeros(len(dff))  # Final MIN principal effective stress
+    dff["mu"] = np.zeros(len(dff))  # Friction coefficient for slip criterion
 
     return dff
+
+
+def build_fault_df_from_reservoir(reservoir):
+
+    gd = reservoir.global_data
+
+    rocknum = np.asarray(gd["rocknum"]).ravel()
+
+    # identify faults
+    mask_ns = rocknum == 2
+    mask_ew = rocknum == 3
+    mask_fault = mask_ns | mask_ew
+
+    ids = np.flatnonzero(mask_fault)
+
+    # strike / dip
+    strike = np.empty(ids.size, dtype=float)
+    dip = np.full(ids.size, 90.0)
+
+    strike[mask_ns[ids]] = 0.0
+    strike[mask_ew[ids]] = 90.0
+
+    # convert to normals
+    # convention: strike clockwise from North, dip from horizontal
+    strike_rad = np.deg2rad(strike)
+    dip_rad = np.deg2rad(dip)
+
+    nx = -np.cos(strike_rad) * np.sin(dip_rad)
+    ny = np.sin(strike_rad) * np.sin(dip_rad)
+    nz = -np.cos(dip_rad)
+
+    # normalize
+    nrm = np.sqrt(nx**2 + ny**2 + nz**2)
+    nx /= nrm
+    ny /= nrm
+    nz /= nrm
+
+    fault_df = pd.DataFrame(
+        {
+            "ID": ids.astype(int),
+            "rocknum": rocknum[ids].astype(int),
+            "strike": strike,
+            "dip": dip,
+            "nx": nx,
+            "ny": ny,
+            "nz": nz,
+        }
+    )
+
+    return fault_df
+
+
+def output_darts_vtk_with_cell_prop(
+    model,
+    ith_step,
+    vtk_dir,
+    cell_prop,
+    field_name,
+    output_properties=("temperature",),
+):
+    """
+    Write a DARTS VTK output file and append one custom full-grid cell property.
+
+    Parameters
+    ----------
+    model : DartsModel
+        Initialized and already-run DARTS model.
+    ith_step : int
+        Output/report step index.
+    vtk_dir : str
+        Output directory for VTK files.
+    cell_prop : array-like
+        Full reservoir cell property array of length n_res_blocks.
+    field_name : str
+        Name of the custom field in the VTK output.
+    output_properties : tuple/list
+        Standard DARTS properties to export in addition to the custom field.
+    """
+
+    cell_prop = np.asarray(cell_prop, dtype=float)
+    n_cells = model.reservoir.mesh.n_res_blocks
+
+    if cell_prop.size != n_cells:
+        raise ValueError(
+            f"{field_name} must have length n_res_blocks={n_cells}, "
+            f"got {cell_prop.size}"
+        )
+
+    timesteps, prop_array = model.output_properties(
+        output_properties=list(output_properties), timestep=ith_step
+    )
+    t_days = float(timesteps[0])
+
+    prop_array[field_name] = cell_prop.reshape(1, n_cells)
+
+    prop_names = {name: i for i, name in enumerate(prop_array.keys())}
+    data = np.vstack([prop_array[name][0] for name in prop_array.keys()])
+
+    os.makedirs(vtk_dir, exist_ok=True)
+
+    model.reservoir.output_to_vtk(
+        ith_step=ith_step,
+        t=t_days,
+        output_directory=vtk_dir,
+        prop_idxs=prop_names,
+        data=data,
+    )

@@ -39,17 +39,6 @@ def run_darts(well_data) -> None:
     # input file location
     mesh_file = "input/mesh_with_properties.vtu"
     restart_file = "input/initial_condition.csv"
-    stress_file = "input/stress_state.csv"
-    fault_file = "input/faults.csv"
-
-    # Simulation time
-    Dtimes = [
-        1 * 365,
-        1 * 365,
-        1 * 365,
-        1 * 365,
-        1 * 365,
-    ]  # 5 years period with fault reactivation check every year
 
     # well names
     PROD = "PROD"
@@ -73,11 +62,19 @@ def run_darts(well_data) -> None:
         verbose=True,
         output_folder=out_root,
     )
-    m.params.max_ts = 365.0
+
+    # Simulation time
+    # Dtimes = [365] * 5    # 5 years period with fault reactivation check every year
+    Dtimes = [365 / 4] * 40  # total of approx 10 years with outputs every quarter year
+    # m.params.max_ts = 365.0
+    m.params.max_ts = 365.0 / 4
 
     # Geomechanics initialization
+    stress_file = "input/stress_state.csv"
     stress_df = pd.read_csv(stress_file, sep=",")
-    fault_df = pd.read_csv(fault_file, sep=",")
+    # fault_file = "input/faults.csv"
+    # fault_df = pd.read_csv(fault_file, sep=",")
+    fault_df = func.build_fault_df_from_reservoir(m.reservoir)
     depth_reservoir = m.reservoir.global_data["depth"]
 
     initcond_df = pd.read_csv(

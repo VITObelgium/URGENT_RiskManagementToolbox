@@ -1,5 +1,5 @@
 from services.solution_updater_service.core.engines.common import (
-    GenerationSummary,
+    # GenerationSummary,
     OptimizationEngineInterface,
 )
 from services.solution_updater_service.core.engines.factory import (
@@ -9,5 +9,5 @@ from services.solution_updater_service.core.engines.factory import (
 __all__ = [
     "OptimizationEngineInterface",
     "OptimizationEngineFactory",
-    "GenerationSummary",
+    # "GenerationSummary",
 ]

@@ -130,6 +130,7 @@ def run_darts(well_data) -> None:
             )
             Qinj = flow_rate_chop * Qinj
             m.Qinj = Qinj
+            m.Qprod = Qinj  # for balanced operation
             print(f"New injection rate: {Qinj:.2f} ton/day")
             m.set_well_controls()
 

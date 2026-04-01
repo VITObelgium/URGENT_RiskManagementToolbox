@@ -33,8 +33,8 @@ logger = get_logger(__name__)
 
 
 def run_risk_management(
-    problem_definition: ProblemDispatcherDefinition,
-    simulation_model_archive: bytes | str,
+        problem_definition: ProblemDispatcherDefinition,
+        simulation_model_archive: bytes | str,
 ) -> tuple[float | npt.NDArray[np.float64], Any] | None:
     """
     Main entry point for running risk management.
@@ -101,11 +101,11 @@ def run_risk_management(
 
             logger.debug("Fetching full key boundaries from ProblemDispatcherService.")
             full_key_boundaries = dispatcher.full_key_boundaries
-            logger.debug("Boundaries retrieved: %s", full_key_boundaries)
+            logger.debug(f"Boundaries retrieved: {full_key_boundaries}")
             logger.debug("Fetching linear inequalities from ProblemDispatcherService.")
             full_key_linear_inequalities = dispatcher.full_key_linear_inequalities
             logger.debug(
-                "Linear inequalities retrieved: %s", full_key_linear_inequalities
+                f"Linear inequalities retrieved: {full_key_linear_inequalities}"
             )
 
             # Initialize solutions
@@ -119,20 +119,20 @@ def run_risk_management(
                 )
                 # Generate or update solutions
                 solutions = dispatcher.process_iteration(next_solutions)
-                logger.debug("Generated solutions: %s", solutions)
+                logger.debug(f"Generated solutions: {solutions}")
 
                 # Prepare simulation cases
                 sim_cases = _prepare_simulation_cases(
                     solutions, dispatcher.expected_optimization_function_names
                 )
-                logger.debug("Prepared simulation cases: %s", sim_cases)
+                logger.debug(f"Prepared simulation cases: {sim_cases}")
 
                 # Process simulation with the simulation service
                 logger.info("Submitting simulation cases to SimulationService.")
                 completed_cases = SimulationService.process_request(
                     {"simulation_cases": sim_cases}
                 )
-                logger.debug("Completed simulation cases: %s", completed_cases)
+                logger.debug(f"Completed simulation cases: {completed_cases}")
 
                 # Update solutions based on simulation results
                 updated_solutions = [
@@ -145,7 +145,7 @@ def run_risk_management(
                     for simulation_case in completed_cases.simulation_cases
                 ]
                 logger.debug(
-                    "Updated solutions for next iteration: %s", updated_solutions
+                    f"Updated solutions for next iteration: {updated_solutions}"
                 )
 
                 # Map simulation service solutions to the ProblemDispatcherService format
@@ -162,29 +162,25 @@ def run_risk_management(
                 next_solutions = response.next_iter_solutions
 
                 logger.info(
-                    "Generation %d successfully completed.",
-                    loop_controller.current_generation,
+                    f"Generation {loop_controller.current_generation} successfully completed."
                 )
 
                 loop_controller.increment_generation()
 
             logger.info(
-                "Loop controller stopped at generation %d. Info: %s",
-                loop_controller.current_generation,
-                loop_controller.info,
+                f"Loop controller stopped at generation {loop_controller.current_generation}. Info: {loop_controller.info}"
             )
 
         except KeyboardInterrupt:
             logger.warning("Risk management process interrupted by user.")
             return None
         except Exception as e:
-            logger.error("Error in risk management process: %s", str(e))
+            logger.error(f"Error in risk management process: {str(e)}")
             raise
 
     logger.info(
-        "Optimization results: Fitness value = %f Control vector = %s",
-        solution_updater.global_best_result,
-        parse_flat_dict_to_nested(solution_updater.global_best_control_vector.items),
+        f"Optimization results: Fitness value(s) = {solution_updater.global_best_result_descriptive}, "
+        f"Control vector = {parse_flat_dict_to_nested(solution_updater.global_best_control_vector.items)}"
     )
     return solution_updater.global_best_result, parse_flat_dict_to_nested(
         solution_updater.global_best_control_vector.items
@@ -192,7 +188,7 @@ def run_risk_management(
 
 
 def _prepare_simulation_cases(
-    solutions: ProblemDispatcherServiceResponse, expected_cost_function_names: list[str]
+        solutions: ProblemDispatcherServiceResponse, expected_cost_function_names: list[str]
 ) -> list[dict[(str, Any)]]:
     """
     Prepare simulation cases from generated candidates.
@@ -207,7 +203,7 @@ def _prepare_simulation_cases(
     sim_cases = []
 
     for index, solution in enumerate(solutions.solution_candidates):
-        logger.debug("Processing solution candidate #%d: %s", index + 1, solution)
+        logger.debug(f"Processing solution candidate #{index + 1}: {solution}")
         sim_case, control_vector = (
             {},
             {},
@@ -217,21 +213,19 @@ def _prepare_simulation_cases(
             match service:
                 case ServiceType.WellDesignService:
                     logger.debug(
-                        "Processing task for service: %s. Task details: %s",
-                        service,
-                        task,
+                        f"Processing task for service: {service}. Task details: {task}"
                     )
                     wells = WellDesignService.process_request({"models": task.request})
                     sim_case["wells"] = wells.model_dump()
                     control_vector.update(task.control_vector.items)
                     logger.debug("Processed wells: %s", wells)
                 case _:
-                    logger.warning("Service not implemented: %s", service)
+                    logger.warning(f"Service not implemented: {service}")
 
         sim_case["control_vector"] = control_vector
         sim_case["results"] = {k: float("nan") for k in expected_cost_function_names}
         sim_cases.append(sim_case)
-        logger.debug("Simulation case #%d prepared: %s", index + 1, sim_case)
+        logger.debug(f"Simulation case #{index + 1} prepared: {sim_case}")
 
-    logger.info("All simulation cases prepared. Total count: %d", len(sim_cases))
+    logger.info(f"All simulation cases prepared. Total count: {len(sim_cases)}")
     return sim_cases

@@ -6,8 +6,10 @@ import numpy as np
 import numpy.typing as npt
 
 from logger import get_csv_logger, get_logger
-from services.solution_updater_service.core.utils import ensure_not_none
 from services.solution_updater_service.core.reports import PopulationStatistic
+from services.solution_updater_service.core.utils import ensure_not_none
+
+LOG_PRECISION = 5
 
 
 class ReportGenerator:
@@ -34,7 +36,7 @@ class ReportGenerator:
             )
 
         for idx, val in enumerate(np.hstack((control_vector, population_statistic.results))):
-            v_str = ",".join(f"{v:.9f}" for v in np.array(val))
+            v_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in np.array(val))
             ensure_not_none(self._control_vector_logger, "Control vector logger not initialized").info(
                 f"{generation},{idx},{v_str}")
 
@@ -61,11 +63,7 @@ class ReportGenerator:
         sd = _to_obj_list(population_statistic.std, name="std", n_objectives=n_objectives)
 
         self._logger.info(
-            "Generation statistics: min=%s, max=%s, avg=%s, std=%s",
-            mn,
-            mx,
-            av,
-            sd,
+            f"Generation {generation} statistics: min={mn:.{LOG_PRECISION}f}, max={mx:.{LOG_PRECISION}f}, avg={av:.{LOG_PRECISION}f}, std={sd:.{LOG_PRECISION}f}",
         )
 
         pop_values: list[float] = []
@@ -74,7 +72,7 @@ class ReportGenerator:
             pop_values.extend(item_vals)
 
         row_values: list[float] = mn + mx + av + sd + pop_values
-        row_str = ",".join(f"{v:.9f}" for v in row_values)
+        row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in row_values)
         ensure_not_none(self._population_statistic_logger, "Population statistic logger not initialized").info(
             f"{generation},{row_str}")
 
@@ -92,7 +90,13 @@ class ReportGenerator:
                 columns=["generation", *results_name],
             )
 
-        self._logger.info("Best result so far: %s", best_result)
+        if isinstance(best_result, float):
+            best_result_v = [best_result]
+        else:
+            best_result_v = list(best_result)
+
+        best_results_dsc = {k: float(v) for k, v in zip(results_name, best_result_v)}
+        self._logger.info(f"Best result so far: {best_results_dsc}")
 
         arr = np.asarray(best_result, dtype=float).ravel()
 
@@ -101,7 +105,7 @@ class ReportGenerator:
                 f"Expected {len(results_name)} values, got {arr.size}: {arr!r}"
             )
 
-        row_str = ",".join(f"{v:.9f}" for v in arr.tolist())
+        row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in arr.tolist())
 
         ensure_not_none(
             self._best_result_logger, "Best result logger not initialized"

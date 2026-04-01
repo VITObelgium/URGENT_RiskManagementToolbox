@@ -1,6 +1,8 @@
 import random
 from typing import Any, Callable
 
+import numpy as np
+
 from common import OptimizationStrategy
 from common.models import RunMode
 from logger import get_logger
@@ -114,10 +116,11 @@ class ProblemDispatcherService:
                     "Evaluation mode control vectors: %s", control_vectors
                 )
             elif next_iter_solutions is None:
+                rng = np.random.default_rng(self._problem_definition.optimization_parameters.seed)
                 control_vectors = CandidateGenerator.generate(
                     self._full_key_boundaries,
                     self.population_size,
-                    random.uniform,
+                    rng.uniform,
                     self._initial_state,
                     self._linear_inequalities,
                 )

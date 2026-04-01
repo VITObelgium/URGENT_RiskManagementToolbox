@@ -522,9 +522,23 @@ class SolutionUpdaterService:
         return ensure_not_none(self._engine, "Engine not initialized").global_best_result
 
     @property
+    def global_best_result_descriptive(self) -> dict[str, float]:
+        global_best: float | npt.NDArray[np.float64] = self.global_best_result
+
+        if isinstance(global_best, float):
+            values = [global_best]
+        else:
+            values = list(global_best)
+
+        return {k: float(v) for k, v in zip(self._mapper.results_name, values)}
+
+    @property
     def global_best_control_vector(self) -> ControlVector:
         control_vector_array = np.array(
-            ensure_not_none(self._engine, "Engine not initialized").global_best_control_vector)
+            [
+                ensure_not_none(self._engine, "Engine not initialized").global_best_control_vector
+            ]
+        )
         first_index = 0
         return self._mapper.to_control_vectors(control_vector_array)[first_index]
 
@@ -603,17 +617,18 @@ class SolutionUpdaterService:
             results_name=self._mapper.results_name,
         )
 
+        self._report_generator.log_best_result(
+            generation=self.loop_controller.current_generation,
+            best_result=global_best_result,
+            results_name=self._mapper.results_name,
+        )
+
         self._report_generator.log_population_statistic(
             generation=self.loop_controller.current_generation,
             population_statistic=population_statistic,
             results_name=self._mapper.results_name,
         )
 
-        self._report_generator.log_best_result(
-            generation=self.loop_controller.current_generation,
-            best_result=global_best_result,
-            results_name=self._mapper.results_name,
-        )
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
 

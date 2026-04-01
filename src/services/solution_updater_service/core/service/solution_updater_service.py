@@ -21,8 +21,10 @@ from services.solution_updater_service.core.models import (
     SolutionUpdaterServiceRequest,
     SolutionUpdaterServiceResponse,
 )
-from services.solution_updater_service.core.reports import PopulationStatisticGenerator, \
-    ReportGenerator
+from services.solution_updater_service.core.reports import (
+    PopulationStatisticGenerator,
+    ReportGenerator,
+)
 from services.solution_updater_service.core.utils import (
     ensure_not_none,
     get_mapping,
@@ -71,10 +73,10 @@ class _MapperState:
     """
 
     def __init__(
-            self,
-            control_vector_mapping: Mapping[Param, Idx],
-            results_mapping: Mapping[Param, Idx],
-            population_size: int,
+        self,
+        control_vector_mapping: Mapping[Param, Idx],
+        results_mapping: Mapping[Param, Idx],
+        population_size: int,
     ):
         self.control_vector_mapping: Mapping[Param, Idx] = control_vector_mapping
         self.results_mapping: Mapping[Param, Idx] = results_mapping
@@ -124,7 +126,7 @@ class _Mapper:
         self._state: _MapperState | None = None
 
     def to_numpy(
-            self, candidates: Sequence[SolutionCandidate]
+        self, candidates: Sequence[SolutionCandidate]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Converts a sequence of `SolutionCandidate` objects into NumPy arrays for
@@ -213,7 +215,7 @@ class _Mapper:
         return candidates_control_vector_array, candidates_results_array
 
     def to_control_vectors(
-            self, parameters2d: npt.NDArray[np.float64]
+        self, parameters2d: npt.NDArray[np.float64]
     ) -> list[ControlVector]:
         """
         Converts a 2D NumPy array of parameter values into a list of `ControlVector` objects.
@@ -281,7 +283,7 @@ class _Mapper:
         ]
 
     def get_variables_lb_and_ub_boundary(
-            self, boundaries: dict[str, Boundaries]
+        self, boundaries: dict[str, Boundaries]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Retrieves the lower and upper boundary values for control vector parameters
@@ -336,7 +338,7 @@ class _Mapper:
 
     @staticmethod
     def _initiate_mapper_on_first_call(
-            candidates: Sequence[SolutionCandidate],
+        candidates: Sequence[SolutionCandidate],
     ) -> _MapperState:
         first_solution_candidate = candidates[0]
         population_size = len(candidates)
@@ -352,10 +354,10 @@ class _Mapper:
 
 class _SolutionUpdaterServiceLoopController:
     def __init__(
-            self,
-            max_generations: int,
-            max_stall_generations: int,
-            solution_updater_service: SolutionUpdaterService,
+        self,
+        max_generations: int,
+        max_stall_generations: int,
+        solution_updater_service: SolutionUpdaterService,
     ) -> None:
         """
         Helper class to control the loop of the solution updater service.
@@ -435,7 +437,7 @@ class _SolutionUpdaterServiceLoopController:
         )
 
     def _has_pareto_converged(
-            self, current_best: float | npt.NDArray[np.float64]
+        self, current_best: float | npt.NDArray[np.float64]
     ) -> bool:
         """
         Check if Pareto front has converged using a moving window approach.
@@ -482,12 +484,12 @@ class _SolutionUpdaterServiceLoopController:
 
 class SolutionUpdaterService:
     def __init__(
-            self,
-            optimization_engine: OptimizationEngine,
-            max_generations: int,
-            max_stall_generations: int,
-            objectives: dict[str, OptimizationStrategy],
-            seed: int | None = None,
+        self,
+        optimization_engine: OptimizationEngine,
+        max_generations: int,
+        max_stall_generations: int,
+        objectives: dict[str, OptimizationStrategy],
+        seed: int | None = None,
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
@@ -519,7 +521,9 @@ class SolutionUpdaterService:
 
     @property
     def global_best_result(self) -> float | npt.NDArray[np.float64]:
-        return ensure_not_none(self._engine, "Engine not initialized").global_best_result
+        return ensure_not_none(
+            self._engine, "Engine not initialized"
+        ).global_best_result
 
     @property
     def global_best_result_descriptive(self) -> dict[str, float]:
@@ -536,14 +540,16 @@ class SolutionUpdaterService:
     def global_best_control_vector(self) -> ControlVector:
         control_vector_array = np.array(
             [
-                ensure_not_none(self._engine, "Engine not initialized").global_best_control_vector
+                ensure_not_none(
+                    self._engine, "Engine not initialized"
+                ).global_best_control_vector
             ]
         )
         first_index = 0
         return self._mapper.to_control_vectors(control_vector_array)[first_index]
 
     def process_request(
-            self, request_dict: dict[str, Any]
+        self, request_dict: dict[str, Any]
     ) -> SolutionUpdaterServiceResponse:
 
         self._logger.info("Processing control vectors update request...")
@@ -601,7 +607,9 @@ class SolutionUpdaterService:
                 iteration_ratio=iteration_ratio,
             )
 
-        global_best_result = ensure_not_none(self._engine, "Engine not initialized").global_best_result
+        global_best_result = ensure_not_none(
+            self._engine, "Engine not initialized"
+        ).global_best_result
 
         population_statistic = PopulationStatisticGenerator.generate(
             self.loop_controller.current_generation,
@@ -629,7 +637,6 @@ class SolutionUpdaterService:
             results_name=self._mapper.results_name,
         )
 
-
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
 
         self._logger.info("Control vectors update request processed successfully.")
@@ -650,9 +657,9 @@ class SolutionUpdaterService:
         return indexed_objectives_strategy
 
     def _get_linear_inequalities_matrices(
-            self,
-            config: SolutionUpdaterServiceRequest,
-            control_vector: npt.NDArray[np.float64],
+        self,
+        config: SolutionUpdaterServiceRequest,
+        control_vector: npt.NDArray[np.float64],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]] | tuple[None, None]:
         if not config.optimization_constrains.linear_inequalities:
             return None, None

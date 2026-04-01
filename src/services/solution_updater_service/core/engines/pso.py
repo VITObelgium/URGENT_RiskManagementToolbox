@@ -16,14 +16,14 @@ EPS = 1e-9
 
 class _PSOState:
     def __init__(
-            self,
-            particles_best_positions: npt.NDArray[np.float64],
-            particles_best_results: npt.NDArray[np.float64],
-            global_best_position: npt.NDArray[np.float64],
-            global_best_result: float | npt.NDArray[np.float64],
-            velocities: npt.NDArray[np.float64],
-            external_archive_positions: npt.NDArray[np.float64] | None = None,
-            external_archive_results: npt.NDArray[np.float64] | None = None,
+        self,
+        particles_best_positions: npt.NDArray[np.float64],
+        particles_best_results: npt.NDArray[np.float64],
+        global_best_position: npt.NDArray[np.float64],
+        global_best_result: float | npt.NDArray[np.float64],
+        velocities: npt.NDArray[np.float64],
+        external_archive_positions: npt.NDArray[np.float64] | None = None,
+        external_archive_results: npt.NDArray[np.float64] | None = None,
     ) -> None:
         self.particles_best_positions = particles_best_positions
         self.particles_best_results = particles_best_results
@@ -36,16 +36,16 @@ class _PSOState:
 
 class PSOEngine(OptimizationEngineInterface):
     def __init__(
-            self,
-            w_max: float = 0.9,
-            w_min: float = 0.4,
-            c1: float = 1.6,
-            c2: float = 1.6,
-            archive_size: int = 100,
-            mutation_probability: float = 0.1,
-            mutation_eta: float = 20.0,
-            epsilon_dominance: float | None = None,
-            seed: int | None = None,
+        self,
+        w_max: float = 0.9,
+        w_min: float = 0.4,
+        c1: float = 1.6,
+        c2: float = 1.6,
+        archive_size: int = 100,
+        mutation_probability: float = 0.1,
+        mutation_eta: float = 20.0,
+        epsilon_dominance: float | None = None,
+        seed: int | None = None,
     ) -> None:
         super().__init__()
         self.w_max = w_max
@@ -64,22 +64,26 @@ class PSOEngine(OptimizationEngineInterface):
 
     @property
     def global_best_result(self) -> float | npt.NDArray[np.float64]:
-        return ensure_not_none(self._state, "PSO state not initialized").global_best_result
+        return ensure_not_none(
+            self._state, "PSO state not initialized"
+        ).global_best_result
 
     @property
     def global_best_control_vector(self) -> npt.NDArray[np.float64]:
-        return ensure_not_none(self._state, "PSO state not initialized").global_best_position
+        return ensure_not_none(
+            self._state, "PSO state not initialized"
+        ).global_best_position
 
     def update_solution_to_next_iter(
-            self,
-            parameters: npt.NDArray[np.float64],
-            results: npt.NDArray[np.float64],
-            lb: npt.NDArray[np.float64],
-            ub: npt.NDArray[np.float64],
-            indexed_objectives_strategy: dict[int, OptimizationStrategy],
-            A: npt.NDArray[np.float64] | None = None,
-            b: npt.NDArray[np.float64] | None = None,
-            iteration_ratio: float | None = None,
+        self,
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
+        iteration_ratio: float | None = None,
     ) -> npt.NDArray[np.float64]:
 
         is_multi_objective = len(indexed_objectives_strategy) > 1
@@ -143,7 +147,7 @@ class PSOEngine(OptimizationEngineInterface):
         return self.w_max - (self.w_max - self.w_min) * iteration_ratio
 
     def _update_global_best_single_objective(
-            self, results, indexed_objectives_strategy
+        self, results, indexed_objectives_strategy
     ):
         """Update global best for single-objective optimization."""
         state = ensure_not_none(self._state, "PSO state is not initialized.")
@@ -204,8 +208,8 @@ class PSOEngine(OptimizationEngineInterface):
 
     @staticmethod
     def _replace_nan_with_inf(
-            results: npt.NDArray[np.float64],
-            indexed_objectives_strategy: dict[int, OptimizationStrategy],
+        results: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> npt.NDArray[np.float64]:
         """
         Replace NaN values with +inf (minimize) or -inf (maximize)
@@ -243,7 +247,7 @@ class PSOEngine(OptimizationEngineInterface):
                 if i == j or dominated[j]:
                     continue
                 if self._epsilon_dominates(
-                        results[j], results[i], indexed_objectives_strategy
+                    results[j], results[i], indexed_objectives_strategy
                 ):
                     dominated[i] = True
                     break
@@ -267,13 +271,13 @@ class PSOEngine(OptimizationEngineInterface):
             for i in range(1, n - 1):
                 idx = sorted_idx[i]
                 crowding[idx] += (
-                                         results[sorted_idx[i + 1], obj] - results[sorted_idx[i - 1], obj]
-                                 ) / obj_range
+                    results[sorted_idx[i + 1], obj] - results[sorted_idx[i - 1], obj]
+                ) / obj_range
 
         return crowding
 
     def _initialize_state_on_first_call(
-            self, parameters, results, indexed_objectives_strategy
+        self, parameters, results, indexed_objectives_strategy
     ):
         velocities = self._rng.uniform(-1, 1, parameters.shape)
 
@@ -323,9 +327,9 @@ class PSOEngine(OptimizationEngineInterface):
         if len(indexed_objectives_strategy) > 1:
             for i in range(len(positions)):
                 if self._epsilon_dominates(
-                        results[i],
-                        state.particles_best_results[i],
-                        indexed_objectives_strategy,
+                    results[i],
+                    state.particles_best_results[i],
+                    indexed_objectives_strategy,
                 ):
                     state.particles_best_positions[i] = positions[i]
                     state.particles_best_results[i] = results[i]
@@ -477,9 +481,9 @@ class PSOEngine(OptimizationEngineInterface):
             c1, c2 = self.c1_single, self.c2_single
 
         new_velocities = (
-                w * state.velocities
-                + c1 * r1 * (state.particles_best_positions - old_positions)
-                + c2 * r2 * (global_best - old_positions)
+            w * state.velocities
+            + c1 * r1 * (state.particles_best_positions - old_positions)
+            + c2 * r2 * (global_best - old_positions)
         )
 
         # Velocity clamping
@@ -487,7 +491,9 @@ class PSOEngine(OptimizationEngineInterface):
         return np.clip(new_velocities, -v_max, v_max)
 
     def _update_state_velocities(self, new_velocity):
-        ensure_not_none(self._state, "PSO state is not initialized.").velocities = new_velocity
+        ensure_not_none(
+            self._state, "PSO state is not initialized."
+        ).velocities = new_velocity
 
     @staticmethod
     def _calculate_new_position(old_positions, velocities):
@@ -500,7 +506,7 @@ class PSOEngine(OptimizationEngineInterface):
 
         # Determine which elements mutate
         mutation_mask = (
-                self._rng.random((n_particles, n_dims)) < self.mutation_probability
+            self._rng.random((n_particles, n_dims)) < self.mutation_probability
         )
 
         delta_max = ub - lb
@@ -539,7 +545,7 @@ class PSOEngine(OptimizationEngineInterface):
 
     @staticmethod
     def _compute_penalized_results(
-            parameters, results, A, b, indexed_objectives_strategy
+        parameters, results, A, b, indexed_objectives_strategy
     ):
         violations = (A @ parameters.T - b[:, None]).T
         violations = np.maximum(violations, 0.0)
@@ -550,9 +556,9 @@ class PSOEngine(OptimizationEngineInterface):
 
         for idx, strategy in indexed_objectives_strategy.items():
             if strategy == OptimizationStrategy.MINIMIZE:
-                penalized[:, idx: idx + 1] += penalty_factor * total_violation
+                penalized[:, idx : idx + 1] += penalty_factor * total_violation
             else:
-                penalized[:, idx: idx + 1] -= penalty_factor * total_violation
+                penalized[:, idx : idx + 1] -= penalty_factor * total_violation
 
         return penalized
 

@@ -1,4 +1,3 @@
-import random
 from typing import Any, Callable
 
 import numpy as np
@@ -116,7 +115,9 @@ class ProblemDispatcherService:
                     "Evaluation mode control vectors: %s", control_vectors
                 )
             elif next_iter_solutions is None:
-                rng = np.random.default_rng(self._problem_definition.optimization_parameters.seed)
+                rng = np.random.default_rng(
+                    self._problem_definition.optimization_parameters.seed
+                )
                 control_vectors = CandidateGenerator.generate(
                     self._full_key_boundaries,
                     self.population_size,

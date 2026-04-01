@@ -22,8 +22,6 @@ class TaskBuilder:
         initial_state (dict[str, Any]): The initial state dictionary, used as the base for updates
             from control vectors.
         handlers (dict[str, ProblemTypeHandler]): Handlers responsible for processing problem types.
-        service_type_map (dict[str, ServiceType]): A mapping of problem types to their corresponding
-            service types.
     """
 
     def __init__(

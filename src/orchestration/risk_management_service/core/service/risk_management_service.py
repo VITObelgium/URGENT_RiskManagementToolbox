@@ -33,8 +33,8 @@ logger = get_logger(__name__)
 
 
 def run_risk_management(
-        problem_definition: ProblemDispatcherDefinition,
-        simulation_model_archive: bytes | str,
+    problem_definition: ProblemDispatcherDefinition,
+    simulation_model_archive: bytes | str,
 ) -> tuple[float | npt.NDArray[np.float64], Any] | None:
     """
     Main entry point for running risk management.
@@ -188,7 +188,7 @@ def run_risk_management(
 
 
 def _prepare_simulation_cases(
-        solutions: ProblemDispatcherServiceResponse, expected_cost_function_names: list[str]
+    solutions: ProblemDispatcherServiceResponse, expected_cost_function_names: list[str]
 ) -> list[dict[(str, Any)]]:
     """
     Prepare simulation cases from generated candidates.

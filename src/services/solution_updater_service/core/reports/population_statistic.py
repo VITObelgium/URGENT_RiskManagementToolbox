@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+
 import numpy as np
 import numpy.typing as npt
+
 from common import OptimizationStrategy
 
 
@@ -16,7 +18,6 @@ class PopulationStatistic:
 
 
 class PopulationStatisticGenerator:
-
     @staticmethod
     def generate(
         generation: int,

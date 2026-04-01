@@ -20,13 +20,13 @@ class ReportGenerator:
         self._best_result_logger: logging.Logger | None = None
 
     def log_control_vector_and_values(
-            self,
-            *,
-            generation: int,
-            control_vector: npt.NDArray[np.float64],
-            population_statistic: PopulationStatistic,
-            parameters_name: list[str],
-            results_name: list[str],
+        self,
+        *,
+        generation: int,
+        control_vector: npt.NDArray[np.float64],
+        population_statistic: PopulationStatistic,
+        parameters_name: list[str],
+        results_name: list[str],
     ) -> None:
         if self._control_vector_logger is None:
             self._control_vector_logger = get_csv_logger(
@@ -35,17 +35,20 @@ class ReportGenerator:
                 columns=["generation", "individual", *parameters_name, *results_name],
             )
 
-        for idx, val in enumerate(np.hstack((control_vector, population_statistic.results))):
+        for idx, val in enumerate(
+            np.hstack((control_vector, population_statistic.results))
+        ):
             v_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in np.array(val))
-            ensure_not_none(self._control_vector_logger, "Control vector logger not initialized").info(
-                f"{generation},{idx},{v_str}")
+            ensure_not_none(
+                self._control_vector_logger, "Control vector logger not initialized"
+            ).info(f"{generation},{idx},{v_str}")
 
     def log_population_statistic(
-            self,
-            *,
-            generation: int,
-            population_statistic: PopulationStatistic,
-            results_name: list[str],
+        self,
+        *,
+        generation: int,
+        population_statistic: PopulationStatistic,
+        results_name: list[str],
     ) -> None:
 
         population_size, n_objectives = population_statistic.results.shape
@@ -57,10 +60,18 @@ class ReportGenerator:
                 columns=_generation_csv_columns(results_name, population_size),
             )
 
-        mn = _to_obj_list(population_statistic.min, name="min", n_objectives=n_objectives)
-        mx = _to_obj_list(population_statistic.max, name="max", n_objectives=n_objectives)
-        av = _to_obj_list(population_statistic.avg, name="avg", n_objectives=n_objectives)
-        sd = _to_obj_list(population_statistic.std, name="std", n_objectives=n_objectives)
+        mn = _to_obj_list(
+            population_statistic.min, name="min", n_objectives=n_objectives
+        )
+        mx = _to_obj_list(
+            population_statistic.max, name="max", n_objectives=n_objectives
+        )
+        av = _to_obj_list(
+            population_statistic.avg, name="avg", n_objectives=n_objectives
+        )
+        sd = _to_obj_list(
+            population_statistic.std, name="std", n_objectives=n_objectives
+        )
 
         self._logger.info(
             f"Generation {generation} statistics: min={mn:.{LOG_PRECISION}f}, max={mx:.{LOG_PRECISION}f}, avg={av:.{LOG_PRECISION}f}, std={sd:.{LOG_PRECISION}f}",
@@ -68,20 +79,24 @@ class ReportGenerator:
 
         pop_values: list[float] = []
         for idx, item in enumerate(population_statistic.results):
-            item_vals = _to_obj_list(item, name=f"population[{idx}]", n_objectives=n_objectives)
+            item_vals = _to_obj_list(
+                item, name=f"population[{idx}]", n_objectives=n_objectives
+            )
             pop_values.extend(item_vals)
 
         row_values: list[float] = mn + mx + av + sd + pop_values
         row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in row_values)
-        ensure_not_none(self._population_statistic_logger, "Population statistic logger not initialized").info(
-            f"{generation},{row_str}")
+        ensure_not_none(
+            self._population_statistic_logger,
+            "Population statistic logger not initialized",
+        ).info(f"{generation},{row_str}")
 
     def log_best_result(
-            self,
-            *,
-            generation: int,
-            best_result: float | npt.NDArray[np.float64],
-            results_name: list[str],
+        self,
+        *,
+        generation: int,
+        best_result: float | npt.NDArray[np.float64],
+        results_name: list[str],
     ) -> None:
         if self._best_result_logger is None:
             self._best_result_logger = get_csv_logger(
@@ -112,7 +127,9 @@ class ReportGenerator:
         ).info(f"{generation},{row_str}")
 
 
-def _to_obj_list(x: float | npt.NDArray[np.float64], *, name: str, n_objectives: int) -> list[float]:
+def _to_obj_list(
+    x: float | npt.NDArray[np.float64], *, name: str, n_objectives: int
+) -> list[float]:
     arr = np.asarray(x, dtype=float).ravel()
     if arr.size == 1 and n_objectives == 1:
         return [float(arr[0])]
@@ -134,8 +151,8 @@ def _sanitize_col(name: str) -> str:
 
 
 def _generation_csv_columns(
-        expected_optimization_function_names: list[str],
-        pop_size: int,
+    expected_optimization_function_names: list[str],
+    pop_size: int,
 ) -> list[str]:
     metrics = ["min", "max", "avg", "std"]
     obj_cols = [_sanitize_col(o) for o in expected_optimization_function_names]

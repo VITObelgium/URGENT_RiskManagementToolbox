@@ -11,15 +11,15 @@ from common import OptimizationStrategy
 class OptimizationEngineInterface(ABC):
     @abstractmethod
     def update_solution_to_next_iter(
-            self,
-            parameters: npt.NDArray[np.float64],
-            results: npt.NDArray[np.float64],
-            lb: npt.NDArray[np.float64],
-            ub: npt.NDArray[np.float64],
-            indexed_objectives_strategy: dict[int, OptimizationStrategy],
-            A: npt.NDArray[np.float64] | None = None,
-            b: npt.NDArray[np.float64] | None = None,
-            iteration_ratio: float | None = None,
+        self,
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
+        iteration_ratio: float | None = None,
     ) -> npt.NDArray[np.float64]: ...
 
     @property

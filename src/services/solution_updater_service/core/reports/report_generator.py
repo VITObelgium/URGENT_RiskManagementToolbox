@@ -35,9 +35,11 @@ class ReportGenerator:
                 columns=["generation", "individual", *parameters_name, *results_name],
             )
 
-        for idx, val in enumerate(
-            np.hstack((control_vector, population_statistic.results))
-        ):
+        results = np.atleast_2d(population_statistic.results)
+        if results.shape[0] == 1 and control_vector.shape[0] != 1:
+            results = results.T
+
+        for idx, val in enumerate(np.hstack((control_vector, results))):
             v_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in np.array(val))
             ensure_not_none(
                 self._control_vector_logger, "Control vector logger not initialized"
@@ -50,8 +52,12 @@ class ReportGenerator:
         population_statistic: PopulationStatistic,
         results_name: list[str],
     ) -> None:
+        results = np.atleast_2d(population_statistic.results)
 
-        population_size, n_objectives = population_statistic.results.shape
+        if results.shape[0] == 1 and population_statistic.results.ndim == 1:
+            results = results.T
+
+        population_size, n_objectives = results.shape
 
         if self._population_statistic_logger is None:
             self._population_statistic_logger = get_csv_logger(
@@ -73,12 +79,16 @@ class ReportGenerator:
             population_statistic.std, name="std", n_objectives=n_objectives
         )
 
+        def _fmt(values: list[float]) -> str:
+            return ", ".join(f"{v:.{LOG_PRECISION}f}" for v in values)
+
         self._logger.info(
-            f"Generation {generation} statistics: min={mn:.{LOG_PRECISION}f}, max={mx:.{LOG_PRECISION}f}, avg={av:.{LOG_PRECISION}f}, std={sd:.{LOG_PRECISION}f}",
+            f"Generation {generation} statistics: "
+            f"min=[{_fmt(mn)}], max=[{_fmt(mx)}], avg=[{_fmt(av)}], std=[{_fmt(sd)}]",
         )
 
         pop_values: list[float] = []
-        for idx, item in enumerate(population_statistic.results):
+        for idx, item in enumerate(results):
             item_vals = _to_obj_list(
                 item, name=f"population[{idx}]", n_objectives=n_objectives
             )
@@ -105,20 +115,15 @@ class ReportGenerator:
                 columns=["generation", *results_name],
             )
 
-        if isinstance(best_result, float):
-            best_result_v = [best_result]
-        else:
-            best_result_v = list(best_result)
-
-        best_results_dsc = {k: float(v) for k, v in zip(results_name, best_result_v)}
-        self._logger.info(f"Best result so far: {best_results_dsc}")
-
         arr = np.asarray(best_result, dtype=float).ravel()
 
         if arr.size != len(results_name):
             raise ValueError(
                 f"Expected {len(results_name)} values, got {arr.size}: {arr!r}"
             )
+
+        best_results_dsc = {k: float(v) for k, v in zip(results_name, arr.tolist())}
+        self._logger.info(f"Best result so far: {best_results_dsc}")
 
         row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in arr.tolist())
 

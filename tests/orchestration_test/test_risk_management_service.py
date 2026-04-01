@@ -17,11 +17,7 @@ import orchestration.risk_management_service.core.service.risk_management_servic
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.ProblemDispatcherService"
 )
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.get_csv_logger"
-)
 def test_run_risk_management_happy_path(
-    mock_csv_logger,
     mock_dispatcher,
     mock_su,
     mock_sim_service,
@@ -79,9 +75,6 @@ def test_run_risk_management_happy_path(
         next_iter_solutions=[{"a": 1}]
     )
 
-    csv_logger_inst = MagicMock()
-    mock_csv_logger.return_value = csv_logger_inst
-
     mock_su_inst.global_best_result = 1.23
     mock_su_inst.global_best_control_vector = MagicMock(items={"x": 5})
 
@@ -104,14 +97,6 @@ def test_run_risk_management_happy_path(
     mock_sim_service.transfer_simulation_model.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1
     mock_su_inst.process_request.assert_called()
-
-    # CSV logger: one numeric row logged for the generation
-    csv_logger_inst.info.assert_called()
-    logged_message = csv_logger_inst.info.call_args[0][0]
-    assert logged_message.startswith("1,")
-
-    # generation + (global_best,min,max,avg,std) + population => 1 + 5 + 1 = 7 fields
-    assert len(logged_message.split(",")) == 7
 
 
 def test_prepare_simulation_cases_basic():
@@ -154,19 +139,7 @@ def test_prepare_simulation_cases_unhandled_service():
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.SimulationService"
 )
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.SolutionUpdaterService"
-)
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.ProblemDispatcherService"
-)
-@patch(
-    "orchestration.risk_management_service.core.service.risk_management_service.get_csv_logger"
-)
 def test_run_risk_management_exception(
-    _mock_csv_logger,
-    _mock_dispatcher,
-    _mock_su,
     mock_sim_service,
     mock_sim_cluster_ctx,
 ):

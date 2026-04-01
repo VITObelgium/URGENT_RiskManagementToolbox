@@ -519,11 +519,12 @@ class SolutionUpdaterService:
 
     @property
     def global_best_result(self) -> float | npt.NDArray[np.float64]:
-        return ensure_not_none(self._engine,"Engine not initialized").global_best_result
+        return ensure_not_none(self._engine, "Engine not initialized").global_best_result
 
     @property
     def global_best_control_vector(self) -> ControlVector:
-        control_vector_array = ensure_not_none(self._engine,"Engine not initialized").global_best_control_vector
+        control_vector_array = np.array(
+            ensure_not_none(self._engine, "Engine not initialized").global_best_control_vector)
         first_index = 0
         return self._mapper.to_control_vectors(control_vector_array)[first_index]
 

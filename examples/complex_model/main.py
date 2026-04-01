@@ -3,8 +3,7 @@
 ###############
 
 import os
-
-import helpers.helper_modelling as func
+import shutil
 
 # import other libraries
 import numpy as np
@@ -21,7 +20,8 @@ from connectors.open_darts import (
 from darts.physics.properties.iapws.iapws_property_vec import _Backward1_T_Ph_vec
 
 # import helper functions
-from helpers.helper_heatproduction import cumulative_heat
+import helpers.helper_heatproduction as func_heat
+import helpers.helper_modelling as func
 
 # import DARTS model
 from model_PROD import ProductionModel
@@ -46,7 +46,7 @@ def run_darts(well_data) -> None:
 
     # Well control parameters
     Qinj = 600.0  # ton/day
-    Tinj = 30 + 273.15  # K    - reference temperature (injection temperature)
+    Tinj = 66 + 273.15  # K    - reference temperature (injection temperature)
     Qprod = Qinj  # ton/day   -- assuming balanced doublet for simplicity, but it can be different
 
     # model run
@@ -76,13 +76,11 @@ def run_darts(well_data) -> None:
     # fault_df = pd.read_csv(fault_file, sep=",")
     fault_df = func.build_fault_df_from_reservoir(m.reservoir)
     depth_reservoir = m.reservoir.global_data["depth"]
+    print(f"Fault dataframe built with {len(fault_df)} fault elements based on reservoir mesh and fault ID mapping.")
 
     initcond_df = pd.read_csv(
         restart_file, sep=",", index_col=0
-    )  # restart file contains only P and H with cell ID as index
-    initcond_df["T"] = _Backward1_T_Ph_vec(
-        initcond_df["P"].to_numpy() / 10, initcond_df["H"].to_numpy() / 18.015
-    )
+    ) 
 
     fault_stress_df = func.stress_fault_df(
         fault_df, depth_reservoir, initcond_df, stress_df=stress_df
@@ -94,27 +92,35 @@ def run_darts(well_data) -> None:
 
     for i, t in enumerate(Dtimes):
         m.run(days=t, restart_dt=0, verbose=True)
-        m.output_to_vtk(
-            ith_step=i + 1,
-            output_directory=vtk_dir,
-            output_properties=["temperature"],
-        )  # pressure/enthalpy are primary vars
+        # m.output_to_vtk(
+        #     ith_step=i + 1,
+        #     output_directory=vtk_dir,
+        #     output_properties=["temperature"],
+        # )  # pressure/enthalpy are primary vars
 
         # Getting primary variables
         P = np.array(m.physics.engine.X[0::2], copy=False)  # pressure in bar
         H = np.array(m.physics.engine.X[1::2], copy=False)  # enthalpy in kJ/kmol
         T = _Backward1_T_Ph_vec(P / 10, H / 18.015)  # temperature in K
         solution_df = pd.DataFrame({"P": P, "H": H, "T": T})
-        solution_df.to_csv(
-            os.path.join(out_root, f"solution_PROD_{i + 1}.csv"), sep=","
-        )
+        # solution_df.to_csv(
+        #     os.path.join(out_root, f"solution_PROD_{i + 1}.csv"), sep=","
+        # )
 
         # Computing stress state on faults
         mu_vec = m.compute_analytical_stress_vect(
             fault_stress_df, stress_df=stress_df, solution_df=solution_df
         )
+        n_cells = m.reservoir.mesh.n_res_blocks
+        mu_full = np.full(n_cells, np.nan, dtype=float)
+        fault_ids = fault_stress_df["ID"].to_numpy(dtype=int)
+        mu_full[fault_ids] = mu_vec
+
+        func.output_darts_vtk_with_cell_prop(model=m, ith_step=i + 1, vtk_dir=vtk_dir, cell_prop=mu_full, field_name="mu_fault", output_properties=("temperature",),)
+
+        # Fault reactivation check and well control adjustment
         Max_mu = mu_vec.max()
-        t_cum += t
+        t_cum = t_cum + t
         print(f"Time {t_cum} days: Max friction coefficient on faults = {Max_mu:.3f}")
 
         # Check failure criteria
@@ -135,7 +141,7 @@ def run_darts(well_data) -> None:
     writer.close()
 
     ## Cumulative heat production (MWy)
-    Heat = cumulative_heat(
+    Heat = func_heat.cumulative_heat(
         td, PROD, INJ
     )  # cumulative heat for a specific doublet: requires accurate well names for producers and injectors
     address = out_root + os.sep + "indicators.txt"
@@ -145,6 +151,14 @@ def run_darts(well_data) -> None:
     np.savetxt(address, Indicators.values, fmt="%.1f", header="Heat[MWy]")
 
     OpenDartsConnector.broadcast_result("Heat", Heat)
+
+    # move darts created pvd to vtk folder for better organization
+    src = os.path.join(os.getcwd(), "solution.pvd")
+    dst = os.path.join(vtk_dir, "solution.pvd")
+
+    if os.path.exists(src):
+        shutil.move(src, dst)
+        func.fix_pvd_paths(dst)
 
 
 if __name__ == "__main__":

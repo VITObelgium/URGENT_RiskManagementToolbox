@@ -244,7 +244,7 @@ class ProductionModel(DartsModel):
             for cell in cells:
                 i, j, k = cell
                 self.reservoir.add_perforation(
-                    well_name, cell_index=(i, j, k), multi_segment=False
+                    well_name, cell_index=(i, j, k), multi_segment=False, verbose=True
                 )
 
     ## Setup well injection and production controls

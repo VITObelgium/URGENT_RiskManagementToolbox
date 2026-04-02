@@ -10,7 +10,6 @@ from common import OptimizationStrategy
 from logger import get_logger
 from services.shared import Boundaries
 from services.solution_updater_service.core.engines import (
-    # GenerationSummary,
     OptimizationEngineFactory,
     OptimizationEngineInterface,
 )

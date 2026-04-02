@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 from typing import Mapping
 
 import numpy as np
 import numpy.typing as npt
 
-type Param = str
-type Idx = int
+from services.solution_updater_service.core.utils.types import Idx, Param
 
 
 def get_numpy_values(

@@ -1,6 +1,9 @@
-from enum import StrEnum
+from enum import Enum
 
 
-class OptimizationStrategy(StrEnum):
+class OptimizationStrategy(str, Enum):
     MINIMIZE = "minimize"
     MAXIMIZE = "maximize"
+
+    def __str__(self) -> str:
+        return self.value

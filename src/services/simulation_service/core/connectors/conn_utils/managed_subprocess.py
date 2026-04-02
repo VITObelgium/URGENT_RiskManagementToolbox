@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import subprocess
 import threading
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Callable
 
 
@@ -34,14 +37,16 @@ class ManagedSubprocess:
         text: bool = True,
         env: Mapping[str, str] | None = None,
         thread_name_prefix: str = "",
+        cwd: str | Path | None = None,
     ):
         self.command_args = command_args
         self.stream_reader_func = stream_reader_func
-        self.log_info = logger_info_func
-        self.log_error = logger_error_func
-        self.log_warning = logger_warning_func or logger_error_func
         self.text = text
-        self.env: dict[str, str] | None = dict(env) if env is not None else None
+        self.logger_info_func = logger_info_func
+        self.logger_error_func = logger_error_func
+        self.logger_warning_func = logger_warning_func or logger_error_func
+        self.env = dict(env) if env is not None else None
+        self.cwd = str(cwd) if cwd is not None else None
         self.thread_name_prefix = thread_name_prefix
 
         self.process: subprocess.Popen | None = None
@@ -50,21 +55,28 @@ class ManagedSubprocess:
         self.stdout_lines: list[str] = []
         self.stderr_lines: list[str] = []
 
-    def __enter__(self) -> "ManagedSubprocess":
-        cwd = self.env.get("PWD") if self.env else None
-        self.log_info(f"Starting subprocess: {' '.join(self.command_args)}")
-
-        popen_kwargs: dict = {
-            "stdout": subprocess.PIPE,
-            "stderr": subprocess.PIPE,
-            "text": self.text,
-            "cwd": cwd,
-        }
-        if self.env is not None:
-            popen_kwargs["env"] = self.env
-
+    def __enter__(self) -> subprocess.Popen:
         try:
-            self.process = subprocess.Popen(self.command_args, **popen_kwargs)
+            command = " ".join(self.command_args)
+        except Exception:
+            command = str(self.command_args)
+        self.logger_info_func("Starting subprocess...")
+        try:
+            popen_kwargs: dict = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": self.text,
+                "cwd": self.cwd,
+            }
+
+            # Pass env only if explicitly provided; do not include when None.
+            if self.env is not None:
+                popen_kwargs["env"] = self.env
+
+            self.process = subprocess.Popen(
+                self.command_args,
+                **popen_kwargs,
+            )
         except Exception:
             self.log_error(f"Failed to start subprocess: {' '.join(self.command_args)}")
             raise
@@ -94,26 +106,26 @@ class ManagedSubprocess:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if self.process is not None and self.process.poll() is None:
-            self.log_warning(
+            self.logger_warning_func(
                 f"Subprocess (PID {self.process.pid}) still running on context exit "
                 f"(exc={exc_type}). Terminating."
             )
             try:
                 self.process.terminate()
             except OSError as e:
-                self.log_warning(f"terminate() failed: {e}")
+                self.logger_warning_func(f"terminate() failed: {e}")
 
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.log_warning(
+                self.logger_warning_func(
                     f"Subprocess (PID {self.process.pid}) did not terminate "
                     "gracefully after 5 s — killing."
                 )
                 try:
                     self.process.kill()
                 except OSError as e:
-                    self.log_warning(f"kill() failed: {e}")
+                    self.logger_warning_func(f"kill() failed: {e}")
                 self.process.wait()
 
         if self._stdout_thread is not None:

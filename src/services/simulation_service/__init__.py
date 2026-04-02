@@ -1,26 +1,16 @@
-_hard_dependencies = ["numpy", "grpc", "pydantic"]
-_missing_dependencies = []
+import os
 
-for _dependency in _hard_dependencies:
-    try:
-        __import__(_dependency)
-    except ImportError as _e:
-        _missing_dependencies.append(f"{_dependency}: {_e}")
+_is_worker_mode = os.environ.get("OPEN_DARTS_RUNNER", "").lower() == "docker"
 
-if _missing_dependencies:
-    raise ImportError(
-        "Unable to import required dependencies:\n" + "\n".join(_missing_dependencies)
+if not _is_worker_mode:
+    from services.simulation_service.core.api import (  # noqa: F401, E402
+        SimulationService,
+        simulation_cluster_context_manager,
+        simulation_process_context_manager,
     )
-del _hard_dependencies, _dependency, _missing_dependencies
 
-from services.simulation_service.core.api import (  # noqa: F401, E402
-    SimulationService,
-    simulation_cluster_context_manager,
-    simulation_process_context_manager,
-)
-
-__all__ = [
-    "SimulationService",
-    "simulation_cluster_context_manager",
-    "simulation_process_context_manager",
-]
+    __all__ = [
+        "SimulationService",
+        "simulation_cluster_context_manager",
+        "simulation_process_context_manager",
+    ]

@@ -1,6 +1,9 @@
-from enum import StrEnum
+from enum import Enum
 
 
-class RunMode(StrEnum):
+class RunMode(str, Enum):
     Evaluation = "evaluation"
     Optimization = "optimization"
+
+    def __str__(self) -> str:
+        return self.value

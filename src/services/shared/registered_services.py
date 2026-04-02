@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 from enum import StrEnum
 from typing import Any
+
+from typing_extensions import TypeAlias
 
 
 class ServiceType(StrEnum):
     WellDesignService = "well_design"
 
 
-type ServiceRequest = list[
-    dict[str, Any]
-]  # generic type which should be compiled with service(s) request
+ServiceRequest: TypeAlias = list[dict[str, Any]]

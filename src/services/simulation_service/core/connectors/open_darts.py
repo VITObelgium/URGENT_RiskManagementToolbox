@@ -3,6 +3,8 @@ NOTE:
 This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import re
@@ -312,6 +314,9 @@ class OpenDartsConnector(ConnectorInterface):
                 return name.split("-", 1)[1]
         except Exception:
             raise RuntimeError("Failed to parse current thread name.")
+        env_worker_id = os.environ.get("SIM_WORKER_ID")
+        if env_worker_id:
+            return env_worker_id
         return None
 
 

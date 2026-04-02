@@ -3,6 +3,8 @@ NOTE:
 This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
 """
 
+from __future__ import annotations
+
 import threading
 from abc import ABC, abstractmethod
 from enum import Enum

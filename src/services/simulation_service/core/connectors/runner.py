@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Callable, Protocol, TypeVar
@@ -12,11 +13,14 @@ from .common import (
     SimulationResults,
     SimulationStatus,
 )
-from .conn_utils import ManagedSubprocess
+from .conn_utils import (
+    ManagedSubprocess,
+    docker_job_workspace,
+    static_workspace,
+)
 
 logger = get_logger("threading-worker", filename=__name__)
 
-_LOG_TAIL_LINES = 100
 _GRACEFUL_TERMINATE_TIMEOUT = 5
 _STOP_TERMINATE_TIMEOUT = 3
 _THREAD_JOIN_TIMEOUT = 2
@@ -45,13 +49,10 @@ class SubprocessRunner:
         managed_subprocess_factory: Callable[..., ManagedSubprocess] | None = None,
         broadcast_results_parser: Callable[[str], SimulationResults] | None = None,
     ):
-        if broadcast_results_parser is None:
-            raise RuntimeError(
-                "SubprocessRunner requires a broadcast_results_parser to be provided"
-            )
 
         self._managed_subprocess_factory = (
             managed_subprocess_factory or self._default_managed_subprocess_factory
+
         )
         self._broadcast_results_parser = broadcast_results_parser
         self._repo_root_getter = repo_root_getter
@@ -229,6 +230,13 @@ class SubprocessRunner:
                 "Ensure each worker runs in an isolated directory and no other "
                 "process holds the same HDF5 file open."
             )
+            return SimulationStatus.EXCEPTION, user_cost_function_with_default_values
+        except FileNotFoundError as e:
+            logger.exception("Failed to prepare simulation workspace: %s", e)
+            return SimulationStatus.EXCEPTION, user_cost_function_with_default_values
+        except Exception as e:
+            logger.exception("Error running simulation subprocess: %s", e)
+            return SimulationStatus.EXCEPTION, user_cost_function_with_default_values
 
     def _parse_and_merge(
         self,
@@ -261,6 +269,115 @@ class SubprocessRunner:
 
 class ThreadRunner:
     """Lightweight runner that runs simulation inside a thread or in-process."""
+    def _get_workspace_manager(
+        self,
+        runner_mode: str,
+        repo_root: Path | None,
+        worker_id: str | None,
+    ):
+        """Get the appropriate workspace context manager for the runner mode."""
+        if runner_mode == "docker":
+            template_dir_raw = os.environ.get("SIM_MODEL_DIR")
+            if not template_dir_raw:
+                logger.error("Docker runner mode requires SIM_MODEL_DIR to be set.")
+                return None
+            return docker_job_workspace(Path(template_dir_raw))
+
+        # Thread mode
+        if repo_root is None or worker_id is None:
+            logger.debug(
+                "Thread runner mode is missing repo_root or worker_id; "
+                "running without an isolated worker workspace."
+            )
+            return static_workspace(None)
+        work_dir = repo_root / f"orchestration_files/.worker_{worker_id}_temp"
+        return static_workspace(work_dir)
+
+    def _execute_in_workspace(
+        self,
+        config: JsonPath,
+        defaults: SimulationResults,
+        work_dir: Path | None,
+        worker_id: str | None,
+        runner_mode: str,
+        stop: threading.Event | None,
+    ) -> tuple[SimulationStatus, SimulationResults]:
+        """Execute the simulation within the prepared workspace."""
+        command = _build_command(config, runner_mode)
+        env = _build_env(work_dir, runner_mode)
+
+        if work_dir is not None:
+            work_dir.mkdir(parents=True, exist_ok=True)
+
+        tw_logger = get_logger("threading-worker")
+        manager = self._managed_subprocess_factory(
+            command_args=command,
+            stream_reader_func=stream_reader,
+            logger_info_func=tw_logger.info,
+            logger_error_func=tw_logger.error,
+            env=env,
+            cwd=work_dir,
+            thread_name_prefix=f"worker-{worker_id}" if worker_id else None,
+        )
+
+        with manager as process:
+            status = self._wait_for_process(process, manager, stop)
+            if status is not None:
+                return status, defaults
+
+            if process.returncode != 0:
+                _log_process_failure(process.returncode, manager)
+                return SimulationStatus.FAILED, defaults
+
+            return self._parse_results(manager, defaults)
+
+    def _wait_for_process(
+        self,
+        process: subprocess.Popen,
+        manager: ManagedSubprocess,
+        stop: threading.Event | None,
+    ) -> SimulationStatus | None:
+        """Wait for process completion, handling stop signals and timeouts."""
+        waited = 0.0
+        poll_step = 0.25
+
+        while True:
+            # Check for stop signal
+            if stop is not None and stop.is_set():
+                logger.warning("Stop requested; terminating OpenDarts subprocess.")
+                _terminate_process(process)
+                return SimulationStatus.FAILED
+
+            # Wait for process with timeout
+            try:
+                process.wait(timeout=poll_step)
+                return None  # Process completed normally
+            except subprocess.TimeoutExpired:
+                waited += poll_step
+                if waited >= self._timeout_duration:
+                    logger.warning(
+                        "Subprocess timed out after %s seconds. Terminating.",
+                        self._timeout_duration,
+                    )
+                    _terminate_process(process)
+                    _join_output_threads(manager)
+                    return SimulationStatus.TIMEOUT
+
+    def _parse_results(
+        self, manager: ManagedSubprocess, defaults: SimulationResults
+    ) -> tuple[SimulationStatus, SimulationResults]:
+        """Parse simulation results from stdout."""
+        parser = self._broadcast_results_parser
+        if parser is None:
+            raise RuntimeError(
+                "SubprocessRunner requires a broadcast_results_parser to be provided"
+            )
+        full_stdout = "\n".join(manager.stdout_lines)
+        broadcast_results = parser(full_stdout)
+        merged = _merge_results(defaults, broadcast_results)
+        return SimulationStatus.SUCCESS, merged
+
+
 
     def __init__(self, subprocess_runner: SubprocessRunner):
         self._subprocess_runner = subprocess_runner
@@ -277,39 +394,105 @@ class ThreadRunner:
         )
 
 
-def _tail(lines: list[str], n: int = _LOG_TAIL_LINES) -> str:
-    return "\n".join(lines[-n:])
+    @staticmethod
+    def _default_subprocess_factory(*args, **kwargs) -> ManagedSubprocess:
+        """Default factory for creating ManagedSubprocess instances."""
+        return ManagedSubprocess(*args, **kwargs)
 
 
-def _safe_call(fn: Callable[[], T]) -> T | None:
-    """Call fn(), returning None on any exception and logging the error."""
+def _build_command(config: JsonPath, runner_mode: str) -> list[str]:
+    """Build the subprocess command based on runner mode."""
+    if runner_mode == "docker":
+        return [sys.executable, "-u", "main.py", config]
+    return ["pixi", "run", "-e", "worker", "python", "-u", "main.py", config]
+
+
+def _build_env(work_dir: Path | None, runner_mode: str) -> dict[str, str]:
+    """Build environment variables for the subprocess."""
+    env = os.environ.copy()
+    if work_dir is not None:
+        env["PWD"] = str(work_dir)
+        if runner_mode == "docker":
+            env["SIM_MODEL_TEMPLATE_DIR"] = os.environ.get("SIM_MODEL_DIR", "")
+            env["SIM_MODEL_DIR"] = str(work_dir)
+    return env
+
+
+def _terminate_process(process: subprocess.Popen) -> None:
+    """Gracefully terminate a process, killing if necessary."""
+    if process.poll() is not None:
+        return
+
+    process.terminate()
     try:
-        return fn()
-    except Exception as e:
-        func_name = getattr(fn, "__name__", str(fn))
-        logger.warning("Safe call to '%s' failed: %s", func_name, e)
-        return None
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        logger.warning("Subprocess did not terminate gracefully. Killing.")
+        process.kill()
+        process.wait()
 
 
-def _update_user_cost_function_with_simulation_results(
-    user_cost_function_with_default_values: SimulationResults,
-    simulation_results: SimulationResults,
+def _join_output_threads(manager: ManagedSubprocess) -> None:
+    """Join stdout/stderr reader threads."""
+    if manager.stdout_thread and manager.stdout_thread.is_alive():
+        manager.stdout_thread.join(timeout=2)
+    if manager.stderr_thread and manager.stderr_thread.is_alive():
+        manager.stderr_thread.join(timeout=2)
+
+
+def _log_process_failure(returncode: int, manager: ManagedSubprocess) -> None:
+    """Log detailed information about a process failure."""
+    stderr_tail = "\n".join(manager.stderr_lines[-100:])
+    stdout_tail = "\n".join(manager.stdout_lines[-100:])
+
+    if returncode == -9:
+        logger.error(
+            "OpenDarts subprocess was killed (rc=-9). This is often due to OOM kill. "
+            "Consider lowering worker_count, reducing model size, or limiting threads. "
+            "Stdout tail:\n%s\nStderr tail:\n%s",
+            stdout_tail,
+            stderr_tail,
+        )
+    else:
+        logger.error(
+            "OpenDarts subprocess failed rc=%s. Stdout tail:\n%s\nStderr tail:\n%s",
+            returncode,
+            stdout_tail,
+            stderr_tail,
+        )
+        if (
+            "BlockingIOError" in stderr_tail
+            and "h5py" in stderr_tail
+            and "Unable to synchronously create file" in stderr_tail
+        ):
+            logger.error(
+                "Detected HDF5 file locking error from h5py. The worker sets "
+                "HDF5_USE_FILE_LOCKING=FALSE, but if the error persists, ensure "
+                "each worker runs in an isolated directory and no other process "
+                "holds the same HDF5 file open."
+            )
+
+
+def _merge_results(
+    defaults: SimulationResults, broadcast_results: SimulationResults
 ) -> SimulationResults:
-    """Merge simulation_results into user_cost_function_with_default_values.
-
-    Raises KeyError with a diagnostic message if key sets do not match exactly.
-    Empty simulation_results must be caught upstream before calling this.
     """
-    user_keys = set(user_cost_function_with_default_values.keys())
-    sim_keys = set(simulation_results.keys())
+    Merge broadcast results into defaults, validating key consistency.
 
-    if user_keys != sim_keys:
-        missing_in_sim = sorted(user_keys - sim_keys)
-        extra_in_sim = sorted(sim_keys - user_keys)
+    Raises:
+        KeyError: If keys don't match between defaults and broadcast_results
+    """
+    default_keys = set(defaults.keys())
+    result_keys = set(broadcast_results.keys())
+
+    if default_keys != result_keys:
+        missing = sorted(default_keys - result_keys)
+        extra = sorted(result_keys - default_keys)
         raise KeyError(
-            "Broadcast results keys do not match user cost-function keys. "
-            f"Missing in connector output: {missing_in_sim}. "
-            f"Unexpected in connector output: {extra_in_sim}."
+            f"Broadcast results keys do not match user cost-function keys. "
+            f"Missing in connector={missing}, extra in connector={extra}"
         )
 
-    return {**user_cost_function_with_default_values, **simulation_results}
+    merged = dict(defaults)
+    merged.update(broadcast_results)
+    return merged

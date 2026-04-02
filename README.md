@@ -216,7 +216,6 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    `OpenDartsConnector.broadcast_result(...)`:
 
    ```python
-   from connectors.common import SimulationResultType
    from connectors.open_darts import OpenDartsConnector
 
    OpenDartsConnector.broadcast_result(

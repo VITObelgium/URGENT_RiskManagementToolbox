@@ -11,13 +11,13 @@ from pydantic import (
     model_validator,
 )
 from pydantic.functional_validators import AfterValidator
-from typing_extensions import Annotated
+from typing_extensions import Annotated, TypeAlias
 
 from common import OptimizationStrategy
 from common.models import RunMode
 from logger import get_logger
+from services.problem_dispatcher_service.core.utils import validate_bounds_recursive
 from services.shared import (
-    Boundaries,
     LinearInequalities,
     ServiceRequest,
     ServiceType,
@@ -27,9 +27,9 @@ from services.well_management_service import WellModel
 
 logger = get_logger(__name__)
 
-type VariableName = str
-type ObjectiveFnName = str
-type ParameterBoundaries = dict[VariableName, Boundaries | ParameterBoundaries]
+VariableName: TypeAlias = str
+ObjectiveFnName: TypeAlias = str
+ParameterBoundaries: TypeAlias = dict[str, Any]
 
 
 class WellDesignItem(BaseModel, extra="forbid"):
@@ -42,6 +42,13 @@ class WellDesignItem(BaseModel, extra="forbid"):
     def set_initial_state_well_name(cls, values):
         values["initial_state"]["name"] = values["well_name"]
         return values
+
+    @model_validator(mode="after")
+    def validate_parameter_bounds(self) -> Self:
+        """Validate that all parameter bounds have lb <= ub."""
+        if self.parameter_bounds:
+            validate_bounds_recursive(self.parameter_bounds)
+        return self
 
 
 class SimulationConfig(BaseModel, extra="forbid"):

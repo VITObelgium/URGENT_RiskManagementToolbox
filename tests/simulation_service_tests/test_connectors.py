@@ -2,6 +2,7 @@ import io
 import subprocess
 import sys
 from collections.abc import Generator
+from pathlib import Path
 from subprocess import Popen as OriginalPopen
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
@@ -197,7 +198,7 @@ def patch_stream_reader(monkeypatch):
     """
     from services.simulation_service.core.connectors import open_darts, runner
 
-    def fake_stream_reader(stream, lines_list, logger_func):
+    def fake_stream_reader(stream, lines_list, logger_func=None, **kwargs):
         for line in stream:
             lines_list.append(line.rstrip("\n"))
 
@@ -262,6 +263,83 @@ def test_run_success_with_single_broadcasted_value(mock_popen: Mock) -> None:
     assert results == {"heat": 2312.12}
     mock_popen.assert_called_once()
     assert mock_popen_instance.wait.called
+
+
+def test_run_uses_container_python_in_docker_mode(
+    mock_popen: Mock, tmp_path: Path
+) -> None:
+    mock_popen_instance = mock_popen.return_value
+    mock_popen_instance.stdout = io.StringIO(
+        "OpenDartsConnector: Type:heat, Value:2312.12\n"
+    )
+    mock_popen_instance.stderr = io.StringIO("")
+    mock_popen_instance.returncode = 0
+
+    runtime_dir = tmp_path / "worker-runtime"
+    runtime_dir.mkdir()
+    (runtime_dir / "main.py").write_text("print('hello')")
+
+    with patch.dict(
+        "os.environ",
+        {
+            "OPEN_DARTS_RUNNER": "docker",
+            "SIM_MODEL_DIR": str(runtime_dir),
+            "SIM_WORKER_ID": "docker-worker-1",
+        },
+    ):
+        simulation_status, results = OpenDartsConnector.run(
+            "test_config", {"heat": float("nan")}
+        )
+
+    assert simulation_status == SimulationStatus.SUCCESS
+    assert results == {"heat": 2312.12}
+
+    command_args = mock_popen.call_args.args[0]
+    popen_kwargs = mock_popen.call_args.kwargs
+    docker_job_dir = Path(popen_kwargs["cwd"])
+
+    assert command_args == [sys.executable, "-u", "main.py", "test_config"]
+    assert docker_job_dir != runtime_dir
+    assert docker_job_dir.parent == runtime_dir.parent
+    assert popen_kwargs["env"]["PWD"] == str(docker_job_dir)
+    assert popen_kwargs["env"]["SIM_MODEL_DIR"] == str(docker_job_dir)
+    assert popen_kwargs["env"]["SIM_MODEL_TEMPLATE_DIR"] == str(runtime_dir)
+    assert not docker_job_dir.exists()
+
+
+def test_run_preserves_docker_template_files_between_jobs(
+    mock_popen: Mock, tmp_path: Path
+) -> None:
+    mock_popen_instance = mock_popen.return_value
+    mock_popen_instance.stdout = io.StringIO(
+        "OpenDartsConnector: Type:heat, Value:2312.12\n"
+    )
+    mock_popen_instance.stderr = io.StringIO("")
+    mock_popen_instance.returncode = 0
+
+    runtime_dir = tmp_path / "worker-runtime"
+    output_dir = runtime_dir / "output"
+    output_dir.mkdir(parents=True)
+    solution_file = output_dir / "solution_NS.csv"
+    solution_file.write_text("packaged restart")
+    (runtime_dir / "main.py").write_text("print('hello')")
+
+    with patch.dict(
+        "os.environ",
+        {
+            "OPEN_DARTS_RUNNER": "docker",
+            "SIM_MODEL_DIR": str(runtime_dir),
+            "SIM_WORKER_ID": "docker-worker-1",
+        },
+    ):
+        simulation_status, results = OpenDartsConnector.run(
+            "test_config", {"heat": float("nan")}
+        )
+
+    assert simulation_status == SimulationStatus.SUCCESS
+    assert results == {"heat": 2312.12}
+    assert solution_file.read_text() == "packaged restart"
+    assert output_dir.exists()
 
 
 def test_run_success_with_multiple_broadcasted_value(mock_popen: Mock) -> None:

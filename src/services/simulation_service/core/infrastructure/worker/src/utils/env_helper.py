@@ -1,3 +1,10 @@
+"""
+NOTE:
+This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
+"""
+
+from __future__ import annotations
+
 import asyncio
 import threading
 from pathlib import Path

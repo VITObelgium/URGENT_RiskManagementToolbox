@@ -7,10 +7,9 @@ import numpy as np
 import numpy.typing as npt
 
 from common import OptimizationStrategy
-from logger import get_csv_logger, get_logger
+from logger import get_logger
 from services.shared import Boundaries
 from services.solution_updater_service.core.engines import (
-    GenerationSummary,
     OptimizationEngineFactory,
     OptimizationEngineInterface,
 )
@@ -20,6 +19,10 @@ from services.solution_updater_service.core.models import (
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
     SolutionUpdaterServiceResponse,
+)
+from services.solution_updater_service.core.reports import (
+    PopulationStatisticGenerator,
+    ReportGenerator,
 )
 from services.solution_updater_service.core.utils import (
     ensure_not_none,
@@ -104,14 +107,19 @@ class _Mapper:
         return list(m.control_vector_mapping.keys())
 
     @property
-    def control_vector_mapping(self) -> Mapping[str, int]:
-        m = ensure_not_none(self._state, "Mapper state is not initialized.")
-        return m.control_vector_mapping
-
-    @property
     def results_name(self) -> list[str]:
         m = ensure_not_none(self._state, "Mapper state is not initialized.")
         return list(m.results_mapping.keys())
+
+    @property
+    def population_size(self) -> int:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return m.population_size
+
+    @property
+    def control_vector_mapping(self) -> Mapping[str, int]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return m.control_vector_mapping
 
     def __init__(self) -> None:
         self._state: _MapperState | None = None
@@ -492,46 +500,59 @@ class SolutionUpdaterService:
                 before early stopping is triggered. Defaults to 10.
             seed (int, optional): Random seed for the optimization engine.
         """
+        self._logger = get_logger(__name__)
         self._mapper: _Mapper = _Mapper()
         self._engine: OptimizationEngineInterface = (
             OptimizationEngineFactory.get_engine(optimization_engine, seed=seed)
         )
         self._objectives = objectives
-        self._logger = get_logger(__name__)
+
+        self._report_generator = ReportGenerator()
+
+        self._control_vector_logger: logging.Logger | None = None
+        self._population_logger: logging.Logger | None = None
+
         self.loop_controller = _SolutionUpdaterServiceLoopController(
             max_generations=max_generations,
             max_stall_generations=max_stall_generations,
             solution_updater_service=self,
         )
 
-        self._control_vector_logger: logging.Logger | None = None
-
     @property
     def global_best_result(self) -> float | npt.NDArray[np.float64]:
-        return self._engine.global_best_result
+        return ensure_not_none(
+            self._engine, "Engine not initialized"
+        ).global_best_result
+
+    @property
+    def global_best_result_descriptive(self) -> dict[str, float]:
+        global_best: float | npt.NDArray[np.float64] = self.global_best_result
+
+        if isinstance(global_best, float):
+            values = [global_best]
+        else:
+            values = list(global_best)
+
+        return {k: float(v) for k, v in zip(self._mapper.results_name, values)}
 
     @property
     def global_best_control_vector(self) -> ControlVector:
-        # cast to array
-        control_vector_array = np.array([self._engine.global_best_control_vector])
+        control_vector_array = np.array(
+            [
+                ensure_not_none(
+                    self._engine, "Engine not initialized"
+                ).global_best_control_vector
+            ]
+        )
         first_index = 0
         return self._mapper.to_control_vectors(control_vector_array)[first_index]
-
-    @property
-    def parameters_name(self) -> list[str]:
-        return self._mapper.parameters_name
-
-    @property
-    def results_name(self) -> list[str]:
-        return self._mapper.results_name
-
-    def get_generation_summary(self) -> GenerationSummary:
-        return self._engine.generation_summary
 
     def process_request(
         self, request_dict: dict[str, Any]
     ) -> SolutionUpdaterServiceResponse:
+
         self._logger.info("Processing control vectors update request...")
+
         config = SolutionUpdaterServiceRequest(**request_dict)
 
         if not config.solution_candidates:
@@ -541,18 +562,15 @@ class SolutionUpdaterService:
             config.solution_candidates
         )
 
-        self._log_control_vector_and_values(control_vector, cost_function_values)
-
-        indexed_objectives_strategy = self._get_indexed_strategy()
-
         lb, ub = self._mapper.get_variables_lb_and_ub_boundary(
             config.optimization_constrains.boundaries
         )
 
+        engine = ensure_not_none(self._engine, "Engine not initialized.")
+        iteration_ratio = self.loop_controller.iteration_progress
+        indexed_objectives_strategy = self._get_indexed_strategy()
         A_np, b_np = self._get_linear_inequalities_matrices(config, control_vector)
 
-        engine = ensure_not_none(self._engine)
-        iteration_ratio = self.loop_controller.iteration_progress
         if A_np is not None and b_np is not None:
             try:
                 updated_params = engine.update_solution_to_next_iter(
@@ -587,6 +605,36 @@ class SolutionUpdaterService:
                 indexed_objectives_strategy,
                 iteration_ratio=iteration_ratio,
             )
+
+        global_best_result = ensure_not_none(
+            self._engine, "Engine not initialized"
+        ).global_best_result
+
+        population_statistic = PopulationStatisticGenerator.generate(
+            self.loop_controller.current_generation,
+            cost_function_values,
+            indexed_objectives_strategy,
+        )
+
+        self._report_generator.log_control_vector_and_values(
+            generation=self.loop_controller.current_generation,
+            control_vector=control_vector,
+            population_statistic=population_statistic,
+            parameters_name=self._mapper.parameters_name,
+            results_name=self._mapper.results_name,
+        )
+
+        self._report_generator.log_best_result(
+            generation=self.loop_controller.current_generation,
+            best_result=global_best_result,
+            results_name=self._mapper.results_name,
+        )
+
+        self._report_generator.log_population_statistic(
+            generation=self.loop_controller.current_generation,
+            population_statistic=population_statistic,
+            results_name=self._mapper.results_name,
+        )
 
         next_iter_solutions = self._mapper.to_control_vectors(updated_params)
 
@@ -648,21 +696,3 @@ class SolutionUpdaterService:
                     b_np[i] *= -1.0
 
         return A_np, b_np
-
-    def _log_control_vector_and_values(
-        self, control_vector, cost_function_values
-    ) -> None:
-        if self._control_vector_logger is None:
-            self._control_vector_logger = get_csv_logger(
-                "control_vector_logger.csv",
-                logger_name="control_vector_logger",
-                columns=["generation", "individual"]
-                + [p for p in self._mapper.parameters_name]
-                + [r for r in self._mapper.results_name],
-            )
-
-        for idx, val in enumerate(np.hstack((control_vector, cost_function_values))):
-            v_str = ",".join(f"{v:.9f}" for v in val)
-            self._control_vector_logger.info(
-                f"{self.loop_controller.current_generation},{idx},{v_str}"
-            )

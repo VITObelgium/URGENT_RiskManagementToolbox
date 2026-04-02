@@ -63,8 +63,16 @@ class PSOEngine(OptimizationEngineInterface):
         self._rng = np.random.default_rng(seed)
 
     @property
+    def global_best_result(self) -> float | npt.NDArray[np.float64]:
+        return ensure_not_none(
+            self._state, "PSO state not initialized"
+        ).global_best_result
+
+    @property
     def global_best_control_vector(self) -> npt.NDArray[np.float64]:
-        return ensure_not_none(self._state).global_best_position
+        return ensure_not_none(
+            self._state, "PSO state not initialized"
+        ).global_best_position
 
     def update_solution_to_next_iter(
         self,
@@ -77,6 +85,7 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64] | None = None,
         iteration_ratio: float | None = None,
     ) -> npt.NDArray[np.float64]:
+
         is_multi_objective = len(indexed_objectives_strategy) > 1
 
         results = self._replace_nan_with_inf(results, indexed_objectives_strategy)
@@ -123,8 +132,6 @@ class PSOEngine(OptimizationEngineInterface):
         if is_multi_objective:
             new_positions = self._apply_mutation(new_positions, lb, ub)
 
-        self._update_generation_summary(penalized_results, indexed_objectives_strategy)
-
         if A is not None and b is not None:
             new_positions = repair_against_linear_inequalities(
                 new_positions, A, b, lb, ub
@@ -143,7 +150,7 @@ class PSOEngine(OptimizationEngineInterface):
         self, results, indexed_objectives_strategy
     ):
         """Update global best for single-objective optimization."""
-        state = ensure_not_none(self._state)
+        state = ensure_not_none(self._state, "PSO state is not initialized.")
         strategy = next(iter(indexed_objectives_strategy.values()))
 
         if strategy == OptimizationStrategy.MINIMIZE:
@@ -229,8 +236,7 @@ class PSOEngine(OptimizationEngineInterface):
 
         return results
 
-    @staticmethod
-    def _non_dominated_mask(results, indexed_objectives_strategy):
+    def _non_dominated_mask(self, results, indexed_objectives_strategy):
         n = results.shape[0]
         dominated = np.zeros(n, dtype=bool)
 
@@ -240,7 +246,7 @@ class PSOEngine(OptimizationEngineInterface):
             for j in range(n):
                 if i == j or dominated[j]:
                     continue
-                if PSOEngine._dominates(
+                if self._epsilon_dominates(
                     results[j], results[i], indexed_objectives_strategy
                 ):
                     dominated[i] = True
@@ -315,11 +321,12 @@ class PSOEngine(OptimizationEngineInterface):
             )
 
     def _update_personal_bests(self, positions, results, indexed_objectives_strategy):
-        state = ensure_not_none(self._state)
+
+        state = ensure_not_none(self._state, "PSO state is not initialized.")
 
         if len(indexed_objectives_strategy) > 1:
             for i in range(len(positions)):
-                if self._dominates(
+                if self._epsilon_dominates(
                     results[i],
                     state.particles_best_results[i],
                     indexed_objectives_strategy,
@@ -338,7 +345,7 @@ class PSOEngine(OptimizationEngineInterface):
             state.particles_best_results[improved] = results[improved]
 
     def _update_external_archive(self, positions, results, indexed_objectives_strategy):
-        state = ensure_not_none(self._state)
+        state = ensure_not_none(self._state, "PSO state is not initialized.")
 
         all_positions = np.vstack([state.external_archive_positions, positions])
         all_results = np.vstack([state.external_archive_results, results])
@@ -484,7 +491,9 @@ class PSOEngine(OptimizationEngineInterface):
         return np.clip(new_velocities, -v_max, v_max)
 
     def _update_state_velocities(self, new_velocity):
-        ensure_not_none(self._state).velocities = new_velocity
+        ensure_not_none(
+            self._state, "PSO state is not initialized."
+        ).velocities = new_velocity
 
     @staticmethod
     def _calculate_new_position(old_positions, velocities):

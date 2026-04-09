@@ -5,7 +5,13 @@ import socket
 import threading
 import time
 from collections.abc import Generator
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_EXCEPTION
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+    FIRST_EXCEPTION,
+    Future,
+)
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -137,7 +143,6 @@ class ProcessClusterManager(ClusterManager):
         stop_flag = threading.Event()
 
         def _runner() -> None:
-            # Configure logging inside the thread to avoid serialising startup.
             try:
                 configure_worker_logger(worker_id)
             except Exception:
@@ -199,7 +204,7 @@ class ProcessClusterManager(ClusterManager):
             max_workers=min(self._worker_count, _IO_POOL_THREADS),
             thread_name_prefix="dep-copy",
         ) as pool:
-            futures = {
+            futures: dict[Future[None], int] = {
                 pool.submit(self.copy_worker_dependencies, wid): wid
                 for wid in worker_ids
             }
@@ -223,14 +228,14 @@ class ProcessClusterManager(ClusterManager):
             max_workers=self._worker_count,
             thread_name_prefix="worker-spawn",
         ) as pool:
-            spawn_futures = {
-                pool.submit(self._spawn_worker, wid): wid for wid in worker_ids
-            }
+            spawn_futures: dict[
+                Future[tuple[threading.Thread, threading.Event]], int
+            ] = {pool.submit(self._spawn_worker, wid): wid for wid in worker_ids}
             done, _ = wait(spawn_futures, return_when=FIRST_EXCEPTION)
-            for fut in done:
-                wid = spawn_futures[fut]
+            for spawn_fut in done:
+                wid = spawn_futures[spawn_fut]
                 try:
-                    t, stop_flag = fut.result()
+                    t, stop_flag = spawn_fut.result()
                     self._worker_threads.append(t)
                     self._worker_stops.append(stop_flag)
                     logger.info("Launched worker thread %d (name=%s)", wid, t.name)

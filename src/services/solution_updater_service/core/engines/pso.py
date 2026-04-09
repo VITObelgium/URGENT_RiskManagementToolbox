@@ -85,7 +85,6 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64] | None = None,
         iteration_ratio: float | None = None,
     ) -> npt.NDArray[np.float64]:
-
         is_multi_objective = len(indexed_objectives_strategy) > 1
 
         results = self._replace_nan_with_inf(results, indexed_objectives_strategy)
@@ -321,7 +320,6 @@ class PSOEngine(OptimizationEngineInterface):
             )
 
     def _update_personal_bests(self, positions, results, indexed_objectives_strategy):
-
         state = ensure_not_none(self._state, "PSO state is not initialized.")
 
         if len(indexed_objectives_strategy) > 1:

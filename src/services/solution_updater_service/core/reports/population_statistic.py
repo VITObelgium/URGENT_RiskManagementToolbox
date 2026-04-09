@@ -24,7 +24,6 @@ class PopulationStatisticGenerator:
         results: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> PopulationStatistic:
-
         raw = np.array(results, dtype=np.float64)
         if raw.ndim == 1:
             raw = raw[:, np.newaxis]
@@ -43,7 +42,6 @@ class PopulationStatisticGenerator:
         results: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> PopulationStatistic:
-
         col_idx, strategy = next(iter(indexed_objectives_strategy.items()))
         col = results[:, col_idx]
 
@@ -79,7 +77,6 @@ class PopulationStatisticGenerator:
         results: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> PopulationStatistic:
-
         n_objectives = len(indexed_objectives_strategy)
         finite_mask = np.isfinite(results).all(axis=1)
         n_feasible = int(finite_mask.sum())

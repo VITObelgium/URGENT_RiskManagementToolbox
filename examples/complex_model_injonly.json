@@ -1,0 +1,67 @@
+{
+  "well_design": [
+    {
+      "well_name": "INJ",
+      "initial_state": {
+        "well_type": "IWell",
+        "md": 3600.0,
+        "md_step": 1.0,
+        "wellhead": {
+          "x": 3460.0,
+          "y": 2900.0,
+          "z": 0.0
+        },
+      "perforations": {
+          "p1": {
+            "start_md": 3210.0,
+            "end_md": 3550.0
+          }
+        }
+      },
+      "parameter_bounds": {
+        "wellhead": {
+          "x": {
+            "lb": 2960.0,
+            "ub": 3960.0
+          },
+          "y": {
+            "lb": 2400.0,
+            "ub": 3400.0
+          }
+        },
+        "md": {
+          "lb": 3250.0,
+          "ub": 3600.0
+        }
+      }
+    },
+    {
+      "well_name": "PROD",
+      "initial_state": {
+        "well_type": "IWell",
+        "md": 4000.0,
+        "md_step": 1.0,
+        "wellhead": {
+          "x": 1800.0,
+          "y": 1950.0,
+          "z": 0.0
+        },
+      "perforations": {
+          "p1": {
+            "start_md": 3210.0,
+            "end_md": 3550.0
+          }
+        }
+      },
+      "parameter_bounds": {
+      }
+    }
+  ],
+  "optimization_parameters": {
+    "objectives":{"Heat": "maximize"},
+    "max_generations": 50,
+    "population_size": 10,
+    "max_stall_generations": 10,
+    "worker_count": 2
+    }
+}

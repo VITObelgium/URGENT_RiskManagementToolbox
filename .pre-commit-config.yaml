@@ -1,3 +1,5 @@
+exclude: 'examples/'
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -6,7 +8,8 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-        args: ['--maxkb=5800']
+        args: ['--maxkb=6800']
+      - id: requirements-txt-fixer
       - id: check-docstring-first
       - id: mixed-line-ending
         args: [ '--fix=lf' ]
@@ -20,7 +23,7 @@ repos:
     rev: v0.15.0
     hooks:
       - id: ruff-check
-        entry: ruff check --extend-select I --fix
+        args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy

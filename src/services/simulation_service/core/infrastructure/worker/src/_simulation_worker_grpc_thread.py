@@ -54,10 +54,8 @@ def _run_simulator(
 ) -> tuple[SimulationStatus, SimulationResults]:
     connector = ConnectorFactory.get_connector(simulation_job.simulator)
 
-    # FIX 2: parse once here, not inside the connector call chain.
     user_cost_function = json.loads(simulation_job.simulation.result.result)
 
-    # FIX 3: explicit lifecycle — always unlink the temp file.
     tf = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
     try:
         json.dump(simulation_job.simulation.input.wells, tf)
@@ -65,7 +63,6 @@ def _run_simulator(
         tf_path = tf.name
         tf.close()
 
-        # FIX 1: pass the working dir as context rather than mutating os.getcwd().
         env_patch: dict[str, str] = {}
         if working_dir is not None:
             env_patch["WORKER_CWD"] = str(working_dir)

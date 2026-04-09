@@ -1,4 +1,4 @@
-FROM python:3.10.12-slim AS builder
+FROM python:3.12.12-slim AS builder
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ COPY src/services/simulation_service/core/infrastructure/worker/worker_requireme
 RUN pip install --no-cache-dir uv && \
     uv pip install --no-cache-dir -r worker_requirements.txt --target /install
 
-FROM python:3.10.12-slim
+FROM python:3.12.12-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libgomp1 && \
@@ -16,7 +16,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY --from=builder /install /usr/local/lib/python3.10/site-packages
+COPY --from=builder /install /usr/local/lib/python3.12/site-packages
 COPY pyproject.toml /app/pyproject.toml
 
 # Copy only necessary source files to minimize python dependency mismatch

@@ -1,4 +1,4 @@
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from services.problem_dispatcher_service.core.models import (
     ParameterBoundaries,
@@ -118,7 +118,8 @@ def _flatten_optimization_parameters(
         elif isinstance(value, dict):
             # Check if dict represents a Boundaries object (has lb and ub keys)
             if is_bounds_dict(value):
-                lb, ub = value["lb"], value["ub"]
+                lb = cast(float, value["lb"])
+                ub = cast(float, value["ub"])
                 validate_bounds(lb, ub, full_key)
                 flat[full_key] = (lb, ub)
             else:

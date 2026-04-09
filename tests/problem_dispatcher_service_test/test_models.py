@@ -168,7 +168,7 @@ def test_worker_count_must_be_positive():
 # Tests for worker_count physical core validation
 def test_worker_count_exceeds_physical_cores():
     physical_cores = psutil.cpu_count(logical=False)
-    max_allowed = max(1, math.floor(physical_cores / 2))
+    max_allowed = max(1, physical_cores)
 
     with pytest.raises(ValidationError):
         OptimizationParameters(

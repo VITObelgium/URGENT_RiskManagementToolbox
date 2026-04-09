@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 import logging
 import shutil
 import signal
@@ -40,33 +39,28 @@ class ProcessClusterManager(ClusterManager):
     """
 
     def __init__(self) -> None:
+        # When running server in-process we keep a reference to a daemon thread
         self._server_thread: threading.Thread | None = None
         self._worker_count = 0
 
+        # In-process worker management
         self._worker_threads: list[threading.Thread] = []
         self._worker_stops: list[threading.Event] = []
         self._stopping = threading.Event()
 
-        # Cache config once — avoids repeated config lookups
         config = get_simulation_config()
+
         self.run_mode = config.run_mode
         self.host = config.server_host
         self.port = config.server_port
-        self._server_startup_timeout = config.server_startup_timeout
-
-        # Cache the expensive path resolution
-        self._orchestration_files_path: Path = (
-            Path(__file__).parent.parent.parent.parent.parent.parent
-            / "orchestration_files"
-        )
 
         self._cleanup_worker_directories()
 
-    def _wait_for_server_readiness(self, timeout: float | None = None, interval: float = 0.25) -> None:
+    def _wait_for_server_readiness(self, timeout=None, interval=0.25):
         if timeout is None:
-            timeout = self._server_startup_timeout  # use cached value
-        deadline = time.monotonic() + timeout  # monotonic is safer than time.time()
-        while time.monotonic() < deadline:
+            timeout = get_simulation_config().server_startup_timeout
+        deadline = time.time() + timeout
+        while time.time() < deadline:
             if self._server_thread is not None and not self._server_thread.is_alive():
                 raise ServerStartupError(
                     "Server thread terminated unexpectedly during startup"
@@ -88,21 +82,43 @@ class ProcessClusterManager(ClusterManager):
             time.sleep(interval)
         raise TimeoutError("Server did not become ready within timeout")
 
-    def _spawn_server(self) -> None:
+    def _spawn_server(self):
         try:
             configure_server_logger()
         except Exception:
             logger.debug(
                 "Failed to configure server logger; continuing without per-thread file handler"
             )
-        self._server_thread = threading.Thread(target=driver, daemon=True, name="server")
+        self._server_thread = threading.Thread(
+            target=driver, daemon=True, name="server"
+        )
         self._server_thread.start()
 
-    def _spawn_worker(self, worker_id: int) -> threading.Thread:
+    def _start_output_threads(self, proc, name):
+        def reader(stream, level):
+            for line in iter(stream.readline, ""):
+                logger.log(level, "[%s pid=%s] %s", name, proc.pid, line.rstrip())
+
+        threading.Thread(
+            target=reader, args=(proc.stdout, logging.INFO), daemon=True
+        ).start()
+        threading.Thread(
+            target=reader, args=(proc.stderr, logging.WARNING), daemon=True
+        ).start()
+
+    def _collect_process_failure(self, proc, role):
+        try:
+            out, err = proc.communicate(timeout=0.5)
+        except Exception:
+            out = err = ""
+        tail = (err or out).splitlines()[-50:]
+        return f"{role} exited code {proc.returncode}. Tail:\\n" + "\\n".join(tail)
+
+    def _spawn_worker(self, worker_id: int):
         self.copy_worker_dependencies(worker_id)
         stop_flag = threading.Event()
 
-        def _runner() -> None:
+        def _runner():
             try:
                 asyncio.run(worker_main(stop_flag=stop_flag, worker_id=str(worker_id)))
             except Exception:
@@ -119,7 +135,8 @@ class ProcessClusterManager(ClusterManager):
     def start(self, worker_count: int) -> None:
         """Start worker processes."""
 
-        def _handle_signal(signum, _frame) -> None:
+        # Install signal handlers for graceful shutdown
+        def _handle_signal(signum, _frame):
             logger.info("Received signal %s, initiating graceful shutdown...", signum)
             self.stop()
 
@@ -127,18 +144,17 @@ class ProcessClusterManager(ClusterManager):
             signal.signal(signal.SIGINT, _handle_signal)
             signal.signal(signal.SIGTERM, _handle_signal)
         except Exception:
+            # Not all environments allow setting signal handlers; ignore if so.
             pass
-
         try:
             self._spawn_server()
         except Exception as e:
             logger.exception("Failed to start server thread: %s", e)
             raise ServerStartupError("Failed to start server thread") from e
-
         self._wait_for_server_readiness()
+
         self._worker_count = max(1, int(worker_count))
 
-        # Configure all worker loggers first (must stay on the main thread)
         for i in range(self._worker_count):
             try:
                 configure_worker_logger(i + 1)
@@ -147,48 +163,24 @@ class ProcessClusterManager(ClusterManager):
                     "Failed to configure worker %d logger; continuing without per-thread file handler",
                     i + 1,
                 )
-
-        # Spawn all workers in parallel
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self._worker_count, thread_name_prefix="spawn-worker"
-        ) as executor:
-            futures = {
-                executor.submit(self._spawn_worker, worker_id=i + 1): i + 1
-                for i in range(self._worker_count)
-            }
-            for future in concurrent.futures.as_completed(futures):
-                worker_id = futures[future]
-                try:
-                    th = future.result()
-                    logger.info("Launched worker thread %d (name=%s)", worker_id, th.name)
-                except Exception:
-                    logger.exception("Failed to spawn worker %d", worker_id)
+            th = self._spawn_worker(worker_id=i + 1)
+            logger.info("Launched worker thread %d (name=%s)", i + 1, th.name)
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Gracefully stop all worker threads, then wait for them concurrently."""
+        """Gracefully stop all worker processes, then force-kill if necessary."""
         if self._stopping.is_set():
             return
         self._stopping.set()
         logger.info("Stopping %d local worker thread(s)...", len(self._worker_threads))
-
-        # Signal all workers to stop at once
         for ev in self._worker_stops:
             ev.set()
 
-        # Join all worker threads concurrently
-        deadline = time.monotonic() + timeout
-
-        def _join(th: threading.Thread) -> None:
-            remaining = max(0.0, deadline - time.monotonic())
+        end = time.time() + timeout
+        for th in self._worker_threads:
+            remaining = max(0.0, end - time.time())
             th.join(timeout=remaining)
             if th.is_alive():
                 logger.warning("Worker thread %s did not stop in time", th.name)
-
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=max(1, len(self._worker_threads)),
-            thread_name_prefix="stop-worker",
-        ) as executor:
-            list(executor.map(_join, self._worker_threads))
 
         self._worker_threads.clear()
         self._worker_stops.clear()
@@ -205,21 +197,24 @@ class ProcessClusterManager(ClusterManager):
             logger.info("Waiting for server thread to shut down...")
             self._server_thread.join(timeout=timeout)
 
-    def copy_worker_dependencies(self, worker_id: int) -> None:
-        """Copy dependencies to worker temp directory."""
+    def copy_worker_dependencies(self, worker_id: int):
+        """helper to copy dependencies to worker temp directory TODO: refactor"""
         scripts_path = Path(__file__).parent
-        target_dir = self._orchestration_files_path / f".worker_{worker_id}_temp"
+        target_dir = (
+            scripts_path.parent.parent.parent.parent.parent
+            / f"orchestration_files/.worker_{worker_id}_temp"
+        )
         connectors_dir = scripts_path.parent / "connectors"
-        logger_dir = self._orchestration_files_path.parent / "src" / "logger"
-
+        logger_dir = target_dir.parent.parent / "src" / "logger"
         logger.info("Copying worker dependencies to %s", target_dir)
+        # Ensure base target directory exists
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             logger.error("Failed to create target directory %s: %s", target_dir, e)
             raise
 
-        def _replace_tree(src: Path, dest: Path) -> None:
+        def _replace_tree(src: Path, dest: Path):
             if not src.exists():
                 raise FileNotFoundError(f"Source path does not exist: {src}")
             try:
@@ -238,37 +233,28 @@ class ProcessClusterManager(ClusterManager):
                         )
                         raise
 
-        # Copy connectors and logger trees concurrently
-        pairs = [(connectors_dir, "connectors"), (logger_dir, "logger")]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [
-                executor.submit(_replace_tree, src, target_dir / dst_name)
-                for src, dst_name in pairs
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                future.result()  # re-raise any exceptions
+        for src, dst_name in ((connectors_dir, "connectors"), (logger_dir, "logger")):
+            _replace_tree(src, target_dir / dst_name)
 
-    def _cleanup_worker_directories(self) -> None:
-        if not self._orchestration_files_path.exists():
+    def _cleanup_worker_directories(self):
+        scripts_path = Path(__file__).parent
+        orchestration_files = (
+            scripts_path.parent.parent.parent.parent.parent / "orchestration_files"
+        )
+
+        if not orchestration_files.exists():
             return
 
         logger.info("Cleaning up worker temp directories...")
-        worker_dirs = [
-            d for d in self._orchestration_files_path.glob(".worker_*_temp")
-            if d.is_dir()
-        ]
-
-        def _remove(worker_dir: Path) -> None:
+        for worker_dir in orchestration_files.glob(".worker_*_temp"):
             try:
-                logger.debug("Removing worker directory: %s", worker_dir)
-                shutil.rmtree(worker_dir)
+                if worker_dir.is_dir():
+                    logger.debug("Removing worker directory: %s", worker_dir)
+                    shutil.rmtree(worker_dir)
             except Exception as e:
-                logger.warning("Failed to remove worker directory %s: %s", worker_dir, e)
-
-        # Remove all worker dirs concurrently
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(worker_dirs))) as executor:
-            list(executor.map(_remove, worker_dirs))
-
+                logger.warning(
+                    "Failed to remove worker directory %s: %s", worker_dir, e
+                )
         logger.info("Worker temp directory cleanup complete.")
 
 
@@ -284,7 +270,9 @@ def simulation_process_context_manager(
         try:
             yield
         except KeyboardInterrupt:
-            logger.info("KeyboardInterrupt received in context manager; shutting down...")
+            logger.info(
+                "KeyboardInterrupt received in context manager; shutting down..."
+            )
             raise
     finally:
         try:

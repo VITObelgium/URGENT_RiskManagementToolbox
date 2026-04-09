@@ -1,5 +1,5 @@
 {
-  "run_mode": "evaluation",
+  "run_mode": "optimization",
   "well_design": [
     {
       "well_name": "INJ",
@@ -69,6 +69,6 @@
     "max_generations": 10,
     "population_size": 40,
     "max_stall_generations": 10,
-    "worker_count": 2
+    "worker_count": 5
     }
 }

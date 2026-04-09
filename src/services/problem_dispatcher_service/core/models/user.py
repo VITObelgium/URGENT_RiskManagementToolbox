@@ -76,7 +76,7 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     @classmethod
     def validate_worker_count(cls, value: int) -> int:
         physical_cores = psutil.cpu_count(logical=False)
-        worker_count = max(1, math.floor(physical_cores))
+        worker_count = max(1, physical_cores)
         if value > worker_count:
             raise ValueError(
                 f"worker_count {value} exceeds available physical cores {physical_cores}"

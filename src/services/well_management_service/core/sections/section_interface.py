@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import MutableMapping
+from collections.abc import MutableMapping
 
 from services.well_management_service.core.models import PerforationRange, Trajectory
 

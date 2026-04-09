@@ -1,7 +1,7 @@
 import json
-from typing import Any, TypeAlias
+from typing import Any
 
-JSON: TypeAlias = dict[str, Any]
+type JSON = dict[str, Any]
 
 
 def json_to_str(

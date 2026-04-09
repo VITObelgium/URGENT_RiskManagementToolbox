@@ -4,7 +4,7 @@ import subprocess
 import threading
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 
 def _default_stream_reader(stream, lines: list[str], log_func: Callable) -> None:

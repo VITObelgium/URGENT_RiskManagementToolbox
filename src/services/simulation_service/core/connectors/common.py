@@ -8,12 +8,12 @@ from __future__ import annotations
 import threading
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import TypeAlias, TypedDict
+from typing import TypedDict
 
-WellName: TypeAlias = str
-GridCell: TypeAlias = tuple[int, int, int]
-Point: TypeAlias = tuple[float, float, float]
-JsonPath: TypeAlias = str
+type WellName = str
+type GridCell = tuple[int, int, int]
+type Point = tuple[float, float, float]
+type JsonPath = str
 
 
 class PerforationSchema(TypedDict):
@@ -54,7 +54,7 @@ def extract_well_with_perforations_points(
     return results
 
 
-SimulationResults: TypeAlias = dict[str, float]
+type SimulationResults = dict[str, float]
 
 
 class SimulationStatus(Enum):

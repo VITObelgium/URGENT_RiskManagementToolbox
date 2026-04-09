@@ -5,7 +5,7 @@ from collections import Counter
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
-from typing_extensions import Annotated
+from typing import Annotated
 
 from services.well_management_service.core import models
 
@@ -176,18 +176,16 @@ class SimulationWellModel(BaseModel, extra="forbid"):
     def from_well(cls, well: models.Well) -> SimulationWellModel:
         return cls(
             name=well.name,
-            trajectory=tuple(((t.x, t.y, t.z) for t in well.trajectory)),
+            trajectory=tuple((t.x, t.y, t.z) for t in well.trajectory),
             completion=(
                 SimulationWellCompletionModel(
                     perforations=tuple(
-                        (
-                            SimulationWellPerforationModel(
-                                name=p.name,
-                                points=tuple([(p.x, p.y, p.z) for p in p.points]),
-                                range=(p.range.start_md, p.range.end_md),
-                            )
-                            for p in well.completion.perforations
+                        SimulationWellPerforationModel(
+                            name=p.name,
+                            points=tuple([(p.x, p.y, p.z) for p in p.points]),
+                            range=(p.range.start_md, p.range.end_md),
                         )
+                        for p in well.completion.perforations
                     )
                 )
                 if well.completion

@@ -5,7 +5,8 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Callable, Protocol, TypeVar
+from typing import Protocol
+from collections.abc import Callable
 
 from logger import get_logger, stream_reader
 from .common import (

@@ -12,7 +12,8 @@ import sys
 import threading
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -106,7 +107,7 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
         json_config_str = sys.argv[1]
         if os.path.isfile(json_config_str):
             try:
-                with open(json_config_str, "r") as f:
+                with open(json_config_str) as f:
                     config = json.load(f)
                 if isinstance(config, str):
                     config = json.loads(config)

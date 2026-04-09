@@ -4,7 +4,7 @@ import subprocess
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
+from collections.abc import Generator
 
 from logger import get_logger, log_docker_logs
 from services.simulation_service.core.config import get_simulation_config

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import MutableMapping
+from collections.abc import MutableMapping
 
 import numpy as np
 

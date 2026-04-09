@@ -11,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic.functional_validators import AfterValidator
-from typing_extensions import Annotated
+from typing import Annotated
 
 from common import OptimizationStrategy
 from common.models import RunMode

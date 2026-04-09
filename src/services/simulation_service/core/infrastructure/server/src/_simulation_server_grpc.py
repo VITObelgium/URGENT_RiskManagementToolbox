@@ -354,7 +354,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         logger.info("Worker %s: Requested a simulation model archive.", worker_id)
         if not self._simulation_model_archive:
             return sm.SimulationModel(
-                package_archive=bytes(), status=sm.ModelStatus.NO_MODEL_AVAILABLE
+                package_archive=b"", status=sm.ModelStatus.NO_MODEL_AVAILABLE
             )
         return sm.SimulationModel(
             package_archive=self._simulation_model_archive,

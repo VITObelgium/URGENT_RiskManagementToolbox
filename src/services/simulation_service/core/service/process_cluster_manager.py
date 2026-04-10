@@ -46,31 +46,6 @@ class ProcessClusterManager(ClusterManager):
 
     Each worker is started as a separate Python thread that runs the
     `_simulation_worker_grpc` async main.
-
-    Parallelism improvements over the original implementation
-    ---------------------------------------------------------
-    1. **Parallel dependency copy** – ``copy_worker_dependencies`` is now
-       called for all workers simultaneously via a ``ThreadPoolExecutor``
-       instead of sequentially in the spawn loop.  The first copy error is
-       re-raised immediately so startup fails fast.
-
-    2. **Parallel worker spawn** – threads are started concurrently; the main
-       thread only blocks once *all* of them have been submitted.
-
-    3. **Parallel stop/join** – all stop-events are set at once, and threads
-       are joined with a *shared* deadline rather than a per-thread timeout
-       that resets on every join call (the original could take N×timeout when
-       many workers were stuck).
-
-    4. **Parallel directory cleanup** – ``_cleanup_worker_directories`` fans
-       out ``shutil.rmtree`` calls across the same I/O executor.
-
-    5. **Logger config moved into the worker thread** – previously
-       ``configure_worker_logger`` was called in the main thread before
-       spawning, which serialised startup and could block signal delivery.
-       Now it runs inside the worker thread immediately on entry.
-
-    Public API is identical to the original.
     """
 
     def __init__(self) -> None:
@@ -87,10 +62,6 @@ class ProcessClusterManager(ClusterManager):
         self.port = config.server_port
 
         self._cleanup_worker_directories()
-
-    # ------------------------------------------------------------------
-    # Server helpers
-    # ------------------------------------------------------------------
 
     def _wait_for_server_readiness(self, timeout=None, interval=0.25):
         if timeout is None:
@@ -128,10 +99,6 @@ class ProcessClusterManager(ClusterManager):
         )
         self._server_thread.start()
 
-    # ------------------------------------------------------------------
-    # Worker helpers
-    # ------------------------------------------------------------------
-
     def _spawn_worker(self, worker_id: int) -> tuple[threading.Thread, threading.Event]:
         """Create and start a single worker thread.
 
@@ -159,22 +126,10 @@ class ProcessClusterManager(ClusterManager):
         t.start()
         return t, stop_flag
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def start(self, worker_count: int) -> None:
-        """Start the server thread and all worker threads.
+        """Start the server thread and all worker threads."""
 
-        Steps
-        -----
-        1. Install signal handlers.
-        2. Start the gRPC server thread and wait for it to be ready.
-        3. Copy worker dependencies **in parallel** using a thread pool.
-        4. Spawn all worker threads **concurrently**.
-        """
-
-        def _handle_signal(signum, _frame):
+        def _handle_signal(signum, _):
             logger.info("Received signal %s, initiating graceful shutdown...", signum)
             self.stop()
 
@@ -195,7 +150,7 @@ class ProcessClusterManager(ClusterManager):
         self._worker_count = max(1, int(worker_count))
         worker_ids = list(range(1, self._worker_count + 1))
 
-        # --- Step 1: copy dependencies for all workers in parallel ----------
+        # Copy dependencies for all workers in parallel
         logger.info(
             "Copying worker dependencies for %d worker(s) in parallel…",
             self._worker_count,
@@ -222,7 +177,7 @@ class ProcessClusterManager(ClusterManager):
                         f.cancel()
                     raise
 
-        # --- Step 2: spawn all worker threads concurrently ------------------
+        # Spawn all worker threads concurrently
         logger.info("Spawning %d worker thread(s)…", self._worker_count)
         with ThreadPoolExecutor(
             max_workers=self._worker_count,
@@ -362,11 +317,6 @@ class ProcessClusterManager(ClusterManager):
             list(pool.map(_remove, worker_dirs))
 
         logger.info("Worker temp directory cleanup complete.")
-
-
-# ---------------------------------------------------------------------------
-# Public context manager (unchanged API)
-# ---------------------------------------------------------------------------
 
 
 @contextmanager

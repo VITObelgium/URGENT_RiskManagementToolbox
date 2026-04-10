@@ -208,7 +208,6 @@ async def try_unpacking_model_archive(
 
 
 async def _retry_with_stop(
-    coro_fn,
     delay: float,
     stop_flag: threading.Event | None,
     worker_id: str,
@@ -230,6 +229,7 @@ async def ask_for_simulation_model(
                 "Worker %s: Stop requested during model acquisition.", worker_id
             )
             return
+
         try:
             logger.info("Worker %s: Requesting simulation model archive...", worker_id)
             simulation_model = await request_simulation_model(stub, worker_id)
@@ -240,57 +240,30 @@ async def ask_for_simulation_model(
                     worker_id,
                     MODEL_RETRY_DELAY_SEC,
                 )
-                if await _retry_with_stop(
-                    None,
-                    MODEL_RETRY_DELAY_SEC,
-                    stop_flag,
-                    worker_id,
-                    "model acquisition",
-                ):
-                    return
-                continue
-
-            if simulation_model.status != sm.ModelStatus.ON_SERVER:
+            elif simulation_model.status != sm.ModelStatus.ON_SERVER:
                 logger.warning(
                     "Worker %s: Unexpected model status: %s. Retrying in %d seconds...",
                     worker_id,
                     simulation_model.status,
                     MODEL_RETRY_DELAY_SEC,
                 )
-                if await _retry_with_stop(
-                    None,
-                    MODEL_RETRY_DELAY_SEC,
-                    stop_flag,
-                    worker_id,
-                    "model acquisition",
-                ):
-                    return
-                continue
-
-            logger.info("Worker %s: Received simulation model archive.", worker_id)
-
-            if await try_unpacking_model_archive(
-                simulation_model.package_archive, worker_id
-            ):
-                logger.info(
-                    "Worker %s: Unpacking simulation model archive successful.",
-                    worker_id,
-                )
-                return
             else:
-                logger.warning(
-                    "Worker %s: Corrupted simulation model archive. Retrying in %d seconds...",
-                    worker_id,
-                    MODEL_RETRY_DELAY_SEC,
-                )
-                if await _retry_with_stop(
-                    None,
-                    MODEL_RETRY_DELAY_SEC,
-                    stop_flag,
-                    worker_id,
-                    "model acquisition",
+                logger.info("Worker %s: Received simulation model archive.", worker_id)
+
+                if await try_unpacking_model_archive(
+                    simulation_model.package_archive, worker_id
                 ):
+                    logger.info(
+                        "Worker %s: Unpacking simulation model archive successful.",
+                        worker_id,
+                    )
                     return
+                else:
+                    logger.warning(
+                        "Worker %s: Corrupted simulation model archive. Retrying in %d seconds...",
+                        worker_id,
+                        MODEL_RETRY_DELAY_SEC,
+                    )
 
         except grpc.aio.AioRpcError as e:
             if (
@@ -308,10 +281,6 @@ async def ask_for_simulation_model(
                 e,
                 MODEL_RETRY_DELAY_SEC,
             )
-            if await _retry_with_stop(
-                None, MODEL_RETRY_DELAY_SEC, stop_flag, worker_id, "model acquisition"
-            ):
-                return
         except Exception as e:
             logger.warning(
                 "Worker %s: Unexpected error while requesting model: %s. Retrying in %d seconds...",
@@ -319,10 +288,11 @@ async def ask_for_simulation_model(
                 e,
                 MODEL_RETRY_DELAY_SEC,
             )
-            if await _retry_with_stop(
-                None, MODEL_RETRY_DELAY_SEC, stop_flag, worker_id, "model acquisition"
-            ):
-                return
+
+        if await _retry_with_stop(
+            MODEL_RETRY_DELAY_SEC, stop_flag, worker_id, "model acquisition"
+        ):
+            return
 
 
 async def run_simulation_loop(
@@ -332,44 +302,12 @@ async def run_simulation_loop(
         if stop_flag is not None and stop_flag.is_set():
             logger.info("Worker %s: Stop requested, exiting loop.", worker_id)
             break
+
         try:
             logger.info("Worker %s: Requesting a job...", worker_id)
             simulation_job = await request_simulation_job(stub, worker_id)
 
-            if simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
-                logger.info(
-                    "Worker %s: No simulation jobs available. Retrying in %d seconds...",
-                    worker_id,
-                    JOB_RETRY_DELAY_SEC,
-                )
-                if await _retry_with_stop(
-                    None, JOB_RETRY_DELAY_SEC, stop_flag, worker_id, "job poll"
-                ):
-                    break
-                continue
-
-            elif simulation_job.status == sm.JobStatus.ERROR:
-                logger.error(
-                    "Worker %s: Server returned an error for the job request. Retrying...",
-                    worker_id,
-                )
-                if await _retry_with_stop(
-                    None, JOB_RETRY_DELAY_SEC, stop_flag, worker_id, "job poll"
-                ):
-                    break
-                continue
-
-            elif simulation_job.status == sm.JobStatus.JOBSTATUS_UNSPECIFIED:
-                logger.warning(
-                    "Worker %s: Received unspecified status. Retrying...", worker_id
-                )
-                if await _retry_with_stop(
-                    None, JOB_RETRY_DELAY_SEC, stop_flag, worker_id, "job poll"
-                ):
-                    break
-                continue
-
-            elif simulation_job.status == sm.JobStatus.EXCEPTION:
+            if simulation_job.status == sm.JobStatus.EXCEPTION:
                 logger.critical(
                     "Worker %s: Received EXCEPTION status. Shutting down...", worker_id
                 )
@@ -377,10 +315,28 @@ async def run_simulation_loop(
                     stop_flag.set()
                 break
 
-            logger.info(
-                "Worker %s: Processing job %s...", worker_id, simulation_job.job_id
-            )
-            await handle_simulation_job(stub, simulation_job, worker_id, stop_flag)
+            elif simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
+                logger.info(
+                    "Worker %s: No simulation jobs available. Retrying in %d seconds...",
+                    worker_id,
+                    JOB_RETRY_DELAY_SEC,
+                )
+            elif simulation_job.status == sm.JobStatus.ERROR:
+                logger.error(
+                    "Worker %s: Server returned an error for the job request. Retrying...",
+                    worker_id,
+                )
+            elif simulation_job.status == sm.JobStatus.JOBSTATUS_UNSPECIFIED:
+                logger.warning(
+                    "Worker %s: Received unspecified status. Retrying...", worker_id
+                )
+
+            else:
+                logger.info(
+                    "Worker %s: Processing job %s...", worker_id, simulation_job.job_id
+                )
+                await handle_simulation_job(stub, simulation_job, worker_id, stop_flag)
+                continue
 
         except grpc.aio.AioRpcError as e:
             if (
@@ -398,17 +354,13 @@ async def run_simulation_loop(
                 e,
                 JOB_RETRY_DELAY_SEC,
             )
-            if await _retry_with_stop(
-                None, JOB_RETRY_DELAY_SEC, stop_flag, worker_id, "job loop"
-            ):
-                break
-
         except Exception as e:
             logger.exception("Worker %s: Unexpected error: %s", worker_id, e)
-            if await _retry_with_stop(
-                None, JOB_RETRY_DELAY_SEC, stop_flag, worker_id, "job loop"
-            ):
-                break
+
+        if await _retry_with_stop(
+            JOB_RETRY_DELAY_SEC, stop_flag, worker_id, "job loop"
+        ):
+            break
 
 
 def _create_channel():

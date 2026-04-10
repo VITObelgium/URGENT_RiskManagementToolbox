@@ -27,6 +27,9 @@ class SimulationServiceConfig(BaseSettings):
         validation_alias="JOB_TIMEOUT_SECONDS",
         description="Timeout in seconds for simulation jobs (default: 1 hour)",
     )
+    log_interval_seconds: int = Field(
+        default=30,
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

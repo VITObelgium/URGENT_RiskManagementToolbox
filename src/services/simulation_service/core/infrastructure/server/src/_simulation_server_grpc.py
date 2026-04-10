@@ -28,6 +28,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._job_event: asyncio.Event = asyncio.Event()
         self._simulation_model_archive: bytes | None = None
         self._job_timeout_seconds: float = get_simulation_config().job_timeout_seconds
+        self._log_interval_seconds: int = get_simulation_config().log_interval_seconds
         self._critical_error: RuntimeError | None = None
         self._total_simulations: int = 0
 
@@ -90,7 +91,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         logger.info("All %d simulation(s) queued, waiting for completion", total)
 
         start_time = time.monotonic()
-        LOG_INTERVAL_SEC = 30
 
         _log_handle: list[asyncio.TimerHandle | None] = [None]
 
@@ -116,11 +116,11 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                 )
             if not self._all_done():
                 _log_handle[0] = asyncio.get_running_loop().call_later(
-                    LOG_INTERVAL_SEC, _log_progress
+                    self._log_interval_seconds, _log_progress
                 )
 
         _log_handle[0] = asyncio.get_running_loop().call_later(
-            LOG_INTERVAL_SEC, _log_progress
+            self._log_interval_seconds, _log_progress
         )
 
         try:

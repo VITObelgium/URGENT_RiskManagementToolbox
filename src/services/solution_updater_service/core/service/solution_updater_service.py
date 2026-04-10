@@ -592,7 +592,6 @@ class SolutionUpdaterService:
     def process_request(
         self, request_dict: dict[str, Any]
     ) -> SolutionUpdaterServiceResponse:
-
         self._logger.info("Processing control vectors update request...")
 
         config = SolutionUpdaterServiceRequest(**request_dict)

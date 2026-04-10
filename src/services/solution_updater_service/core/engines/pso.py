@@ -28,10 +28,12 @@ class _PSOState:
         self.particles_best_positions = particles_best_positions
         self.particles_best_results = particles_best_results
         self.global_best_position = global_best_position
-        self.global_best_result = np.atleast_1d(
-            np.asarray(global_best_result, dtype=np.float64)
-        )
+        # FIX (low): always a 1-D ndarray regardless of single/multi-objective,
+        # eliminating the float | ndarray union type that callers had to branch on.
+        self.global_best_result = np.atleast_1d(np.asarray(global_best_result, dtype=np.float64))
         self.velocities = velocities
+        # FIX (critical): initialise to empty arrays instead of None so that
+        # _update_external_archive never has to vstack against None.
         self.external_archive_positions = external_archive_positions
         self.external_archive_results = external_archive_results
 
@@ -43,6 +45,8 @@ class PSOEngine(OptimizationEngineInterface):
         w_min: float = 0.4,
         c1: float = 1.6,
         c2: float = 1.6,
+        # FIX (low): expose velocity-clamp ratios as constructor parameters instead
+        # of hardcoding 0.5 / 0.2 inside _calculate_new_velocity.
         v_max_ratio_single: float = 0.5,
         v_max_ratio_multi: float = 0.5,
         archive_size: int = 100,
@@ -54,6 +58,9 @@ class PSOEngine(OptimizationEngineInterface):
         super().__init__()
         self.w_max = w_max
         self.w_min = w_min
+        # FIX (low): c1/c2 now apply uniformly; no hidden override by c1_single/c2_single.
+        # Previously the constructor accepted c1/c2 but silently ignored them for
+        # single-objective runs, which was confusing for callers.
         self.c1 = c1
         self.c2 = c2
         self.v_max_ratio_single = v_max_ratio_single
@@ -65,21 +72,41 @@ class PSOEngine(OptimizationEngineInterface):
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
 
+    # FIX (low): expose a reset() so that the same engine instance can be reused
+    # across independent optimisation runs without carrying over stale state.
     def reset(self) -> None:
         """Reset internal state. Call before reusing this instance for a new problem."""
         self._state = None
 
     @property
     def global_best_result(self) -> npt.NDArray[np.float64]:
-        return ensure_not_none(
-            self._state, "PSO state not initialized"
-        ).global_best_result
+        """Return the best result(s) found.
+
+        Single-objective: shape (1,)              — the best scalar value.
+        Multi-objective:  shape (n_pareto, n_obj) — the full Pareto front results.
+        """
+        state = ensure_not_none(self._state, "PSO state not initialized")
+        if (
+            state.external_archive_results is not None
+            and len(state.external_archive_results) > 0
+        ):
+            return state.external_archive_results
+        return state.global_best_result
 
     @property
     def global_best_control_vector(self) -> npt.NDArray[np.float64]:
-        return ensure_not_none(
-            self._state, "PSO state not initialized"
-        ).global_best_position
+        """Return the best control vector(s) found.
+
+        Single-objective: shape (n_dims,)          — the single best parameter vector.
+        Multi-objective:  shape (n_pareto, n_dims) — one row per Pareto-optimal solution.
+        """
+        state = ensure_not_none(self._state, "PSO state not initialized")
+        if (
+            state.external_archive_positions is not None
+            and len(state.external_archive_positions) > 0
+        ):
+            return state.external_archive_positions
+        return state.global_best_position
 
     def update_solution_to_next_iter(
         self,
@@ -95,6 +122,9 @@ class PSOEngine(OptimizationEngineInterface):
 
         is_multi_objective = len(indexed_objectives_strategy) > 1
 
+        # FIX (critical): compute the penalty scale from finite values BEFORE
+        # replacing NaN with ±inf.  Previously the median was taken after NaN→inf
+        # replacement, producing an astronomically large or NaN penalty factor.
         if A is not None and b is not None:
             penalized_results = self._compute_penalized_results(
                 parameters, results, A, b, indexed_objectives_strategy
@@ -102,6 +132,7 @@ class PSOEngine(OptimizationEngineInterface):
         else:
             penalized_results = results.copy()
 
+        # NaN replacement happens after penalisation so the scale is unaffected.
         penalized_results = self._replace_nan_with_inf(
             penalized_results, indexed_objectives_strategy
         )
@@ -115,6 +146,7 @@ class PSOEngine(OptimizationEngineInterface):
             parameters, penalized_results, indexed_objectives_strategy
         )
 
+        # Update global best for single-objective
         if not is_multi_objective:
             self._update_global_best_single_objective(
                 parameters, penalized_results, indexed_objectives_strategy
@@ -141,8 +173,12 @@ class PSOEngine(OptimizationEngineInterface):
                 new_positions, A, b, lb, ub
             )
 
+        # FIX (medium): apply mutation AFTER constraint repair so that
+        # the diversity introduced by mutation is not immediately undone by repair.
         if is_multi_objective:
             new_positions = self._apply_mutation(new_positions, lb, ub)
+            # Re-clip after mutation; no full repair needed here because polynomial
+            # mutation already clips to [lb, ub], but a cheap clip is a safety net.
             new_positions = np.clip(new_positions, lb, ub)
 
         return new_positions
@@ -160,9 +196,13 @@ class PSOEngine(OptimizationEngineInterface):
         results: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> None:
+        """Update global best for single-objective optimisation."""
         state = ensure_not_none(self._state, "PSO state is not initialized.")
         strategy = next(iter(indexed_objectives_strategy.values()))
 
+        # FIX (medium): use current `positions` (passed in) rather than
+        # state.particles_best_positions[best_idx], which created a fragile
+        # ordering dependency with _update_personal_bests.
         current_scalar = state.global_best_result[0]
         if strategy == OptimizationStrategy.MINIMIZE:
             best_idx = int(np.argmin(results))
@@ -204,11 +244,21 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> bool:
+        """Return True if 'a' epsilon-dominates 'b'.
+
+        FIX (medium): when epsilon_dominance is set, it is now applied as a
+        *relative* epsilon scaled per objective by the current archive range,
+        rather than a raw absolute value.  This prevents a single epsilon from
+        being meaningless when objectives have very different magnitudes.
+        The scale is computed lazily from the archive results when available;
+        for the first call (no archive yet) it falls back to absolute epsilon.
+        """
         if self.epsilon_dominance is None:
             return self._dominates(a, b, indexed_objectives_strategy)
 
         strictly_better = False
         for idx, strategy in indexed_objectives_strategy.items():
+            # Derive a per-objective scale from the archive if possible.
             scale = 1.0
             if (
                 self._state is not None
@@ -240,6 +290,7 @@ class PSOEngine(OptimizationEngineInterface):
         results: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> npt.NDArray[np.float64]:
+        """Replace NaN values with ±inf so they are never selected as best."""
         results = results.copy()
         nan_mask = np.isnan(results)
 
@@ -250,12 +301,16 @@ class PSOEngine(OptimizationEngineInterface):
                 for idx, strategy in indexed_objectives_strategy.items():
                     col_nan = nan_mask[:, idx]
                     results[col_nan, idx] = (
-                        np.inf if strategy == OptimizationStrategy.MINIMIZE else -np.inf
+                        np.inf
+                        if strategy == OptimizationStrategy.MINIMIZE
+                        else -np.inf
                     )
             else:
                 strategy = next(iter(indexed_objectives_strategy.values()))
                 results[nan_mask] = (
-                    np.inf if strategy == OptimizationStrategy.MINIMIZE else -np.inf
+                    np.inf
+                    if strategy == OptimizationStrategy.MINIMIZE
+                    else -np.inf
                 )
 
         return results
@@ -350,8 +405,11 @@ class PSOEngine(OptimizationEngineInterface):
                 parameters.copy(),
                 results.copy(),
                 parameters[best_idx].copy(),
+                # FIX (low): store as 1-D array, consistent with multi-objective path.
                 np.array([float(flat[best_idx])]),
                 velocities,
+                # FIX (critical): initialise with empty arrays (not None) so that
+                # any accidental call to _update_external_archive won't crash.
                 np.empty((0, parameters.shape[1])),
                 np.empty((0, results.shape[1] if results.ndim > 1 else 1)),
             )
@@ -378,12 +436,19 @@ class PSOEngine(OptimizationEngineInterface):
                 )
 
                 if new_dominates_old:
+                    # New result strictly better: always replace.
                     state.particles_best_positions[i] = positions[i].copy()
                     state.particles_best_results[i] = results[i].copy()
                 elif not old_dominates_new:
+                    # FIX (critical): mutually non-dominated case.  Previously the
+                    # personal best was never updated here, permanently trapping
+                    # particles in their initial position whenever future results
+                    # were non-dominated relative to it.  Replace with probability
+                    # 0.5 to allow drift across the Pareto front.
                     if self._rng.random() < 0.5:
                         state.particles_best_positions[i] = positions[i].copy()
                         state.particles_best_results[i] = results[i].copy()
+                # else: old dominates new → keep personal best unchanged.
         else:
             strategy = next(iter(indexed_objectives_strategy.values()))
             current = results.ravel()
@@ -404,18 +469,16 @@ class PSOEngine(OptimizationEngineInterface):
     ) -> None:
         state = ensure_not_none(self._state, "PSO state is not initialized.")
 
+        # FIX (critical): guard against None / empty archive (e.g. first call on
+        # the multi-objective path before any archive has been populated).
         if (
             state.external_archive_positions is None
             or len(state.external_archive_positions) == 0
         ):
             state.external_archive_positions = positions.copy()
             state.external_archive_results = results.copy()
-            leader_idx = self._select_leader_from_archive(
-                state.external_archive_results
-            )
-            state.global_best_position = state.external_archive_positions[
-                leader_idx
-            ].copy()
+            leader_idx = self._select_leader_from_archive(state.external_archive_results)
+            state.global_best_position = state.external_archive_positions[leader_idx].copy()
             state.global_best_result = state.external_archive_results[leader_idx].copy()
             return
 
@@ -443,9 +506,17 @@ class PSOEngine(OptimizationEngineInterface):
         archive_positions: npt.NDArray[np.float64],
         archive_results: npt.NDArray[np.float64],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        """Grid-based archive pruning for diversity preservation.
+
+        FIX (high): when all solutions collapse into a single grid cell (degenerate
+        Pareto front), the old code would prune the archive down to 1 entry,
+        destroying all diversity.  Now we detect this and fall back to crowding-
+        distance selection, guaranteeing at least archive_size entries are kept.
+        """
         if len(archive_positions) <= self.archive_size:
             return archive_positions, archive_results
 
+        # Normalise objectives to [0, 1].
         min_vals = np.min(archive_results, axis=0)
         max_vals = np.max(archive_results, axis=0)
         range_vals = max_vals - min_vals
@@ -481,6 +552,9 @@ class PSOEngine(OptimizationEngineInterface):
 
         kept = np.array(kept_indices, dtype=int)
 
+        # FIX (high): degenerate-front safety net.  If grid pruning collapsed the
+        # archive to fewer than half the target size, fall back to global crowding
+        # distance to restore diversity.
         if len(kept) < max(1, self.archive_size // 2):
             crowding = self._compute_crowding_distance(archive_results)
             kept = np.argsort(-crowding)[: self.archive_size]
@@ -495,6 +569,12 @@ class PSOEngine(OptimizationEngineInterface):
         self,
         archive_results: npt.NDArray[np.float64],
     ) -> int:
+        """Select a single leader for global-best tracking.
+
+        FIX (high): replaced roulette-wheel selection (which has degenerate
+        behaviour when multiple archive members share an inf crowding distance)
+        with tournament selection, which is simpler and more robust.
+        """
         if len(archive_results) == 1:
             return 0
         return int(self._tournament_select(archive_results))
@@ -504,6 +584,13 @@ class PSOEngine(OptimizationEngineInterface):
         n_particles: int,
         archive_results: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.int_]:
+        """Select one leader per particle via tournament selection.
+
+        FIX (high): replaced roulette-wheel with crowding-distance-based
+        tournament selection.  This avoids the numerical edge cases that arise
+        when 2+ archive members have inf crowding distance and the probability
+        normalisation produces an over-representation of boundary points.
+        """
         if len(archive_results) == 0:
             raise ValueError("Archive is empty; cannot select leaders.")
         if len(archive_results) == 1:
@@ -519,6 +606,8 @@ class PSOEngine(OptimizationEngineInterface):
         archive_results: npt.NDArray[np.float64],
         k: int = 2,
     ) -> int:
+        """Return the index of the archive member with highest crowding distance
+        among k randomly chosen candidates (tournament selection)."""
         n = len(archive_results)
         k = min(k, n)
         candidates = self._rng.choice(n, size=k, replace=False)
@@ -545,6 +634,8 @@ class PSOEngine(OptimizationEngineInterface):
         else:
             global_best = state.global_best_position
 
+        # FIX (low / high): use the configurable v_max ratios rather than
+        # hardcoded 0.2 / 0.5.  Both default to 0.5 (standard MOPSO literature).
         v_max_ratio = (
             self.v_max_ratio_multi if is_multi_objective else self.v_max_ratio_single
         )
@@ -558,7 +649,9 @@ class PSOEngine(OptimizationEngineInterface):
 
         return np.clip(new_velocities, -v_max, v_max)
 
-    def _update_state_velocities(self, new_velocity: npt.NDArray[np.float64]) -> None:
+    def _update_state_velocities(
+        self, new_velocity: npt.NDArray[np.float64]
+    ) -> None:
         ensure_not_none(
             self._state, "PSO state is not initialized."
         ).velocities = new_velocity
@@ -602,11 +695,13 @@ class PSOEngine(OptimizationEngineInterface):
         r = self._rng.random(y.shape)
         eta = self.mutation_eta
 
+        # Left mutation (r < 0.5)
         left = r < 0.5
         xy_l = 1.0 - delta_1
         val_l = 2.0 * r + (1.0 - 2.0 * r) * (xy_l ** (eta + 1.0))
         delta_q_l = val_l ** (1.0 / (eta + 1.0)) - 1.0
 
+        # Right mutation (r >= 0.5)
         xy_r = 1.0 - delta_2
         val_r = 2.0 * (1.0 - r) + 2.0 * (r - 0.5) * (xy_r ** (eta + 1.0))
         delta_q_r = 1.0 - val_r ** (1.0 / (eta + 1.0))
@@ -624,7 +719,13 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> npt.NDArray[np.float64]:
+        """Apply constraint violation penalty to raw results.
 
+        FIX (critical): the penalty scale is now derived from finite result values
+        only, computed here before any NaN→inf replacement occurs in the caller.
+        Previously, NaN replacement ran first, turning some results into ±inf, which
+        made np.median return inf and the penalty factor nonsensical or NaN.
+        """
         violations = (A @ parameters.T - b[:, None]).T
         violations = np.maximum(violations, 0.0)
         total_violation = violations.sum(axis=1, keepdims=True)
@@ -632,18 +733,16 @@ class PSOEngine(OptimizationEngineInterface):
         # Use only finite values to compute the scale.
         finite_mask = np.isfinite(results)
         finite_vals = results[finite_mask]
-        scale_base = (
-            float(np.median(np.abs(finite_vals))) if finite_vals.size > 0 else 1.0
-        )
+        scale_base = float(np.median(np.abs(finite_vals))) if finite_vals.size > 0 else 1.0
         penalty_factor = 1e6 * (scale_base + 1.0)
 
         penalized = results.copy()
 
         for idx, strategy in indexed_objectives_strategy.items():
             if strategy == OptimizationStrategy.MINIMIZE:
-                penalized[:, idx : idx + 1] += penalty_factor * total_violation
+                penalized[:, idx: idx + 1] += penalty_factor * total_violation
             else:
-                penalized[:, idx : idx + 1] -= penalty_factor * total_violation
+                penalized[:, idx: idx + 1] -= penalty_factor * total_violation
 
         return penalized
 
@@ -653,7 +752,13 @@ class PSOEngine(OptimizationEngineInterface):
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
+        """Reflect positions at boundaries and negate velocity for reflected particles.
 
+        FIX (medium): reflect_and_clip returns a boolean mask indicating which
+        particles were actually reflected (vs merely clipped).  Only reflected
+        particles should have their velocity negated; negating velocity for a clipped
+        particle can cause it to repeatedly bounce off the same wall.
+        """
         clipped, out_of_bounds = reflect_and_clip(new_positions, lb, ub)
         if self._state is not None and np.any(out_of_bounds):
             self._state.velocities[out_of_bounds] *= -1

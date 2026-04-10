@@ -372,10 +372,15 @@ class _SolutionUpdaterServiceLoopController:
             max_stall_generations,
         )
 
-        # Track history for multi-objective
-        self._last_run_global_best_result: float | npt.NDArray[np.float64] | None = None
+        self._last_run_global_best_result: float | None = None
         self._is_multi_objective: bool | None = None
-        self._pareto_front_history: list[npt.NDArray[np.float64]] = []
+
+        # Pareto convergence: store per-objective min and mean vectors in a
+        # rolling window rather than a single scalar norm, so improvement in any
+        # one objective is detectable regardless of how many objectives there are.
+        self._pareto_min_history: list[npt.NDArray[np.float64]] = []
+        self._pareto_mean_history: list[npt.NDArray[np.float64]] = []
+        self._pareto_history_window: int = 5
 
     @property
     def current_generation(self) -> int:
@@ -390,14 +395,20 @@ class _SolutionUpdaterServiceLoopController:
         return self._info
 
     def running(self) -> bool:
-        """Checks if the loop controller should run"""
+        """Checks if the loop controller should run."""
         running = True
 
         if self._is_max_generation_reached():
-            self._info = f"Max Generation {self._max_generations} reached, stopping optimization loop."
+            self._info = (
+                f"Max Generation {self._max_generations} reached, "
+                "stopping optimization loop."
+            )
             running = False
         elif self._is_max_stall_reached():
-            self._info = f"Maximum stall generations {self._base_stall} reached, stopping optimization loop."
+            self._info = (
+                f"Maximum stall generations {self._base_stall} reached, "
+                "stopping optimization loop."
+            )
             running = False
 
         return running
@@ -412,67 +423,98 @@ class _SolutionUpdaterServiceLoopController:
 
         current_best = self._solution_updater_service.global_best_result
 
-        # Detect if multi-objective on first run
+        # Detect objective mode on first call.
         if self._is_multi_objective is None:
-            self._is_multi_objective = isinstance(current_best, np.ndarray)
+            self._is_multi_objective = (
+                isinstance(current_best, np.ndarray) and current_best.ndim == 2
+            )
 
         if self._is_multi_objective:
-            # Multi-objective: use Pareto front convergence
-            has_improved = self._has_pareto_converged(current_best)
+            has_improved = self._pareto_has_improved(current_best)
         else:
-            # Single-objective: direct comparison
-            last_best = self._last_run_global_best_result
-            has_improved = last_best != current_best if last_best is not None else True
+            has_improved = self._single_objective_has_improved(current_best)
 
         if has_improved:
             self._stall_left = self._base_stall
         else:
             self._stall_left -= 1
 
-        self._last_run_global_best_result = (
-            current_best.copy()
-            if isinstance(current_best, np.ndarray)
-            else current_best
-        )
+        # Store scalar best for next single-objective comparison.
+        # Multi-objective tracking is handled inside _pareto_has_improved.
+        if not self._is_multi_objective:
+            self._last_run_global_best_result = (
+                float(current_best)
+                if not isinstance(current_best, np.ndarray)
+                else float(current_best.ravel()[0])
+            )
 
-    def _has_pareto_converged(
+    def _single_objective_has_improved(
         self, current_best: float | npt.NDArray[np.float64]
     ) -> bool:
+        """Return True if the scalar best value changed since the last generation."""
+        last = self._last_run_global_best_result
+        if last is None:
+            return True
+
+        current_scalar = (
+            float(current_best)
+            if not isinstance(current_best, np.ndarray)
+            else float(np.ravel(current_best)[0])
+        )
+
+        # Relative tolerance so floating-point noise does not reset the stall
+        # counter on every generation.
+        threshold = 1e-8
+        denom = abs(last) if abs(last) > threshold else 1.0
+        return abs(current_scalar - last) / denom > threshold
+
+    def _pareto_has_improved(
+        self, current_front: npt.NDArray[np.float64]
+    ) -> bool:
+        """Return True if the Pareto front changed meaningfully since the last generation.
+
+        Tracks per-objective min and mean vectors separately rather than collapsing
+        to a single scalar norm.  This means improvement in *any one* objective is
+        detected independently of how many objectives there are — the threshold stays
+        meaningful whether there are 2 or 10 objectives.
+
+        Both min and mean are tracked:
+          - per-obj min  captures convergence (front moving toward better values).
+          - per-obj mean captures spread (front expanding across the objective space).
         """
-        Check if Pareto front has converged using a moving window approach.
+        front = np.atleast_2d(np.asarray(current_front, dtype=float))
 
-        Returns True if improvement detected (NOT converged yet).
-        """
-        # Store current front
-        if isinstance(current_best, np.ndarray):
-            self._pareto_front_history.append(current_best.copy())
+        per_obj_min = front.min(axis=0)    # shape (n_obj,)
+        per_obj_mean = front.mean(axis=0)  # shape (n_obj,)
 
-        # Need at least 2 iterations to compare
-        if len(self._pareto_front_history) < 2:
-            return True  # Still improving (not converged)
+        self._pareto_min_history.append(per_obj_min)
+        self._pareto_mean_history.append(per_obj_mean)
 
-        # Keep only recent history (e.g., last 5 iterations)
-        max_history = 5
-        if len(self._pareto_front_history) > max_history:
-            self._pareto_front_history.pop(0)
+        # Trim to rolling window.
+        if len(self._pareto_min_history) > self._pareto_history_window:
+            self._pareto_min_history.pop(0)
+            self._pareto_mean_history.pop(0)
 
-        # Compare last two fronts
-        previous = self._pareto_front_history[-2]
-        current = self._pareto_front_history[-1]
+        # Need at least 2 data points to detect change.
+        if len(self._pareto_min_history) < 2:
+            return True
 
-        # Simple metric: check if objectives changed significantly
+        prev_min = self._pareto_min_history[-2]
+        prev_mean = self._pareto_mean_history[-2]
+
         threshold = 1e-4
 
-        for i in range(len(current)):
-            if previous[i] != 0:
-                relative_change = abs((current[i] - previous[i]) / previous[i])
-            else:
-                relative_change = abs(current[i] - previous[i])
+        # Per-objective relative change — np.where guards against division by
+        # zero on objectives that are near 0.
+        denom_min = np.where(np.abs(prev_min) > threshold, np.abs(prev_min), 1.0)
+        denom_mean = np.where(np.abs(prev_mean) > threshold, np.abs(prev_mean), 1.0)
 
-            if relative_change > threshold:
-                return True  # Significant change = still improving
+        rel_change = max(
+            float(np.max(np.abs(per_obj_min - prev_min) / denom_min)),
+            float(np.max(np.abs(per_obj_mean - prev_mean) / denom_mean)),
+        )
 
-        return False  # No significant change = converged
+        return rel_change > threshold
 
     def _is_max_generation_reached(self) -> bool:
         return self._current_generation >= self._max_generations

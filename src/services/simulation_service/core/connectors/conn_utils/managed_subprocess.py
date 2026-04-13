@@ -95,9 +95,7 @@ class ManagedSubprocess:
         try:
             self.process = subprocess.Popen(self.command_args, **popen_kwargs)
         except Exception:
-            self.log_error(
-                f"Failed to start subprocess: {' '.join(self.command_args)}"
-            )
+            self.log_error(f"Failed to start subprocess: {' '.join(self.command_args)}")
             raise
 
         if self.process.stdout is None or self.process.stderr is None:

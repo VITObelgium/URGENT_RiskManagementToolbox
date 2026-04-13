@@ -1,15 +1,10 @@
-"""
-NOTE:
-This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
-"""
-
 from __future__ import annotations
 
 import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable, Protocol, cast
+from typing import Any, Callable, Protocol, TypeVar
 
 from logger import get_logger, stream_reader
 from .common import (
@@ -21,16 +16,13 @@ from .conn_utils import ManagedSubprocess, get_timeout_value
 
 logger = get_logger("threading-worker", filename=__name__)
 
-_FAILED = SimulationStatus.FAILED
-_TIMEOUT = SimulationStatus.TIMEOUT
-_SUCCESS = SimulationStatus.SUCCESS
-_EXCEPTION = SimulationStatus.EXCEPTION
-
 _LOG_TAIL_LINES = 100
 _GRACEFUL_TERMINATE_TIMEOUT = 5
 _STOP_TERMINATE_TIMEOUT = 3
 _THREAD_JOIN_TIMEOUT = 2
 _POLL_STEP = 0.25
+
+T = TypeVar("T")
 
 
 class SimulationRunner(Protocol):
@@ -47,15 +39,16 @@ class SubprocessRunner:
 
     def __init__(
         self,
-        managed_subprocess_factory: Callable | None = None,
+        repo_root_getter: Callable[[], Path],
+        worker_id_getter: Callable[[], str | None],
+        managed_subprocess_factory: Callable[..., ManagedSubprocess] | None = None,
         broadcast_results_parser: Callable[[str], SimulationResults] | None = None,
-        repo_root_getter: Callable[[], Path] | None = None,
-        worker_id_getter: Callable[[], str | None] | None = None,
     ):
         if broadcast_results_parser is None:
             raise RuntimeError(
                 "SubprocessRunner requires a broadcast_results_parser to be provided"
             )
+
         self._managed_subprocess_factory = (
             managed_subprocess_factory or self._default_managed_subprocess_factory
         )
@@ -72,9 +65,6 @@ class SubprocessRunner:
     ) -> tuple[SimulationStatus, SimulationResults]:
         defaults = user_cost_function_with_default_values
 
-        if not (self._repo_root_getter and self._worker_id_getter):
-            return _FAILED, defaults
-
         env, thread_name = self._build_env()
         command = self._build_command(config)
         self._cleanup_stale_caches()
@@ -89,22 +79,24 @@ class SubprocessRunner:
         )
 
         try:
-            with manager as process:
-                status = self._wait_for_process(process, stop)
+            with manager as m:
+                if m.process is None:
+                    return SimulationStatus.FAILED, defaults
+                status = self._wait_for_process(m.process, stop)
 
-                if status == _TIMEOUT:
-                    self._terminate_process(process, graceful=True)
-                    self._join_io_threads(manager)
-                    return _TIMEOUT, defaults
+                if status == SimulationStatus.TIMEOUT:
+                    self._terminate_process(m.process, graceful=True)
+                    self._join_io_threads(m)
+                    return SimulationStatus.TIMEOUT, defaults
 
-                if status == _FAILED:
-                    return _FAILED, defaults
+                if status == SimulationStatus.FAILED:
+                    return SimulationStatus.FAILED, defaults
 
-                if process.returncode != 0:
-                    self._log_nonzero_returncode(process.returncode, manager)
-                    return _FAILED, defaults
+                if m.returncode is None or m.returncode != 0:
+                    self._log_nonzero_returncode(m.returncode or 1, m)
+                    return SimulationStatus.FAILED, defaults
 
-                return self._parse_and_merge(manager, defaults)
+                return self._parse_and_merge(m, defaults)
 
         except KeyError as e:
             logger.exception(
@@ -114,34 +106,26 @@ class SubprocessRunner:
                 e,
                 _tail(manager.stdout_lines),
             )
-            return _EXCEPTION, defaults
+            return SimulationStatus.EXCEPTION, defaults
         except FileNotFoundError:
             logger.exception(
                 "Failed to start subprocess. Command '%s' not found.",
                 " ".join(command),
             )
-            return _EXCEPTION, defaults
+            return SimulationStatus.EXCEPTION, defaults
         except Exception as e:
             logger.exception(
                 "An error occurred while running the simulation subprocess: %s", e
             )
-            return _EXCEPTION, defaults
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
+            return SimulationStatus.EXCEPTION, defaults
 
     def _build_env(self) -> tuple[dict[str, str], str | None]:
-        """Resolve worker id and working directory; return (env, thread_name)."""
-        assert self._repo_root_getter is not None, "repo_root_getter must be set"
+        """Resolve worker id and working directory."""
         repo_root = _safe_call(self._repo_root_getter)
-        assert self._worker_id_getter is not None, "worker_id_getter must be set"
         wid = _safe_call(self._worker_id_getter)
 
         env = os.environ.copy()
         if repo_root is not None and wid is not None:
-            repo_root = cast(Path, repo_root)
-            wid = cast(str, wid)
             work_dir = repo_root / f"orchestration_files/.worker_{wid}_temp"
             env["PWD"] = str(work_dir)
 
@@ -158,11 +142,12 @@ class SubprocessRunner:
             for p in Path.cwd().glob("obl_point_data_*.pkl"):
                 try:
                     p.unlink(missing_ok=True)
-                except Exception:
-                    pass
-        except Exception:
+                except OSError as e:
+                    logger.debug("Could not remove cache file %s: %s", p, e)
+        except OSError as e:
             logger.warning(
-                "Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway."
+                "Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway. Error: %s",
+                e,
             )
 
     def _wait_for_process(
@@ -177,11 +162,11 @@ class SubprocessRunner:
             if stop is not None and stop.is_set():
                 logger.warning("Stop requested; terminating OpenDarts subprocess.")
                 self._terminate_process(process, graceful=False)
-                return _FAILED
+                return SimulationStatus.FAILED
 
             try:
                 process.wait(timeout=_POLL_STEP)
-                return _SUCCESS
+                return SimulationStatus.SUCCESS
             except subprocess.TimeoutExpired:
                 waited += _POLL_STEP
                 if waited >= self._timeout_duration:
@@ -189,7 +174,7 @@ class SubprocessRunner:
                         "Subprocess timed out after %s seconds. Terminating.",
                         self._timeout_duration,
                     )
-                    return _TIMEOUT
+                    return SimulationStatus.TIMEOUT
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen, graceful: bool) -> None:
@@ -261,23 +246,23 @@ class SubprocessRunner:
                 _tail(manager.stdout_lines),
                 _tail(manager.stderr_lines),
             )
-            return _EXCEPTION, defaults
+            return SimulationStatus.EXCEPTION, defaults
 
         merged = _update_user_cost_function_with_simulation_results(
             defaults, broadcast_results
         )
-        return _SUCCESS, merged
+        return SimulationStatus.SUCCESS, merged
 
     @staticmethod
-    def _default_managed_subprocess_factory(*a, **k) -> ManagedSubprocess:
+    def _default_managed_subprocess_factory(*a: Any, **k: Any) -> ManagedSubprocess:
         return ManagedSubprocess(*a, **k)
 
 
 class ThreadRunner:
     """Lightweight runner that runs simulation inside a thread or in-process."""
 
-    def __init__(self, subprocess_runner: SubprocessRunner | None = None):
-        self._subprocess_runner = subprocess_runner or SubprocessRunner()
+    def __init__(self, subprocess_runner: SubprocessRunner):
+        self._subprocess_runner = subprocess_runner
 
     def run(
         self,
@@ -291,20 +276,17 @@ class ThreadRunner:
         )
 
 
-# ------------------------------------------------------------------
-# Module-level helpers
-# ------------------------------------------------------------------
-
-
 def _tail(lines: list[str], n: int = _LOG_TAIL_LINES) -> str:
     return "\n".join(lines[-n:])
 
 
-def _safe_call(fn: Callable) -> object:
-    """Call fn(), returning None on any exception."""
+def _safe_call(fn: Callable[[], T]) -> T | None:
+    """Call fn(), returning None on any exception and logging the error."""
     try:
         return fn()
-    except Exception:
+    except Exception as e:
+        func_name = getattr(fn, "__name__", str(fn))
+        logger.warning("Safe call to '%s' failed: %s", func_name, e)
         return None
 
 

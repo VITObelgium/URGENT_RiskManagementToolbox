@@ -123,7 +123,7 @@ class ManagedSubprocess:
         # the block, and optionally access self.process for the returncode.
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         # ----------------------------------------------------------------
         # 1. Ensure the process has actually finished.
         # ----------------------------------------------------------------
@@ -161,11 +161,19 @@ class ManagedSubprocess:
         if self._stderr_thread is not None:
             self._stderr_thread.join()
 
-        return False  # do not suppress exceptions
-
     # ------------------------------------------------------------------
     # Convenience helpers
     # ------------------------------------------------------------------
+
+    @property
+    def stdout_thread(self) -> threading.Thread | None:
+        """Return the background thread reading stdout."""
+        return self._stdout_thread
+
+    @property
+    def stderr_thread(self) -> threading.Thread | None:
+        """Return the background thread reading stderr."""
+        return self._stderr_thread
 
     @property
     def returncode(self) -> int | None:
@@ -186,4 +194,6 @@ class ManagedSubprocess:
             self._stdout_thread.join()
         if self._stderr_thread:
             self._stderr_thread.join()
+        if self.returncode is None:
+            raise RuntimeError("Subprocess finished but returncode is None.")
         return self.returncode

@@ -469,10 +469,10 @@ class PSOEngine(OptimizationEngineInterface):
 
         # FIX (critical): guard against None / empty archive (e.g. first call on
         # the multi-objective path before any archive has been populated).
-        if (
-            state.external_archive_positions is None
-            or len(state.external_archive_positions) == 0
-        ):
+        ext_arch_pos = state.external_archive_positions
+        ext_arch_res = state.external_archive_results
+
+        if ext_arch_pos is None or ext_arch_res is None or len(ext_arch_pos) == 0:
             state.external_archive_positions = positions.copy()
             state.external_archive_results = results.copy()
             leader_idx = self._select_leader_from_archive(
@@ -484,8 +484,8 @@ class PSOEngine(OptimizationEngineInterface):
             state.global_best_result = state.external_archive_results[leader_idx].copy()
             return
 
-        all_positions = np.vstack([state.external_archive_positions, positions])
-        all_results = np.vstack([state.external_archive_results, results])
+        all_positions = np.vstack([ext_arch_pos, positions])
+        all_results = np.vstack([ext_arch_res, results])
 
         mask = self._non_dominated_mask(all_results, indexed_objectives_strategy)
         archive_positions = all_positions[mask]
@@ -545,7 +545,7 @@ class PSOEngine(OptimizationEngineInterface):
             cell_indices = np.where(cell_mask)[0]
 
             if len(cell_indices) == 1:
-                kept_indices.extend(cell_indices.tolist())
+                kept_indices.extend(int(x) for x in cell_indices)
             else:
                 cell_results = archive_results[cell_indices]
                 crowding = self._compute_crowding_distance(cell_results)
@@ -629,8 +629,12 @@ class PSOEngine(OptimizationEngineInterface):
         r2 = self._rng.uniform(size=state.velocities.shape)
 
         if is_multi_objective:
+            arch_res = ensure_not_none(
+                state.external_archive_results,
+                "External archive results is not initialized",
+            )
             leader_indices = self._select_leaders_for_particles(
-                len(old_positions), state.external_archive_results
+                len(old_positions), arch_res
             )
             global_best = ensure_not_none(
                 state.external_archive_positions,
@@ -652,7 +656,7 @@ class PSOEngine(OptimizationEngineInterface):
             + self.c2 * r2 * (global_best - old_positions)
         )
 
-        return np.clip(new_velocities, -v_max, v_max)
+        return np.clip(new_velocities, -v_max, v_max).astype(np.float64)
 
     def _update_state_velocities(self, new_velocity: npt.NDArray[np.float64]) -> None:
         ensure_not_none(
@@ -664,7 +668,8 @@ class PSOEngine(OptimizationEngineInterface):
         old_positions: npt.NDArray[np.float64],
         velocities: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-        return old_positions + velocities
+        out = old_positions + velocities
+        return out.astype(np.float64)
 
     def _apply_mutation(
         self,

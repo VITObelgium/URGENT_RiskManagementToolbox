@@ -362,9 +362,8 @@ class SolutionUpdaterService:
         Single-objective: shape (1,).
         Multi-objective:  shape (n_pareto, n_obj) — full Pareto front results.
         """
-        return ensure_not_none(
-            self._engine, "Engine not initialized"
-        ).global_best_result
+        res = ensure_not_none(self._engine, "Engine not initialized").global_best_result
+        return np.atleast_1d(np.asarray(res, dtype=np.float64))
 
     @property
     def global_best_result_descriptive(

@@ -120,7 +120,7 @@ def run_risk_management(
 
             while loop_controller.running():
                 logger.info(
-                    f"Starting generation {loop_controller.current_generation}",
+                    f"*** Starting generation {loop_controller.current_generation} ***",
                 )
                 solutions = dispatcher.process_iteration(next_solutions)
                 logger.debug(f"Generated solutions: {solutions}")

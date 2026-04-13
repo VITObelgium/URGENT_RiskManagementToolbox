@@ -124,10 +124,10 @@ def get_logging_output() -> dict[str, Any]:
             "external_docker_log_console": False,
         }
 
-    import tomli
+    import tomllib
 
     with open(pyproject_path, "rb") as f:
-        pyproject_toml = tomli.load(f)
+        pyproject_toml = tomllib.load(f)
     return dict(pyproject_toml.get("logging", {}).get("output", {}))
 
 
@@ -140,6 +140,13 @@ def get_external_console_logging() -> bool:
     bool
         The value of external_docker_log_console. Returns False if pyproject.toml is not found.
     """
+    env_override = os.environ.get("URGENT_EXTERNAL_DOCKER_LOG_CONSOLE")
+    if env_override is not None:
+        return (
+            os.getenv("URGENT_EXTERNAL_DOCKER_LOG_CONSOLE", "").strip().lower()
+            == "true"
+        )
+
     try:
         return bool(get_logging_output().get("external_docker_log_console", False))
     except FileNotFoundError:
@@ -331,12 +338,12 @@ def get_log_config() -> dict[str, Any]:
         The logging configuration compatible with logging.config.dictConfig.
     """
     pyproject_path = find_pyproject_toml()
-    import tomli
+    import tomllib
 
     if pyproject_path and pyproject_path.exists():
         try:
             with open(pyproject_path, "rb") as f:
-                pyproject_toml = tomli.load(f)
+                pyproject_toml = tomllib.load(f)
             config = pyproject_toml.get("logging", {}).get("config")
             if isinstance(config, dict):
                 return config

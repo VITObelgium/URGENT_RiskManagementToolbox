@@ -29,9 +29,6 @@ from services.simulation_service.core.infrastructure.server.src._simulation_serv
 from services.simulation_service.core.infrastructure.worker.src._simulation_worker_grpc import (
     main as worker_main,
 )
-from services.simulation_service.core.infrastructure.worker.src.utils import (
-    stage_worker_runtime,
-)
 from services.simulation_service.core.service.cluster_manager import ClusterManager
 
 logger = get_logger(__name__)

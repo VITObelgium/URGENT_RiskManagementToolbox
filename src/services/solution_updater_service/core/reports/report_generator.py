@@ -6,14 +6,21 @@ import numpy as np
 import numpy.typing as npt
 
 from logger import get_csv_logger, get_logger
+from services.shared import ensure_not_none
 from services.solution_updater_service.core.reports import PopulationStatistic
-from services.solution_updater_service.core.utils import ensure_not_none
+
 
 LOG_PRECISION = 5
 
 
 class ReportGenerator:
-    def __init__(self) -> None:
+    def __init__(self, is_multi_objective: bool = False) -> None:
+        # FIX: accept is_multi_objective at construction time so the CSV logger
+        # columns are fixed upfront rather than inferred from the first call's
+        # array shape. Without this, iteration 0 may have a Pareto archive of
+        # size 1 (looks single-objective) which locks in the wrong column set,
+        # causing a column-count mismatch on all subsequent multi-objective writes.
+        self._is_multi_objective = is_multi_objective
         self._logger = get_logger(__name__)
         self._control_vector_logger: logging.Logger | None = None
         self._population_statistic_logger: logging.Logger | None = None
@@ -110,21 +117,22 @@ class ReportGenerator:
     ) -> None:
         """Log the best result(s) found so far.
 
-        Single-objective: best_result is shape (1,) or a scalar — logs one row.
-        Multi-objective:  best_result is shape (n_pareto, n_obj) — logs one row
-                          per Pareto-optimal solution, each prefixed with its rank.
+        Single-objective: best_result shape (1,) — logs one row without pareto_rank.
+        Multi-objective:  best_result shape (n_pareto, n_obj) — logs one row per
+                          Pareto-optimal solution, each prefixed with its rank.
+
+        The CSV schema (with or without pareto_rank column) is determined by
+        self._is_multi_objective set at construction, NOT by the shape of the
+        array passed here. This prevents a schema mismatch when the Pareto archive
+        starts with 1 entry and later grows to many.
         """
         arr = np.atleast_2d(np.asarray(best_result, dtype=float))
-
-        # Normalise: a flat (n_obj,) array arrives as (1, n_obj) after atleast_2d,
-        # which is correct.  A scalar arrives as (1, 1), also correct.
+        # atleast_2d turns (n_obj,) → (1, n_obj) and scalar → (1, 1).
         n_solutions, n_obj = arr.shape
 
-        is_pareto = n_solutions > 1
-
-        if is_pareto:
-            # Multi-objective: one CSV column set per objective, rows = Pareto members.
-            # Logger columns: generation, pareto_rank, <obj_0>, <obj_1>, ...
+        if self._is_multi_objective:
+            # FIX: initialise logger with pareto_rank column, decided at
+            # construction time — not inferred from n_solutions on first call.
             if self._best_result_logger is None:
                 self._best_result_logger = get_csv_logger(
                     "best_result_logger.csv",
@@ -133,7 +141,7 @@ class ReportGenerator:
                 )
 
             self._logger.info(
-                f"Generation {generation} Pareto front: {n_solutions} solutions "
+                f"Generation {generation} Pareto front: {n_solutions} solution(s) "
                 f"across {n_obj} objective(s)"
             )
 
@@ -146,19 +154,15 @@ class ReportGenerator:
                         f"Pareto solution {rank}: expected {len(results_name)} "
                         f"objective values, got {row.size}: {row!r}"
                     )
-                best_results_dsc = {
-                    k: float(v) for k, v in zip(results_name, row.tolist())
-                }
                 self._logger.debug(
-                    f"  Pareto rank {rank}: {best_results_dsc}"
+                    f"  Pareto rank {rank}: "
+                    f"{ {k: float(v) for k, v in zip(results_name, row.tolist())} }"
                 )
                 row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in row.tolist())
                 logger.info(f"{generation},{rank},{row_str}")
 
         else:
             # Single-objective: one row, no pareto_rank column.
-            flat = arr.ravel()
-
             if self._best_result_logger is None:
                 self._best_result_logger = get_csv_logger(
                     "best_result_logger.csv",
@@ -166,6 +170,7 @@ class ReportGenerator:
                     columns=["generation", *results_name],
                 )
 
+            flat = arr.ravel()
             if flat.size != len(results_name):
                 raise ValueError(
                     f"Expected {len(results_name)} values, got {flat.size}: {flat!r}"
@@ -190,7 +195,8 @@ def _to_obj_list(
         return [float(arr[0])]
     if arr.size != n_objectives:
         raise ValueError(
-            f"Expected {name} to have {n_objectives} objective values, got {arr.size}: {arr!r}"
+            f"Expected {name} to have {n_objectives} objective values, "
+            f"got {arr.size}: {arr!r}"
         )
     return [float(v) for v in arr.tolist()]
 

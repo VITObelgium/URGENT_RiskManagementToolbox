@@ -2,11 +2,11 @@ import numpy as np
 from numpy import typing as npt
 
 from common import OptimizationStrategy
+from services.shared import ensure_not_none
 from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
 from services.solution_updater_service.core.utils import (
-    ensure_not_none,
     reflect_and_clip,
     repair_against_linear_inequalities,
 )
@@ -30,7 +30,9 @@ class _PSOState:
         self.global_best_position = global_best_position
         # FIX (low): always a 1-D ndarray regardless of single/multi-objective,
         # eliminating the float | ndarray union type that callers had to branch on.
-        self.global_best_result = np.atleast_1d(np.asarray(global_best_result, dtype=np.float64))
+        self.global_best_result = np.atleast_1d(
+            np.asarray(global_best_result, dtype=np.float64)
+        )
         self.velocities = velocities
         # FIX (critical): initialise to empty arrays instead of None so that
         # _update_external_archive never has to vstack against None.
@@ -301,16 +303,12 @@ class PSOEngine(OptimizationEngineInterface):
                 for idx, strategy in indexed_objectives_strategy.items():
                     col_nan = nan_mask[:, idx]
                     results[col_nan, idx] = (
-                        np.inf
-                        if strategy == OptimizationStrategy.MINIMIZE
-                        else -np.inf
+                        np.inf if strategy == OptimizationStrategy.MINIMIZE else -np.inf
                     )
             else:
                 strategy = next(iter(indexed_objectives_strategy.values()))
                 results[nan_mask] = (
-                    np.inf
-                    if strategy == OptimizationStrategy.MINIMIZE
-                    else -np.inf
+                    np.inf if strategy == OptimizationStrategy.MINIMIZE else -np.inf
                 )
 
         return results
@@ -477,8 +475,12 @@ class PSOEngine(OptimizationEngineInterface):
         ):
             state.external_archive_positions = positions.copy()
             state.external_archive_results = results.copy()
-            leader_idx = self._select_leader_from_archive(state.external_archive_results)
-            state.global_best_position = state.external_archive_positions[leader_idx].copy()
+            leader_idx = self._select_leader_from_archive(
+                state.external_archive_results
+            )
+            state.global_best_position = state.external_archive_positions[
+                leader_idx
+            ].copy()
             state.global_best_result = state.external_archive_results[leader_idx].copy()
             return
 
@@ -622,7 +624,7 @@ class PSOEngine(OptimizationEngineInterface):
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-        state = ensure_not_none(self._state)
+        state = ensure_not_none(self._state, "PSO state is not initialize")
         r1 = self._rng.uniform(size=state.velocities.shape)
         r2 = self._rng.uniform(size=state.velocities.shape)
 
@@ -630,7 +632,10 @@ class PSOEngine(OptimizationEngineInterface):
             leader_indices = self._select_leaders_for_particles(
                 len(old_positions), state.external_archive_results
             )
-            global_best = state.external_archive_positions[leader_indices]
+            global_best = ensure_not_none(
+                state.external_archive_positions,
+                "External archive positions is not initialized",
+            )[leader_indices]
         else:
             global_best = state.global_best_position
 
@@ -649,9 +654,7 @@ class PSOEngine(OptimizationEngineInterface):
 
         return np.clip(new_velocities, -v_max, v_max)
 
-    def _update_state_velocities(
-        self, new_velocity: npt.NDArray[np.float64]
-    ) -> None:
+    def _update_state_velocities(self, new_velocity: npt.NDArray[np.float64]) -> None:
         ensure_not_none(
             self._state, "PSO state is not initialized."
         ).velocities = new_velocity
@@ -733,16 +736,18 @@ class PSOEngine(OptimizationEngineInterface):
         # Use only finite values to compute the scale.
         finite_mask = np.isfinite(results)
         finite_vals = results[finite_mask]
-        scale_base = float(np.median(np.abs(finite_vals))) if finite_vals.size > 0 else 1.0
+        scale_base = (
+            float(np.median(np.abs(finite_vals))) if finite_vals.size > 0 else 1.0
+        )
         penalty_factor = 1e6 * (scale_base + 1.0)
 
         penalized = results.copy()
 
         for idx, strategy in indexed_objectives_strategy.items():
             if strategy == OptimizationStrategy.MINIMIZE:
-                penalized[:, idx: idx + 1] += penalty_factor * total_violation
+                penalized[:, idx : idx + 1] += penalty_factor * total_violation
             else:
-                penalized[:, idx: idx + 1] -= penalty_factor * total_violation
+                penalized[:, idx : idx + 1] -= penalty_factor * total_violation
 
         return penalized
 

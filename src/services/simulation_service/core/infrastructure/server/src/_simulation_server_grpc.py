@@ -29,6 +29,9 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._simulation_model_archive: bytes | None = None
         self._job_timeout_seconds: float = get_simulation_config().job_timeout_seconds
         self._log_interval_seconds: int = get_simulation_config().log_interval_seconds
+        self._long_poll_timeout_seconds: float = (
+            get_simulation_config().long_poll_timeout_seconds
+        )
         self._critical_error: RuntimeError | None = None
         self._total_simulations: int = 0
 
@@ -76,7 +79,14 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._total_simulations = total
         logger.info("Initializing simulations with %d job(s)", total)
 
-        self._pending_jobs = asyncio.Queue()
+        # Drain without replacing the queue instance — workers already blocked
+        # on get() remain attached and will receive jobs immediately after put().
+        while not self._pending_jobs.empty():
+            try:
+                self._pending_jobs.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
         self._running_jobs.clear()
         for h in self._timeout_handles.values():
             h.cancel()
@@ -174,15 +184,17 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         return sm.Simulations(simulations=simulations)
 
     async def RequestSimulationJob(self, request, context):
+        worker_id = request.worker_id
         try:
-            worker_id = request.worker_id
-
             try:
-                job_id, simulation = self._pending_jobs.get_nowait()
-            except asyncio.QueueEmpty:
-                logger.info("Worker %s: No jobs available in queue", worker_id)
-                if self._running_jobs:
-                    logger.info("Jobs still in-flight: %s", list(self._running_jobs))
+                job_id, simulation = await asyncio.wait_for(
+                    self._pending_jobs.get(),
+                    timeout=self._long_poll_timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                logger.debug(
+                    "Worker %s: Long-poll timed out, no jobs available", worker_id
+                )
                 return sm.SimulationJob(
                     simulation=sm.Simulation(),
                     status=sm.JobStatus.NO_JOB_AVAILABLE,
@@ -211,7 +223,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             return sm.SimulationJob(
                 simulation=sm.Simulation(),
                 status=sm.JobStatus.NO_JOB_AVAILABLE,
-                worker_id=getattr(request, "worker_id", ""),
+                worker_id=worker_id,
                 simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
             )
 
@@ -344,7 +356,7 @@ async def serve() -> None:
 
         _SERVER_LOOP = loop
         _SERVER = server
-        _SERVER_READY.set()  # unblock any readiness waiters
+        _SERVER_READY.set()
 
         try:
             await server.wait_for_termination()

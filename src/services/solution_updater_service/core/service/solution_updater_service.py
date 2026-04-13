@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any, Mapping, Sequence
 
@@ -8,7 +9,7 @@ import numpy.typing as npt
 
 from common import OptimizationStrategy
 from logger import get_logger
-from services.shared import Boundaries
+from services.shared import Boundaries, ensure_not_none
 from services.solution_updater_service.core.engines import (
     OptimizationEngineFactory,
     OptimizationEngineInterface,
@@ -25,7 +26,6 @@ from services.solution_updater_service.core.reports import (
     ReportGenerator,
 )
 from services.solution_updater_service.core.utils import (
-    ensure_not_none,
     get_mapping,
     get_numpy_values,
     numpy_to_dict,
@@ -36,41 +36,6 @@ type Idx = int
 
 
 class _MapperState:
-    """
-    Represents the internal state used for mapping between structured dictionary-based
-    data and their corresponding representations in NumPy arrays, enabling efficient
-    optimization-related operations.
-
-    The class provides key elements for handling and transforming data for population-level
-    candidates in optimization workflows. `_MapperState` acts as the backbone of internal
-    data representation for `_Mapper`.
-
-    Attributes:
-        control_vector_mapping (Mapping[Param, Idx]):
-            A dictionary-like mapping where keys represent parameter names
-            (strings) from the control vector, and values represent their corresponding
-            indices (`int`) in the NumPy array representation.
-
-        results_mapping (Mapping[Param, Union[Idx, Sequence[Idx]]]):
-            A dictionary-like mapping where keys represent parameter names (strings)
-            from the result set, and values represent either a single index (`int`) or
-            a sequence of indices (`Sequence[int]`) in the NumPy results array. This allows
-            handling both scalar results and structured data that spans multiple result indices.
-
-        control_vector_length (int):
-            The total number of control vector parameters. Derived from the length of
-            the `control_vector_mapping`.
-
-        results_length (int):
-            The total number of result parameters. Derived from the length of the
-            `results_mapping`.
-
-        population_size (int):
-            The number of individuals or candidates in the optimization problem's
-            population. Used to define the size of data structures for storing
-            population-wide data.
-    """
-
     def __init__(
         self,
         control_vector_mapping: Mapping[Param, Idx],
@@ -85,21 +50,9 @@ class _MapperState:
 
 
 class _Mapper:
-    """
-    A utility class for mapping between structured data used in optimization,
-    enabling transformations between dictionary-based and NumPy array-based
-    representations of control vectors and results.
-
-    The `Mapper` class is designed to facilitate efficient handling of optimization
-    parameters and results for a population of candidates, particularly when dealing
-    with large datasets or computational optimizations.
-    """
-
     @property
     def is_initialized(self) -> bool:
-        if not self._state:
-            return False
-        return True
+        return self._state is not None
 
     @property
     def parameters_name(self) -> list[str]:
@@ -127,72 +80,7 @@ class _Mapper:
     def to_numpy(
         self, candidates: Sequence[SolutionCandidate]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        """
-        Converts a sequence of `SolutionCandidate` objects into NumPy arrays for
-        control vectors and cost function results.
 
-        This method processes a list of `SolutionCandidate` objects (one for each
-        candidate in the optimization process) and returns two NumPy arrays:
-          1. A 2D NumPy array where each row represents the values of the control
-             vector for a candidate.
-          2. A 2D NumPy array where each row contains the cost function results
-             associated with a candidate.
-
-        Args:
-            candidates (Sequence[SolutionCandidate]):
-                A list or other sequence of `SolutionCandidate` objects, each representing
-                an individual or candidate in the optimization population. Each candidate
-                contains:
-                - A control vector (`control_vector`) with parameter values.
-                - Cost function results (`cost_function_results`) providing the optimization metrics.
-
-        Returns:
-            tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-                A tuple of two NumPy arrays:
-                - The first array (2D) contains the control vector values for each candidate.
-                  Shape: `(population_size, control_vector_length)`.
-                - The second array (2D) contains the cost function results for each candidate.
-                  Shape: `(population_size, results_length)`.
-
-        Raises:
-            RuntimeError:
-                If no `candidates` are provided or if the `_Mapper` state cannot be
-                initialized. The `_state` must be initialized before utilizing this method.
-
-        Notes:
-            - The method assumes the `SolutionCandidate` objects to have structured
-              and valid `control_vector` and `cost_function_results`.
-            - To map the data efficiently into the `Mapper`'s internal representation,
-              the `control_vector` and `cost_function_results` of the first candidate
-              are used to determine the field mappings (`control_vector_mapping` and
-              `results_mapping`).
-
-        Example:
-            ```python
-            # Sample candidates
-            candidates = [
-                SolutionCandidate(
-                    control_vector={"param1": 1.0, "param2": 2.0},
-                    cost_function_results={"cost1": 5.0, "cost2": 10.0},
-                ),
-                SolutionCandidate(
-                    control_vector={"param1": 1.5, "param2": 2.5},
-                    cost_function_results={"cost1": 6.0, "cost2": 8.0},
-                ),
-            ]
-
-            # Convert candidates to NumPy arrays
-            control_vector_array, results_array = mapper.to_numpy(candidates)
-
-            # `control_vector_array`:
-            # [[1.0, 2.0],
-            #  [1.5, 2.5]]
-
-            # `results_array`:
-            # [[5.0, 10.0],
-            #  [6.0, 8.0]]
-            ```
-        """
         if not self._state:
             self._state = _Mapper._initiate_mapper_on_first_call(candidates)
 
@@ -216,59 +104,6 @@ class _Mapper:
     def to_control_vectors(
         self, parameters2d: npt.NDArray[np.float64]
     ) -> list[ControlVector]:
-        """
-        Converts a 2D NumPy array of parameter values into a list of `ControlVector` objects.
-
-        This method maps each row of a 2D NumPy array, where each row corresponds to a
-        candidate's parameter values, back into a structured `ControlVector` representation.
-        The mapping leverages the internal state of the `Mapper`, specifically the
-        `control_vector_mapping`, which provides the correspondence between control
-        vector indices and their parameter names.
-
-        Args:
-            parameters2d (npt.NDArray[np.float64]):
-                A 2D NumPy array where each row holds the parameter values for an individual candidate
-                in the population. The shape of the array should be
-                `(population_size, control_vector_length)`.
-
-        Returns:
-            list[ControlVector]:
-                A list of `ControlVector` objects, with each object representing the set of
-                parameter values for an individual candidate. Each `ControlVector` is restored
-                to its structured, dictionary-based representation.
-
-        Raises:
-            RuntimeError:
-                If the internal `Mapper` state (`_state`) is not initialized, which is required
-                to provide the `control_vector_mapping`. The `to_numpy` method must be called
-                before this to initialize the state.
-
-        Notes:
-            - The `Mapper` must maintain a valid internal state, including the
-              `control_vector_mapping`, which defines the relationship between
-              parameter names and their array indices.
-            - The number of columns in the `parameters2d` array must match the
-              `control_vector_length` defined in the internal state.
-
-        Example:
-            ```python
-            # Example of a 2D NumPy array with two candidates
-            parameters2d = np.array([
-                [1.0, 2.0],  # Candidate 1 parameter values
-                [1.5, 2.5],  # Candidate 2 parameter values
-            ])
-
-            # Assume control vector mapping: {'param1': 0, 'param2': 1}
-            control_vectors = mapper.to_control_vectors(parameters2d)
-
-            # `control_vectors` will be:
-            # [
-            #     ControlVector(items={'param1': 1.0, 'param2': 2.0}),
-            #     ControlVector(items={'param1': 1.5, 'param2': 2.5}),
-            # ]
-            ```
-        """
-
         if not self._state:
             raise RuntimeError(
                 "Mapper state is not initialized, call 'to_numpy' first."
@@ -284,43 +119,6 @@ class _Mapper:
     def get_variables_lb_and_ub_boundary(
         self, boundaries: dict[str, Boundaries]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        """
-        Retrieves the lower and upper boundary values for control vector parameters
-        in the optimization process.
-
-        This function returns NumPy arrays representing the per-parameter lower and
-        upper bounds for the control vector used in the optimization process. If boundary
-        values are not specified or missing, it defaults to `-np.inf` (negative infinity)
-        for the lower bound and `np.inf` (positive infinity) for the upper bound.
-
-        Args:
-            boundaries (OptimizationConstrains | None):
-                An `OptimizationBoundaries` object containing boundary constraints for the
-                control vector parameters. The boundaries include per-parameter lower
-                and upper bounds structured as key-value pairs, where the key is the
-                parameter name and the value is a tuple of the form `(lower_bound, upper_bound)`.
-
-        Returns:
-            tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-                A tuple containing two 1D NumPy arrays:
-                - The first array represents the lower bounds (`lb`) for each parameter
-                  in the control vector.
-                - The second array represents the upper bounds (`ub`) for each parameter
-                  in the control vector.
-
-        Raises:
-            RuntimeError:
-                If the internal `Mapper` state is not initialized. This occurs if the
-                `to_numpy` method has not been called before this function.
-
-        Notes:
-            - If the `boundaries` argument is None or does not contain any items,
-              the function defaults to `-np.inf` for all lower bounds and `np.inf` for
-              all upper bounds.
-            - The function matches boundary constraints with control vector indices
-              using the `control_vector_mapping` attribute from the internal state.
-        """
-
         if not self._state:
             raise RuntimeError(
                 "Mapper state is not initialized, call 'to_numpy' first."
@@ -358,9 +156,6 @@ class _SolutionUpdaterServiceLoopController:
         max_stall_generations: int,
         solution_updater_service: SolutionUpdaterService,
     ) -> None:
-        """
-        Helper class to control the loop of the solution updater service.
-        """
         self._info = "Loop controller running"
         self._solution_updater_service = solution_updater_service
 
@@ -462,15 +257,11 @@ class _SolutionUpdaterServiceLoopController:
             else float(np.ravel(current_best)[0])
         )
 
-        # Relative tolerance so floating-point noise does not reset the stall
-        # counter on every generation.
         threshold = 1e-8
         denom = abs(last) if abs(last) > threshold else 1.0
         return abs(current_scalar - last) / denom > threshold
 
-    def _pareto_has_improved(
-        self, current_front: npt.NDArray[np.float64]
-    ) -> bool:
+    def _pareto_has_improved(self, current_front: npt.NDArray[np.float64]) -> bool:
         """Return True if the Pareto front changed meaningfully since the last generation.
 
         Tracks per-objective min and mean vectors separately rather than collapsing
@@ -484,18 +275,16 @@ class _SolutionUpdaterServiceLoopController:
         """
         front = np.atleast_2d(np.asarray(current_front, dtype=float))
 
-        per_obj_min = front.min(axis=0)    # shape (n_obj,)
+        per_obj_min = front.min(axis=0)  # shape (n_obj,)
         per_obj_mean = front.mean(axis=0)  # shape (n_obj,)
 
         self._pareto_min_history.append(per_obj_min)
         self._pareto_mean_history.append(per_obj_mean)
 
-        # Trim to rolling window.
         if len(self._pareto_min_history) > self._pareto_history_window:
             self._pareto_min_history.pop(0)
             self._pareto_mean_history.pop(0)
 
-        # Need at least 2 data points to detect change.
         if len(self._pareto_min_history) < 2:
             return True
 
@@ -536,11 +325,12 @@ class SolutionUpdaterService:
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
 
         Args:
-            optimization_engine (OptimizationEngine): The optimization algorithm to use.
-            max_generations (int): Maximum number of optimization iterations to perform.
-            max_stall_generations (int, optional): Number of consecutive iterations without improvement
-                before early stopping is triggered. Defaults to 10.
-            seed (int, optional): Random seed for the optimization engine.
+            optimization_engine: The optimization algorithm to use.
+            max_generations: Maximum number of optimization iterations to perform.
+            max_stall_generations: Number of consecutive iterations without improvement
+                before early stopping is triggered.
+            objectives: Mapping of objective name → OptimizationStrategy.
+            seed: Random seed for the optimization engine.
         """
         self._logger = get_logger(__name__)
         self._mapper: _Mapper = _Mapper()
@@ -549,7 +339,12 @@ class SolutionUpdaterService:
         )
         self._objectives = objectives
 
-        self._report_generator = ReportGenerator()
+        # FIX: pass is_multi_objective at construction time so ReportGenerator
+        # fixes its CSV columns upfront rather than inferring from the first call.
+        # This prevents a column-count mismatch when the Pareto archive grows from
+        # 1 entry (looks single-objective) to many on subsequent iterations.
+        is_multi_objective = len(objectives) > 1
+        self._report_generator = ReportGenerator(is_multi_objective=is_multi_objective)
 
         self._control_vector_logger: logging.Logger | None = None
         self._population_logger: logging.Logger | None = None
@@ -561,33 +356,69 @@ class SolutionUpdaterService:
         )
 
     @property
-    def global_best_result(self) -> float | npt.NDArray[np.float64]:
+    def global_best_result(self) -> npt.NDArray[np.float64]:
+        """Return best result(s) found by the engine.
+
+        Single-objective: shape (1,).
+        Multi-objective:  shape (n_pareto, n_obj) — full Pareto front results.
+        """
         return ensure_not_none(
             self._engine, "Engine not initialized"
         ).global_best_result
 
     @property
-    def global_best_result_descriptive(self) -> dict[str, float]:
-        global_best: float | npt.NDArray[np.float64] = self.global_best_result
+    def global_best_result_descriptive(
+        self,
+    ) -> dict[str, float] | list[dict[str, float]]:
+        """Return best result(s) keyed by objective name.
 
-        if isinstance(global_best, float):
-            values = [global_best]
-        else:
-            values = list(global_best)
+        Single-objective: dict[str, float]       — one value per objective name.
+        Multi-objective:  list[dict[str, float]] — one dict per Pareto solution.
+        """
+        global_best = np.atleast_1d(np.asarray(self.global_best_result, dtype=float))
 
-        return {k: float(v) for k, v in zip(self._mapper.results_name, values)}
+        names = self._mapper.results_name
+
+        # 2-D → multi-objective Pareto front: shape (n_pareto, n_obj)
+        if global_best.ndim == 2:
+            n_obj = global_best.shape[1]
+            if len(names) != n_obj:
+                raise ValueError(
+                    f"results_name has {len(names)} entries but Pareto front "
+                    f"has {n_obj} objectives: {names!r}"
+                )
+            return [{k: float(v) for k, v in zip(names, row)} for row in global_best]
+
+        # 1-D → single-objective: shape (n_obj,)
+        if len(names) != len(global_best):
+            raise ValueError(
+                f"results_name has {len(names)} entries but global best "
+                f"has {len(global_best)} values: {names!r}"
+            )
+        return {k: float(v) for k, v in zip(names, global_best)}
 
     @property
-    def global_best_control_vector(self) -> ControlVector:
-        control_vector_array = np.array(
-            [
-                ensure_not_none(
-                    self._engine, "Engine not initialized"
-                ).global_best_control_vector
-            ]
-        )
-        first_index = 0
-        return self._mapper.to_control_vectors(control_vector_array)[first_index]
+    def global_best_control_vector(self) -> ControlVector | list[ControlVector]:
+        """Return best control vector(s) found by the engine.
+
+        Single-objective: ControlVector          — the single best parameter set.
+        Multi-objective:  list[ControlVector]    — one per Pareto-optimal solution.
+
+        FIX: the original code did np.array([engine.global_best_control_vector])
+        which added an extra outer dimension, producing shape (1, n_pareto, n_dims)
+        for multi-objective and crashing to_control_vectors. Now we branch on ndim
+        and pass the array through without extra wrapping.
+        """
+        raw = ensure_not_none(
+            self._engine, "Engine not initialized"
+        ).global_best_control_vector
+
+        # Multi-objective: shape (n_pareto, n_dims) → list of ControlVectors
+        if raw.ndim == 2:
+            return self._mapper.to_control_vectors(raw)
+
+        # Single-objective: shape (n_dims,) → single ControlVector
+        return self._mapper.to_control_vectors(raw[np.newaxis, :])[0]
 
     def process_request(
         self, request_dict: dict[str, Any]
@@ -612,31 +443,24 @@ class SolutionUpdaterService:
         indexed_objectives_strategy = self._get_indexed_strategy()
         A_np, b_np = self._get_linear_inequalities_matrices(config, control_vector)
 
-        if A_np is not None and b_np is not None:
-            try:
-                updated_params = engine.update_solution_to_next_iter(
-                    control_vector,
-                    cost_function_values,
-                    lb,
-                    ub,
-                    indexed_objectives_strategy,
-                    A=A_np,
-                    b=b_np,
-                    iteration_ratio=iteration_ratio,
-                )
-            except TypeError:
-                # Fallback if engine does not support A,b
-                self._logger.warning(
-                    "Engine does not support A,b, using default update_solution_to_next_iter"
-                )
-                updated_params = engine.update_solution_to_next_iter(
-                    control_vector,
-                    cost_function_values,
-                    lb,
-                    ub,
-                    indexed_objectives_strategy,
-                    iteration_ratio=iteration_ratio,
-                )
+        # FIX: use signature inspection to detect linear constraint support instead
+        # of catching TypeError, which would silently swallow real engine bugs
+        # (e.g. shape mismatches, bad numpy ops) and retry without constraints.
+        if (
+            A_np is not None
+            and b_np is not None
+            and self._engine_supports_linear_constraints()
+        ):
+            updated_params = engine.update_solution_to_next_iter(
+                control_vector,
+                cost_function_values,
+                lb,
+                ub,
+                indexed_objectives_strategy,
+                A=A_np,
+                b=b_np,
+                iteration_ratio=iteration_ratio,
+            )
         else:
             updated_params = engine.update_solution_to_next_iter(
                 control_vector,
@@ -683,10 +507,14 @@ class SolutionUpdaterService:
 
         return SolutionUpdaterServiceResponse(next_iter_solutions=next_iter_solutions)
 
+    def _engine_supports_linear_constraints(self) -> bool:
+        """Return True if the engine's update method accepts A and b keyword args."""
+        sig = inspect.signature(self._engine.update_solution_to_next_iter)
+        return "A" in sig.parameters and "b" in sig.parameters
+
     def _get_indexed_strategy(self) -> dict[int, OptimizationStrategy]:
         indexed_objectives_strategy: dict[int, OptimizationStrategy] = {}
         for obj_name, strategy in self._objectives.items():
-            # Find the index of this objective in the results
             if obj_name in self._mapper.results_name:
                 idx = self._mapper.results_name.index(obj_name)
                 indexed_objectives_strategy[idx] = strategy
@@ -718,7 +546,8 @@ class SolutionUpdaterService:
             for var, coef in row.items():
                 if var not in simple_to_idx:
                     raise ValueError(
-                        f"Linear inequality variable '{var}' not found in control vector mapping {simple_to_idx}"
+                        f"Linear inequality variable '{var}' not found in "
+                        f"control vector mapping {simple_to_idx}"
                     )
                 dense[simple_to_idx[var]] = float(coef)
             A_rows.append(dense)

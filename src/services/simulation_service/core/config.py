@@ -29,6 +29,11 @@ class SimulationServiceConfig(BaseSettings):
     )
     log_interval_seconds: int = Field(
         default=30,
+        description="Interval in seconds for logging progress (default: 30 seconds)",
+    )
+    long_poll_timeout_seconds: int = Field(
+        default=30,
+        description="Timeout in seconds for long-polling for simulation jobs (default: 30 seconds)",
     )
 
     model_config = SettingsConfigDict(

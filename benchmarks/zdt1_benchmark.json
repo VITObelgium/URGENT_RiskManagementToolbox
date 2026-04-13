@@ -57,7 +57,7 @@
 			"f2": "minimize"
 		},
     "population_size" : 100,
-    "max_generations" : 100,
-    "max_stall_generations" : 101
+    "max_generations" : 200,
+    "max_stall_generations" : 201
   }
 }

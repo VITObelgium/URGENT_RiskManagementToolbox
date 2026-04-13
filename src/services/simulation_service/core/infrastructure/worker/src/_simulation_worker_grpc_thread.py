@@ -304,7 +304,7 @@ async def run_simulation_loop(
             break
 
         try:
-            logger.info("Worker %s: Requesting a job...", worker_id)
+            logger.debug("Worker %s: Requesting a job...", worker_id)
             simulation_job = await request_simulation_job(stub, worker_id)
 
             if simulation_job.status == sm.JobStatus.EXCEPTION:
@@ -316,16 +316,19 @@ async def run_simulation_loop(
                 break
 
             elif simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
-                logger.info(
-                    "Worker %s: No simulation jobs available. Retrying in %d seconds...",
-                    worker_id,
-                    JOB_RETRY_DELAY_SEC,
+                # Server long-poll timed out — no jobs arrived within the window.
+                # Re-request immediately; no sleep needed.
+                logger.debug(
+                    "Worker %s: Long-poll timed out, re-requesting...", worker_id
                 )
+                continue
+
             elif simulation_job.status == sm.JobStatus.ERROR:
                 logger.error(
                     "Worker %s: Server returned an error for the job request. Retrying...",
                     worker_id,
                 )
+
             elif simulation_job.status == sm.JobStatus.JOBSTATUS_UNSPECIFIED:
                 logger.warning(
                     "Worker %s: Received unspecified status. Retrying...", worker_id

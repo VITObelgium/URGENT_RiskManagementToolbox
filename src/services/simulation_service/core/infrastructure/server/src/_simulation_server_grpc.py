@@ -17,6 +17,7 @@ logger = get_logger("threading-server", filename=__name__)
 _SERVER_LOOP: asyncio.AbstractEventLoop | None = None
 _SERVER: aio.Server | None = None
 _SERVER_READY: asyncio.Event | None = None
+_HANDLER: "SimulationMessagingHandler | None" = None
 
 
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
@@ -26,6 +27,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._timeout_handles: dict[int, asyncio.TimerHandle] = {}
         self._completed_jobs: dict[int, sm.SimulationJob] = {}
         self._job_event: asyncio.Event = asyncio.Event()
+        self._shutdown_event: asyncio.Event = asyncio.Event()
         self._simulation_model_archive: bytes | None = None
         self._job_timeout_seconds: float = get_simulation_config().job_timeout_seconds
         self._log_interval_seconds: int = get_simulation_config().log_interval_seconds
@@ -79,8 +81,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._total_simulations = total
         logger.info("Initializing simulations with %d job(s)", total)
 
-        # Drain without replacing the queue instance — workers already blocked
-        # on get() remain attached and will receive jobs immediately after put().
         while not self._pending_jobs.empty():
             try:
                 self._pending_jobs.get_nowait()
@@ -94,6 +94,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._completed_jobs.clear()
         self._critical_error = None
         self._job_event.clear()
+        self._shutdown_event.clear()
 
         for i, sim in enumerate(request.simulations, start=1):
             await self._pending_jobs.put((i, sim))
@@ -144,7 +145,30 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                     await context.abort(grpc.StatusCode.ABORTED, details)
                     return sm.Simulations(simulations=[])
 
-                await self._job_event.wait()
+                # Wait for EITHER a job event OR a shutdown signal so that a
+                # server shutdown unblocks this coroutine cleanly instead of
+                # letting gRPC tear it down from underneath.
+                job_fut = asyncio.ensure_future(self._job_event.wait())
+                shutdown_fut = asyncio.ensure_future(self._shutdown_event.wait())
+                try:
+                    await asyncio.wait(
+                        [job_fut, shutdown_fut],
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    # Always cancel whichever future didn't fire to avoid leaking tasks.
+                    job_fut.cancel()
+                    shutdown_fut.cancel()
+
+                if self._shutdown_event.is_set():
+                    logger.info(
+                        "Shutdown requested; aborting PerformSimulations RPC cleanly."
+                    )
+                    await context.abort(
+                        grpc.StatusCode.UNAVAILABLE, "Server shutting down"
+                    )
+                    return sm.Simulations(simulations=[])
+
                 self._job_event.clear()
         finally:
             if _log_handle[0] is not None:
@@ -305,7 +329,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
 
 async def serve() -> None:
-    global _SERVER_LOOP, _SERVER, _SERVER_READY
+    global _SERVER_LOOP, _SERVER, _SERVER_READY, _HANDLER
 
     logger.info("Initializing Async gRPC Server setup...")
     mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
@@ -341,9 +365,9 @@ async def serve() -> None:
         logger.debug("gRPC server options: %s", server_options)
 
         server = aio.server(options=server_options)
-        sm_grpc.add_SimulationMessagingServicer_to_server(
-            SimulationMessagingHandler(), server
-        )
+        handler = SimulationMessagingHandler()
+        _HANDLER = handler
+        sm_grpc.add_SimulationMessagingServicer_to_server(handler, server)
 
         manager_port = os.environ.get("SERVER_PORT", "50051")
         logger.info(
@@ -369,6 +393,7 @@ async def serve() -> None:
     finally:
         _SERVER_LOOP = None
         _SERVER = None
+        _HANDLER = None
         if _SERVER_READY is not None:
             _SERVER_READY.clear()
         logger.info("Server serve() routine completed or interrupted.")
@@ -393,6 +418,22 @@ def request_server_shutdown(timeout: float | None = 2.0) -> None:
             "request_server_shutdown: server not initialized; nothing to stop."
         )
         return
+
+    # Signal the handler to exit its wait loop *before* tearing the server
+    # down, so PerformSimulations can abort the RPC cleanly rather than having
+    # gRPC raise an unhandled exception when the server disappears beneath it.
+    if _HANDLER is not None:
+
+        def _set_shutdown() -> None:
+            _HANDLER._shutdown_event.set()
+            # Also set _job_event so the asyncio.wait() in PerformSimulations
+            # unblocks immediately without waiting for the next job event.
+            _HANDLER._job_event.set()
+
+        try:
+            _SERVER_LOOP.call_soon_threadsafe(_set_shutdown)
+        except Exception:
+            logger.exception("Failed to signal handler shutdown event")
 
     def _stop() -> None:
         try:

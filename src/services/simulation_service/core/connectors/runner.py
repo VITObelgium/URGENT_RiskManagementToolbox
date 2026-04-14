@@ -12,7 +12,8 @@ from .common import (
     SimulationResults,
     SimulationStatus,
 )
-from .conn_utils import ManagedSubprocess, get_timeout_value
+from .conn_utils import ManagedSubprocess
+from ..config import get_simulation_config
 
 logger = get_logger("threading-worker", filename=__name__)
 
@@ -55,7 +56,7 @@ class SubprocessRunner:
         self._broadcast_results_parser = broadcast_results_parser
         self._repo_root_getter = repo_root_getter
         self._worker_id_getter = worker_id_getter
-        self._timeout_duration = get_timeout_value()
+        self._timeout_duration = get_simulation_config().simulation_timeout_seconds
 
     def run(
         self,

@@ -246,16 +246,8 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    All simulation model files must be archived in a single `.zip` file.
    After extraction, all files must be located directly in the root directory (no nested subfolders).
 
-### 4. Global Configuration
 
-Global toolbox settings are defined in `pyproject.toml` under the `[toolbox-config]` table.
-
-| Parameter                    | Type | Description|
-|-----|----|----|
-| `simulation_timeout_seconds` | int  | Maximum allowed time (in seconds) for a single simulation run before it is terminated. |
-
-
-### 5. Run configuration file
+### 4. Run configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s), initial state, and variable constraints.
 
 Configuration file define services to be used for simulation and optimization as well as the global optimization parameters as objectives or linear inequality constraints.

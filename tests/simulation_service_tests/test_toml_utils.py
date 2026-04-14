@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from services.simulation_service.core.connectors.conn_utils.toml_utils import (
     _find_pyproject_toml,
-    get_timeout_value,
 )
 
 
@@ -47,81 +46,3 @@ class TestFindPyprojectToml:
     def test_returns_path_object(self):
         result = _find_pyproject_toml()
         assert result is None or isinstance(result, Path)
-
-
-class TestGetTimeoutValue:
-    def test_returns_default_when_pyproject_not_found(self):
-        """Returns 15*60 when pyproject.toml cannot be found."""
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=None,
-        ):
-            result = get_timeout_value()
-        assert result == 15 * 60
-
-    def test_returns_configured_value(self, tmp_path):
-        """Returns the configured timeout from pyproject.toml."""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_bytes(b"[toolbox-config]\nsimulation_timeout_seconds = 3600\n")
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=pyproject,
-        ):
-            result = get_timeout_value()
-        assert result == 3600
-
-    def test_returns_default_when_key_missing(self, tmp_path):
-        """Returns 15*60 when the key is absent from the config section."""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_bytes(b"[tool.pytest.ini_options]\naddopts = '--tb=short'\n")
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=pyproject,
-        ):
-            result = get_timeout_value()
-        assert result == 15 * 60
-
-    def test_returns_default_when_value_is_zero(self, tmp_path):
-        """Returns 15*60 when simulation_timeout_seconds is 0 (not positive)."""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_bytes(b"[toolbox-config]\nsimulation_timeout_seconds = 0\n")
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=pyproject,
-        ):
-            result = get_timeout_value()
-        assert result == 15 * 60
-
-    def test_returns_default_when_value_is_negative(self, tmp_path):
-        """Returns 15*60 when simulation_timeout_seconds is negative."""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_bytes(b"[toolbox-config]\nsimulation_timeout_seconds = -100\n")
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=pyproject,
-        ):
-            result = get_timeout_value()
-        assert result == 15 * 60
-
-    def test_returns_default_when_value_is_string(self, tmp_path):
-        """Returns 15*60 when simulation_timeout_seconds is not an integer."""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_bytes(
-            b'[toolbox-config]\nsimulation_timeout_seconds = "not-an-int"\n'
-        )
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=pyproject,
-        ):
-            result = get_timeout_value()
-        assert result == 15 * 60
-
-    def test_returns_default_on_read_error(self, tmp_path):
-        """Returns 15*60 when the file cannot be read."""
-        non_existent = tmp_path / "missing.toml"
-        with patch(
-            "services.simulation_service.core.connectors.conn_utils.toml_utils._find_pyproject_toml",
-            return_value=non_existent,
-        ):
-            result = get_timeout_value()
-        assert result == 15 * 60

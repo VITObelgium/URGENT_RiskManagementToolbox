@@ -316,8 +316,6 @@ async def run_simulation_loop(
                 break
 
             elif simulation_job.status == sm.JobStatus.NO_JOB_AVAILABLE:
-                # Server long-poll timed out — no jobs arrived within the window.
-                # Re-request immediately; no sleep needed.
                 logger.debug(
                     "Worker %s: Long-poll timed out, re-requesting...", worker_id
                 )

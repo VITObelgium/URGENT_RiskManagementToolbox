@@ -15,11 +15,6 @@ LOG_PRECISION = 5
 
 class ReportGenerator:
     def __init__(self, is_multi_objective: bool = False) -> None:
-        # FIX: accept is_multi_objective at construction time so the CSV logger
-        # columns are fixed upfront rather than inferred from the first call's
-        # array shape. Without this, iteration 0 may have a Pareto archive of
-        # size 1 (looks single-objective) which locks in the wrong column set,
-        # causing a column-count mismatch on all subsequent multi-objective writes.
         self._is_multi_objective = is_multi_objective
         self._logger = get_logger(__name__)
         self._control_vector_logger: logging.Logger | None = None
@@ -122,17 +117,12 @@ class ReportGenerator:
                           Pareto-optimal solution, each prefixed with its rank.
 
         The CSV schema (with or without pareto_rank column) is determined by
-        self._is_multi_objective set at construction, NOT by the shape of the
-        array passed here. This prevents a schema mismatch when the Pareto archive
-        starts with 1 entry and later grows to many.
+        self._is_multi_objective set at construction
         """
         arr = np.atleast_2d(np.asarray(best_result, dtype=float))
-        # atleast_2d turns (n_obj,) → (1, n_obj) and scalar → (1, 1).
         n_solutions, n_obj = arr.shape
 
         if self._is_multi_objective:
-            # FIX: initialise logger with pareto_rank column, decided at
-            # construction time — not inferred from n_solutions on first call.
             if self._best_result_logger is None:
                 self._best_result_logger = get_csv_logger(
                     "best_result_logger.csv",

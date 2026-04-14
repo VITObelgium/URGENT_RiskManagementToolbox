@@ -22,31 +22,6 @@ class ManagedSubprocess:
     """
     Context manager that launches a subprocess and captures its stdout/stderr
     via background reader threads.
-
-    The critical guarantee: by the time ``__exit__`` returns, *all* output
-    has been appended to ``stdout_lines`` / ``stderr_lines``.  This prevents
-    the race where the caller inspects those lists immediately after the
-    process exits but before the reader threads have finished draining the
-    pipes.
-
-    Parameters
-    ----------
-    command_args:
-        Argument list passed directly to ``subprocess.Popen``.
-    log_info / log_error / log_warning:
-        Callables used for structured logging.  ``log_warning`` defaults to
-        ``log_error`` when omitted.
-    stream_reader_func:
-        Optional override for the stream-reader callable; defaults to
-        ``_default_stream_reader``.  Signature must be
-        ``(stream, lines: list[str], log_func: Callable) -> None``.
-    text:
-        Passed through to ``Popen``; ``True`` decodes streams as text.
-    env:
-        Optional environment mapping.  When provided it completely replaces
-        the inherited environment (same as ``Popen`` semantics).
-    thread_name_prefix:
-        Prefix for the reader thread names (aids debugging).
     """
 
     def __init__(
@@ -74,10 +49,6 @@ class ManagedSubprocess:
         self._stderr_thread: threading.Thread | None = None
         self.stdout_lines: list[str] = []
         self.stderr_lines: list[str] = []
-
-    # ------------------------------------------------------------------
-    # Context-manager protocol
-    # ------------------------------------------------------------------
 
     def __enter__(self) -> "ManagedSubprocess":
         cwd = self.env.get("PWD") if self.env else None
@@ -119,14 +90,9 @@ class ManagedSubprocess:
         self._stdout_thread.start()
         self._stderr_thread.start()
 
-        # Return self so callers can inspect stdout_lines / stderr_lines after
-        # the block, and optionally access self.process for the returncode.
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        # ----------------------------------------------------------------
-        # 1. Ensure the process has actually finished.
-        # ----------------------------------------------------------------
         if self.process is not None and self.process.poll() is None:
             self.log_warning(
                 f"Subprocess (PID {self.process.pid}) still running on context exit "
@@ -150,43 +116,24 @@ class ManagedSubprocess:
                     self.log_warning(f"kill() failed: {e}")
                 self.process.wait()
 
-        # ----------------------------------------------------------------
-        # 2. CRITICAL: join reader threads *before* returning.
-        #    This guarantees stdout_lines / stderr_lines are fully populated
-        #    by the time the caller's `with` block ends, eliminating the race
-        #    condition where rc=0 but the output lists appear empty.
-        # ----------------------------------------------------------------
         if self._stdout_thread is not None:
-            self._stdout_thread.join()  # no timeout — drain completely
+            self._stdout_thread.join()
         if self._stderr_thread is not None:
             self._stderr_thread.join()
 
-    # ------------------------------------------------------------------
-    # Convenience helpers
-    # ------------------------------------------------------------------
-
     @property
     def stdout_thread(self) -> threading.Thread | None:
-        """Return the background thread reading stdout."""
         return self._stdout_thread
 
     @property
     def stderr_thread(self) -> threading.Thread | None:
-        """Return the background thread reading stderr."""
         return self._stderr_thread
 
     @property
     def returncode(self) -> int | None:
-        """Return the process exit code, or None if not yet finished."""
         return self.process.returncode if self.process else None
 
     def wait(self, timeout: float | None = None) -> int:
-        """
-        Block until the subprocess exits and *all* output has been captured.
-
-        Raises ``subprocess.TimeoutExpired`` if ``timeout`` is given and
-        the process does not finish in time.
-        """
         if self.process is None:
             raise RuntimeError("Subprocess has not been started.")
         self.process.wait(timeout=timeout)

@@ -145,9 +145,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                     await context.abort(grpc.StatusCode.ABORTED, details)
                     return sm.Simulations(simulations=[])
 
-                # Wait for EITHER a job event OR a shutdown signal so that a
-                # server shutdown unblocks this coroutine cleanly instead of
-                # letting gRPC tear it down from underneath.
                 job_fut = asyncio.ensure_future(self._job_event.wait())
                 shutdown_fut = asyncio.ensure_future(self._shutdown_event.wait())
                 try:
@@ -419,15 +416,10 @@ def request_server_shutdown(timeout: float | None = 2.0) -> None:
         )
         return
 
-    # Signal the handler to exit its wait loop *before* tearing the server
-    # down, so PerformSimulations can abort the RPC cleanly rather than having
-    # gRPC raise an unhandled exception when the server disappears beneath it.
     if _HANDLER is not None:
 
         def _set_shutdown() -> None:
             _HANDLER._shutdown_event.set()
-            # Also set _job_event so the asyncio.wait() in PerformSimulations
-            # unblocks immediately without waiting for the next job event.
             _HANDLER._job_event.set()
 
         try:

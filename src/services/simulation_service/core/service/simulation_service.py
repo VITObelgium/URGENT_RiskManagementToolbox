@@ -160,9 +160,6 @@ class SimulationService:
                         details,
                     )
                 elif code in (grpc.StatusCode.CANCELLED, grpc.StatusCode.UNAVAILABLE):
-                    # CANCELLED = clean shutdown via context.abort(CANCELLED, ...)
-                    # UNAVAILABLE = clean shutdown via context.abort(UNAVAILABLE, ...)
-                    # Both are intentional — log at INFO, not ERROR.
                     logger.info(
                         "Simulations ended due to server shutdown (code=%s, details=%s).",
                         code,

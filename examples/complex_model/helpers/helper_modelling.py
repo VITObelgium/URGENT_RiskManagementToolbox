@@ -269,6 +269,22 @@ def get_perforation_cells_for_well(
     return perf
 
 
+def fix_pvd_paths(pvd_path):
+    tree = ET.parse(pvd_path)
+    root = tree.getroot()
+    collection = root.find("Collection")
+
+    if collection is None:
+        raise ValueError("No Collection element found in PVD file")
+
+    for ds in collection.findall("DataSet"):
+        file_attr = ds.get("file")
+        if file_attr:
+            ds.set("file", os.path.basename(file_attr))
+
+    tree.write(pvd_path, encoding="utf-8", xml_declaration=True)
+
+
 # TODO: move to helper_geomechanics.py
 
 

@@ -69,6 +69,6 @@
     "max_generations": 10,
     "population_size": 40,
     "max_stall_generations": 10,
-    "worker_count": 4
+    "worker_count": 2
     }
 }

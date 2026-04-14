@@ -64,8 +64,8 @@ def run_darts(well_data) -> None:
     )
 
     # Simulation time
-    # Dtimes = [365] * 5    # 5 years period with fault reactivation check every year
-    Dtimes = [365 / 4] * 40  # total of approx 10 years with outputs every quarter year
+    Dtimes = [365] * 10    # 10 years period with fault reactivation check every year
+    # Dtimes = [365 / 4] * 40  # total of approx 10 years with outputs every quarter year
     # m.params.max_ts = 365.0
     m.params.max_ts = 365.0 / 4
 

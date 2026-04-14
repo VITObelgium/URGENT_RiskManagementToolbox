@@ -66,9 +66,9 @@
   ],
   "optimization_parameters": {
     "objectives":{"Heat": "maximize"},
-    "max_generations": 2,
-    "population_size": 4,
+    "max_generations": 20,
+    "population_size": 10,
     "max_stall_generations": 10,
-    "worker_count": 4
+    "worker_count": 2
     }
 }

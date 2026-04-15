@@ -48,7 +48,10 @@ class GrpcStubManager:
             except Exception:
                 pass
 
-            if code in (grpc.StatusCode.ABORTED, grpc.StatusCode.CANCELLED):
+            if code in (grpc.StatusCode.ABORTED, grpc.StatusCode.CANCELLED) or (
+                code == grpc.StatusCode.UNAVAILABLE
+                and details == "Server shutting down"
+            ):
                 logger.info(
                     "gRPC call ended intentionally (code=%s, details=%s).",
                     code,

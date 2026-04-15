@@ -28,14 +28,10 @@ class _PSOState:
         self.particles_best_positions = particles_best_positions
         self.particles_best_results = particles_best_results
         self.global_best_position = global_best_position
-        # FIX (low): always a 1-D ndarray regardless of single/multi-objective,
-        # eliminating the float | ndarray union type that callers had to branch on.
         self.global_best_result = np.atleast_1d(
             np.asarray(global_best_result, dtype=np.float64)
         )
         self.velocities = velocities
-        # FIX (critical): initialise to empty arrays instead of None so that
-        # _update_external_archive never has to vstack against None.
         self.external_archive_positions = external_archive_positions
         self.external_archive_results = external_archive_results
 
@@ -47,8 +43,6 @@ class PSOEngine(OptimizationEngineInterface):
         w_min: float = 0.4,
         c1: float = 1.6,
         c2: float = 1.6,
-        # FIX (low): expose velocity-clamp ratios as constructor parameters instead
-        # of hardcoding 0.5 / 0.2 inside _calculate_new_velocity.
         v_max_ratio_single: float = 0.5,
         v_max_ratio_multi: float = 0.5,
         archive_size: int = 100,
@@ -60,9 +54,6 @@ class PSOEngine(OptimizationEngineInterface):
         super().__init__()
         self.w_max = w_max
         self.w_min = w_min
-        # FIX (low): c1/c2 now apply uniformly; no hidden override by c1_single/c2_single.
-        # Previously the constructor accepted c1/c2 but silently ignored them for
-        # single-objective runs, which was confusing for callers.
         self.c1 = c1
         self.c2 = c2
         self.v_max_ratio_single = v_max_ratio_single
@@ -74,8 +65,6 @@ class PSOEngine(OptimizationEngineInterface):
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
 
-    # FIX (low): expose a reset() so that the same engine instance can be reused
-    # across independent optimisation runs without carrying over stale state.
     def reset(self) -> None:
         """Reset internal state. Call before reusing this instance for a new problem."""
         self._state = None
@@ -124,9 +113,6 @@ class PSOEngine(OptimizationEngineInterface):
 
         is_multi_objective = len(indexed_objectives_strategy) > 1
 
-        # FIX (critical): compute the penalty scale from finite values BEFORE
-        # replacing NaN with ±inf.  Previously the median was taken after NaN→inf
-        # replacement, producing an astronomically large or NaN penalty factor.
         if A is not None and b is not None:
             penalized_results = self._compute_penalized_results(
                 parameters, results, A, b, indexed_objectives_strategy
@@ -175,8 +161,6 @@ class PSOEngine(OptimizationEngineInterface):
                 new_positions, A, b, lb, ub
             )
 
-        # FIX (medium): apply mutation AFTER constraint repair so that
-        # the diversity introduced by mutation is not immediately undone by repair.
         if is_multi_objective:
             new_positions = self._apply_mutation(new_positions, lb, ub)
             # Re-clip after mutation; no full repair needed here because polynomial
@@ -202,9 +186,6 @@ class PSOEngine(OptimizationEngineInterface):
         state = ensure_not_none(self._state, "PSO state is not initialized.")
         strategy = next(iter(indexed_objectives_strategy.values()))
 
-        # FIX (medium): use current `positions` (passed in) rather than
-        # state.particles_best_positions[best_idx], which created a fragile
-        # ordering dependency with _update_personal_bests.
         current_scalar = state.global_best_result[0]
         if strategy == OptimizationStrategy.MINIMIZE:
             best_idx = int(np.argmin(results))
@@ -248,10 +229,9 @@ class PSOEngine(OptimizationEngineInterface):
     ) -> bool:
         """Return True if 'a' epsilon-dominates 'b'.
 
-        FIX (medium): when epsilon_dominance is set, it is now applied as a
+        When epsilon_dominance is set, it is applied as a
         *relative* epsilon scaled per objective by the current archive range,
-        rather than a raw absolute value.  This prevents a single epsilon from
-        being meaningless when objectives have very different magnitudes.
+        rather than a raw absolute value.
         The scale is computed lazily from the archive results when available;
         for the first call (no archive yet) it falls back to absolute epsilon.
         """
@@ -403,11 +383,8 @@ class PSOEngine(OptimizationEngineInterface):
                 parameters.copy(),
                 results.copy(),
                 parameters[best_idx].copy(),
-                # FIX (low): store as 1-D array, consistent with multi-objective path.
                 np.array([float(flat[best_idx])]),
                 velocities,
-                # FIX (critical): initialise with empty arrays (not None) so that
-                # any accidental call to _update_external_archive won't crash.
                 np.empty((0, parameters.shape[1])),
                 np.empty((0, results.shape[1] if results.ndim > 1 else 1)),
             )
@@ -438,11 +415,7 @@ class PSOEngine(OptimizationEngineInterface):
                     state.particles_best_positions[i] = positions[i].copy()
                     state.particles_best_results[i] = results[i].copy()
                 elif not old_dominates_new:
-                    # FIX (critical): mutually non-dominated case.  Previously the
-                    # personal best was never updated here, permanently trapping
-                    # particles in their initial position whenever future results
-                    # were non-dominated relative to it.  Replace with probability
-                    # 0.5 to allow drift across the Pareto front.
+                    # allow drift across the Pareto front.
                     if self._rng.random() < 0.5:
                         state.particles_best_positions[i] = positions[i].copy()
                         state.particles_best_results[i] = results[i].copy()
@@ -467,8 +440,6 @@ class PSOEngine(OptimizationEngineInterface):
     ) -> None:
         state = ensure_not_none(self._state, "PSO state is not initialized.")
 
-        # FIX (critical): guard against None / empty archive (e.g. first call on
-        # the multi-objective path before any archive has been populated).
         ext_arch_pos = state.external_archive_positions
         ext_arch_res = state.external_archive_results
 
@@ -508,13 +479,7 @@ class PSOEngine(OptimizationEngineInterface):
         archive_positions: npt.NDArray[np.float64],
         archive_results: npt.NDArray[np.float64],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        """Grid-based archive pruning for diversity preservation.
-
-        FIX (high): when all solutions collapse into a single grid cell (degenerate
-        Pareto front), the old code would prune the archive down to 1 entry,
-        destroying all diversity.  Now we detect this and fall back to crowding-
-        distance selection, guaranteeing at least archive_size entries are kept.
-        """
+        """Grid-based archive pruning for diversity preservation."""
         if len(archive_positions) <= self.archive_size:
             return archive_positions, archive_results
 
@@ -554,8 +519,8 @@ class PSOEngine(OptimizationEngineInterface):
 
         kept = np.array(kept_indices, dtype=int)
 
-        # FIX (high): degenerate-front safety net.  If grid pruning collapsed the
-        # archive to fewer than half the target size, fall back to global crowding
+        # If grid pruning collapsed the archive to fewer than half
+        # the target size, fall back to global crowding
         # distance to restore diversity.
         if len(kept) < max(1, self.archive_size // 2):
             crowding = self._compute_crowding_distance(archive_results)
@@ -571,12 +536,7 @@ class PSOEngine(OptimizationEngineInterface):
         self,
         archive_results: npt.NDArray[np.float64],
     ) -> int:
-        """Select a single leader for global-best tracking.
-
-        FIX (high): replaced roulette-wheel selection (which has degenerate
-        behaviour when multiple archive members share an inf crowding distance)
-        with tournament selection, which is simpler and more robust.
-        """
+        """Select a single leader for global-best tracking, using tournament selection."""
         if len(archive_results) == 1:
             return 0
         return int(self._tournament_select(archive_results))
@@ -586,13 +546,7 @@ class PSOEngine(OptimizationEngineInterface):
         n_particles: int,
         archive_results: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.int_]:
-        """Select one leader per particle via tournament selection.
-
-        FIX (high): replaced roulette-wheel with crowding-distance-based
-        tournament selection.  This avoids the numerical edge cases that arise
-        when 2+ archive members have inf crowding distance and the probability
-        normalisation produces an over-representation of boundary points.
-        """
+        """Select one leader per particle via tournament selection."""
         if len(archive_results) == 0:
             raise ValueError("Archive is empty; cannot select leaders.")
         if len(archive_results) == 1:
@@ -643,8 +597,6 @@ class PSOEngine(OptimizationEngineInterface):
         else:
             global_best = state.global_best_position
 
-        # FIX (low / high): use the configurable v_max ratios rather than
-        # hardcoded 0.2 / 0.5.  Both default to 0.5 (standard MOPSO literature).
         v_max_ratio = (
             self.v_max_ratio_multi if is_multi_objective else self.v_max_ratio_single
         )
@@ -727,13 +679,7 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> npt.NDArray[np.float64]:
-        """Apply constraint violation penalty to raw results.
-
-        FIX (critical): the penalty scale is now derived from finite result values
-        only, computed here before any NaN→inf replacement occurs in the caller.
-        Previously, NaN replacement ran first, turning some results into ±inf, which
-        made np.median return inf and the penalty factor nonsensical or NaN.
-        """
+        """Apply constraint violation penalty to raw results."""
         violations = (A @ parameters.T - b[:, None]).T
         violations = np.maximum(violations, 0.0)
         total_violation = violations.sum(axis=1, keepdims=True)
@@ -762,13 +708,7 @@ class PSOEngine(OptimizationEngineInterface):
         lb: npt.NDArray[np.float64],
         ub: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-        """Reflect positions at boundaries and negate velocity for reflected particles.
-
-        FIX (medium): reflect_and_clip returns a boolean mask indicating which
-        particles were actually reflected (vs merely clipped).  Only reflected
-        particles should have their velocity negated; negating velocity for a clipped
-        particle can cause it to repeatedly bounce off the same wall.
-        """
+        """Reflect positions at boundaries and negate velocity for reflected particles."""
         clipped, out_of_bounds = reflect_and_clip(new_positions, lb, ub)
         if self._state is not None and np.any(out_of_bounds):
             self._state.velocities[out_of_bounds] *= -1

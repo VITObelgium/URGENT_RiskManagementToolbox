@@ -1,6 +1,7 @@
 import os
 from typing import Any
 
+import grpc
 import numpy as np
 import numpy.typing as npt
 
@@ -175,6 +176,22 @@ def run_risk_management(
         except KeyboardInterrupt:
             logger.warning("Risk management process interrupted by user.")
             return None
+
+        except grpc.RpcError as e:
+            code = e.code() if hasattr(e, "code") else None
+            details = e.details() if hasattr(e, "details") else None
+
+            if code in (grpc.StatusCode.ABORTED, grpc.StatusCode.CANCELLED) or (
+                code == grpc.StatusCode.UNAVAILABLE
+                and details == "Server shutting down"
+            ):
+                logger.info(
+                    "Risk management process stopped due to gRPC server shutdown."
+                )
+                raise
+
+            logger.error(f"Error in risk management process: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Error in risk management process: {str(e)}")
             raise

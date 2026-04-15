@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, Mapping, Sequence
+from collections import deque
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -50,9 +52,16 @@ class _MapperState:
 
 
 class _Mapper:
+    def __init__(self) -> None:
+        self._state: _MapperState | None = None
+
     @property
     def is_initialized(self) -> bool:
         return self._state is not None
+
+    def initialize(self, candidates: Sequence[SolutionCandidate]) -> None:
+        if not self._state:
+            self._state = self._initiate_mapper_on_first_call(candidates)
 
     @property
     def parameters_name(self) -> list[str]:
@@ -65,31 +74,34 @@ class _Mapper:
         return list(m.results_mapping.keys())
 
     @property
-    def population_size(self) -> int:
-        m = ensure_not_none(self._state, "Mapper state is not initialized.")
-        return m.population_size
-
-    @property
     def control_vector_mapping(self) -> Mapping[str, int]:
         m = ensure_not_none(self._state, "Mapper state is not initialized.")
         return m.control_vector_mapping
 
-    def __init__(self) -> None:
-        self._state: _MapperState | None = None
+    @property
+    def results_mapping(self) -> Mapping[str, int]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return m.results_mapping
+
+    @property
+    def population_size(self) -> int:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return m.population_size
 
     def to_numpy(
         self, candidates: Sequence[SolutionCandidate]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        if not self.is_initialized:
+            self.initialize(candidates)
 
-        if not self._state:
-            self._state = _Mapper._initiate_mapper_on_first_call(candidates)
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
 
         candidates_control_vector_array: npt.NDArray[np.float64] = np.empty(
-            shape=(self._state.population_size, self._state.control_vector_length)
+            shape=(m.population_size, m.control_vector_length)
         )
 
         candidates_results_array: npt.NDArray[np.float64] = np.empty(
-            shape=(self._state.population_size, self._state.results_length)
+            shape=(m.population_size, m.results_length)
         )
 
         for idx, c in enumerate(candidates):
@@ -106,7 +118,7 @@ class _Mapper:
     ) -> list[ControlVector]:
         if not self._state:
             raise RuntimeError(
-                "Mapper state is not initialized, call 'to_numpy' first."
+                "Mapper state is not initialized, call 'initialize' or 'to_numpy' first."
             )
 
         return [
@@ -121,7 +133,7 @@ class _Mapper:
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if not self._state:
             raise RuntimeError(
-                "Mapper state is not initialized, call 'to_numpy' first."
+                "Mapper state is not initialized, call 'initialize' or 'to_numpy' first."
             )
 
         lb = np.full(self._state.control_vector_length, -np.inf)
@@ -155,6 +167,7 @@ class _SolutionUpdaterServiceLoopController:
         max_generations: int,
         max_stall_generations: int,
         solution_updater_service: SolutionUpdaterService,
+        is_multi_objective: bool,
     ) -> None:
         self._info = "Loop controller running"
         self._solution_updater_service = solution_updater_service
@@ -168,14 +181,16 @@ class _SolutionUpdaterServiceLoopController:
         )
 
         self._last_run_global_best_result: float | None = None
-        self._is_multi_objective: bool | None = None
+        self._is_multi_objective: bool = is_multi_objective
 
-        # Pareto convergence: store per-objective min and mean vectors in a
-        # rolling window rather than a single scalar norm, so improvement in any
-        # one objective is detectable regardless of how many objectives there are.
-        self._pareto_min_history: list[npt.NDArray[np.float64]] = []
-        self._pareto_mean_history: list[npt.NDArray[np.float64]] = []
+        # Pareto convergence: store per-objective min and mean vectors in a rolling window.
         self._pareto_history_window: int = 5
+        self._pareto_min_history: deque[npt.NDArray[np.float64]] = deque(
+            maxlen=self._pareto_history_window
+        )
+        self._pareto_mean_history: deque[npt.NDArray[np.float64]] = deque(
+            maxlen=self._pareto_history_window
+        )
 
     @property
     def current_generation(self) -> int:
@@ -218,12 +233,6 @@ class _SolutionUpdaterServiceLoopController:
 
         current_best = self._solution_updater_service.global_best_result
 
-        # Detect objective mode on first call.
-        if self._is_multi_objective is None:
-            self._is_multi_objective = (
-                isinstance(current_best, np.ndarray) and current_best.ndim == 2
-            )
-
         if self._is_multi_objective:
             has_improved = self._pareto_has_improved(current_best)
         else:
@@ -234,8 +243,6 @@ class _SolutionUpdaterServiceLoopController:
         else:
             self._stall_left -= 1
 
-        # Store scalar best for next single-objective comparison.
-        # Multi-objective tracking is handled inside _pareto_has_improved.
         if not self._is_multi_objective:
             self._last_run_global_best_result = (
                 float(current_best)
@@ -262,17 +269,7 @@ class _SolutionUpdaterServiceLoopController:
         return abs(current_scalar - last) / denom > threshold
 
     def _pareto_has_improved(self, current_front: npt.NDArray[np.float64]) -> bool:
-        """Return True if the Pareto front changed meaningfully since the last generation.
-
-        Tracks per-objective min and mean vectors separately rather than collapsing
-        to a single scalar norm.  This means improvement in *any one* objective is
-        detected independently of how many objectives there are — the threshold stays
-        meaningful whether there are 2 or 10 objectives.
-
-        Both min and mean are tracked:
-          - per-obj min  captures convergence (front moving toward better values).
-          - per-obj mean captures spread (front expanding across the objective space).
-        """
+        """Return True if the Pareto front changed meaningfully since the last generation."""
         front = np.atleast_2d(np.asarray(current_front, dtype=float))
 
         per_obj_min = front.min(axis=0)  # shape (n_obj,)
@@ -281,20 +278,15 @@ class _SolutionUpdaterServiceLoopController:
         self._pareto_min_history.append(per_obj_min)
         self._pareto_mean_history.append(per_obj_mean)
 
-        if len(self._pareto_min_history) > self._pareto_history_window:
-            self._pareto_min_history.pop(0)
-            self._pareto_mean_history.pop(0)
-
         if len(self._pareto_min_history) < 2:
             return True
 
+        # Deque automatically handles maxlen, so [-2] safely accesses previous entry
         prev_min = self._pareto_min_history[-2]
         prev_mean = self._pareto_mean_history[-2]
 
         threshold = 1e-4
 
-        # Per-objective relative change — np.where guards against division by
-        # zero on objectives that are near 0.
         denom_min = np.where(np.abs(prev_min) > threshold, np.abs(prev_min), 1.0)
         denom_mean = np.where(np.abs(prev_mean) > threshold, np.abs(prev_mean), 1.0)
 
@@ -323,14 +315,6 @@ class SolutionUpdaterService:
     ) -> None:
         """
         Initializes the SolutionUpdaterService with specified optimization engine and parameters.
-
-        Args:
-            optimization_engine: The optimization algorithm to use.
-            max_generations: Maximum number of optimization iterations to perform.
-            max_stall_generations: Number of consecutive iterations without improvement
-                before early stopping is triggered.
-            objectives: Mapping of objective name → OptimizationStrategy.
-            seed: Random seed for the optimization engine.
         """
         self._logger = get_logger(__name__)
         self._mapper: _Mapper = _Mapper()
@@ -339,10 +323,6 @@ class SolutionUpdaterService:
         )
         self._objectives = objectives
 
-        # FIX: pass is_multi_objective at construction time so ReportGenerator
-        # fixes its CSV columns upfront rather than inferring from the first call.
-        # This prevents a column-count mismatch when the Pareto archive grows from
-        # 1 entry (looks single-objective) to many on subsequent iterations.
         is_multi_objective = len(objectives) > 1
         self._report_generator = ReportGenerator(is_multi_objective=is_multi_objective)
 
@@ -353,15 +333,12 @@ class SolutionUpdaterService:
             max_generations=max_generations,
             max_stall_generations=max_stall_generations,
             solution_updater_service=self,
+            is_multi_objective=is_multi_objective,
         )
 
     @property
     def global_best_result(self) -> npt.NDArray[np.float64]:
-        """Return best result(s) found by the engine.
-
-        Single-objective: shape (1,).
-        Multi-objective:  shape (n_pareto, n_obj) — full Pareto front results.
-        """
+        """Return best result(s) found by the engine."""
         res = ensure_not_none(self._engine, "Engine not initialized").global_best_result
         return np.atleast_1d(np.asarray(res, dtype=np.float64))
 
@@ -369,16 +346,11 @@ class SolutionUpdaterService:
     def global_best_result_descriptive(
         self,
     ) -> dict[str, float] | list[dict[str, float]]:
-        """Return best result(s) keyed by objective name.
-
-        Single-objective: dict[str, float]       — one value per objective name.
-        Multi-objective:  list[dict[str, float]] — one dict per Pareto solution.
-        """
+        """Return best result(s) keyed by objective name."""
         global_best = np.atleast_1d(np.asarray(self.global_best_result, dtype=float))
 
         names = self._mapper.results_name
 
-        # 2-D → multi-objective Pareto front: shape (n_pareto, n_obj)
         if global_best.ndim == 2:
             n_obj = global_best.shape[1]
             if len(names) != n_obj:
@@ -388,7 +360,6 @@ class SolutionUpdaterService:
                 )
             return [{k: float(v) for k, v in zip(names, row)} for row in global_best]
 
-        # 1-D → single-objective: shape (n_obj,)
         if len(names) != len(global_best):
             raise ValueError(
                 f"results_name has {len(names)} entries but global best "
@@ -398,25 +369,14 @@ class SolutionUpdaterService:
 
     @property
     def global_best_control_vector(self) -> ControlVector | list[ControlVector]:
-        """Return best control vector(s) found by the engine.
-
-        Single-objective: ControlVector          — the single best parameter set.
-        Multi-objective:  list[ControlVector]    — one per Pareto-optimal solution.
-
-        FIX: the original code did np.array([engine.global_best_control_vector])
-        which added an extra outer dimension, producing shape (1, n_pareto, n_dims)
-        for multi-objective and crashing to_control_vectors. Now we branch on ndim
-        and pass the array through without extra wrapping.
-        """
+        """Return best control vector(s) found by the engine."""
         raw = ensure_not_none(
             self._engine, "Engine not initialized"
         ).global_best_control_vector
 
-        # Multi-objective: shape (n_pareto, n_dims) → list of ControlVectors
         if raw.ndim == 2:
             return self._mapper.to_control_vectors(raw)
 
-        # Single-objective: shape (n_dims,) → single ControlVector
         return self._mapper.to_control_vectors(raw[np.newaxis, :])[0]
 
     def process_request(
@@ -428,6 +388,9 @@ class SolutionUpdaterService:
 
         if not config.solution_candidates:
             raise RuntimeError("Nothing to optimize")
+
+        if not self._mapper.is_initialized:
+            self._mapper.initialize(config.solution_candidates)
 
         control_vector, cost_function_values = self._mapper.to_numpy(
             config.solution_candidates
@@ -442,9 +405,6 @@ class SolutionUpdaterService:
         indexed_objectives_strategy = self._get_indexed_strategy()
         A_np, b_np = self._get_linear_inequalities_matrices(config, control_vector)
 
-        # FIX: use signature inspection to detect linear constraint support instead
-        # of catching TypeError, which would silently swallow real engine bugs
-        # (e.g. shape mismatches, bad numpy ops) and retry without constraints.
         if (
             A_np is not None
             and b_np is not None
@@ -513,9 +473,12 @@ class SolutionUpdaterService:
 
     def _get_indexed_strategy(self) -> dict[int, OptimizationStrategy]:
         indexed_objectives_strategy: dict[int, OptimizationStrategy] = {}
+
+        results_mapping = self._mapper.results_mapping
+
         for obj_name, strategy in self._objectives.items():
-            if obj_name in self._mapper.results_name:
-                idx = self._mapper.results_name.index(obj_name)
+            if obj_name in results_mapping:
+                idx = results_mapping[obj_name]
                 indexed_objectives_strategy[idx] = strategy
             else:
                 raise ValueError(

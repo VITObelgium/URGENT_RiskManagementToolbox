@@ -247,7 +247,20 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    After extraction, all files must be located directly in the root directory (no nested subfolders).
 
 
-### 4. Run configuration file
+### 4. Global Configuration
+
+The `SimulationServiceConfig` (found in `src/services/simulation_service/core/config.py`) class manages global network and timeout settings for the simulation service. These can be configured via environment variables or a local `.env` file.
+
+- **`worker_simulation_timeout_seconds`**: Worker-side subprocess timeout. Maximum time in seconds allowed for a worker to run the local simulation process before the worker terminates that process and reports a `TIMEOUT` result upstream (default: 900 or 15 minutes). Environment variable: `WORKER_SIMULATION_TIMEOUT_SECONDS`.
+- **`server_job_timeout_seconds`**: Server-side watchdog timeout. Maximum time in seconds the gRPC server will wait for a worker to return a terminal status for an assigned job before the server marks that job as `TIMEOUT` itself (default: 3600 or 1 hour). Environment variable: `SERVER_JOB_TIMEOUT_SECONDS`.
+- **`log_interval_seconds`**: Time interval in seconds for the orchestrator to log simulation progress to the console/log file (default: 30 seconds). This is unrelated to the simulation execution itself.
+- **`server_port`**: The port used by the internal gRPC server for communication between the orchestrator and simulation workers (default: `50051`).
+- **`model_config`**: Pydantic model configuration dictating how settings are loaded (for example, reading from a `.env` file, ignoring extra variables, and being case-insensitive).
+
+For safety, `server_job_timeout_seconds` must be greater than or equal to `worker_simulation_timeout_seconds`. In normal operation, the worker timeout should fire first and the server timeout acts as a fallback if a worker hangs or disappears without reporting back.
+
+
+### 5. Run configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s), initial state, and variable constraints.
 
 Configuration file define services to be used for simulation and optimization as well as the global optimization parameters as objectives or linear inequality constraints.

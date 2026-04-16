@@ -56,7 +56,9 @@ class SubprocessRunner:
         self._broadcast_results_parser = broadcast_results_parser
         self._repo_root_getter = repo_root_getter
         self._worker_id_getter = worker_id_getter
-        self._timeout_duration = get_simulation_config().simulation_timeout_seconds
+        self._timeout_duration = (
+            get_simulation_config().worker_simulation_timeout_seconds
+        )
 
     def run(
         self,

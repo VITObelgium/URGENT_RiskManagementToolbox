@@ -30,7 +30,9 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._job_event: asyncio.Event = asyncio.Event()
         self._shutdown_event: asyncio.Event = asyncio.Event()
         self._simulation_model_archive: bytes | None = None
-        self._job_timeout_seconds: float = get_simulation_config().job_timeout_seconds
+        self._job_timeout_seconds: float = (
+            get_simulation_config().server_job_timeout_seconds
+        )
         self._log_interval_seconds: int = get_simulation_config().log_interval_seconds
         self._long_poll_timeout_seconds: float = (
             get_simulation_config().long_poll_timeout_seconds

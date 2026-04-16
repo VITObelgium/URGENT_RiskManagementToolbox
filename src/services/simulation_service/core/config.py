@@ -1,4 +1,4 @@
-from pydantic import Field, computed_field
+from pydantic import AliasChoices, Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common.models import RunMode
@@ -22,16 +22,22 @@ class SimulationServiceConfig(BaseSettings):
         default=25.0, description="Timeout in seconds for server startup"
     )
 
-    job_timeout_seconds: int = Field(
+    server_job_timeout_seconds: int = Field(
         default=3600,
-        validation_alias="JOB_TIMEOUT_SECONDS",
-        description="Timeout in seconds for simulation jobs (default: 1 hour)",
+        validation_alias=AliasChoices("SERVER_JOB_TIMEOUT_SECONDS"),
+        description=(
+            "Server-side watchdog timeout in seconds for assigned jobs "
+            "(default: 1 hour)"
+        ),
     )
 
-    simulation_timeout_seconds: int = Field(
+    worker_simulation_timeout_seconds: int = Field(
         default=900,
-        validation_alias="SIMULATION_TIMEOUT",
-        description="Timeout in seconds for simulation to respond (default: 15 minutes)",
+        validation_alias=AliasChoices("WORKER_SIMULATION_TIMEOUT_SECONDS"),
+        description=(
+            "Worker-side timeout in seconds for the local simulation subprocess "
+            "to complete (default: 15 minutes)"
+        ),
     )
 
     log_interval_seconds: int = Field(
@@ -64,6 +70,15 @@ class SimulationServiceConfig(BaseSettings):
             ("grpc.max_send_message_length", self.grpc_max_message_size),
             ("grpc.max_receive_message_length", self.grpc_max_message_size),
         ]
+
+    @model_validator(mode="after")
+    def validate_timeouts(self) -> "SimulationServiceConfig":
+        if self.server_job_timeout_seconds < self.worker_simulation_timeout_seconds:
+            raise ValueError(
+                "server_job_timeout_seconds must be greater than or equal to "
+                "worker_simulation_timeout_seconds"
+            )
+        return self
 
 
 def get_simulation_config() -> SimulationServiceConfig:

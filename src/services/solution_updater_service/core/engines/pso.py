@@ -2,11 +2,11 @@ import numpy as np
 from numpy import typing as npt
 
 from common import OptimizationStrategy
+from services.shared import ensure_not_none
 from services.solution_updater_service.core.engines import (
     OptimizationEngineInterface,
 )
 from services.solution_updater_service.core.utils import (
-    ensure_not_none,
     reflect_and_clip,
     repair_against_linear_inequalities,
 )
@@ -20,7 +20,7 @@ class _PSOState:
         particles_best_positions: npt.NDArray[np.float64],
         particles_best_results: npt.NDArray[np.float64],
         global_best_position: npt.NDArray[np.float64],
-        global_best_result: float | npt.NDArray[np.float64],
+        global_best_result: npt.NDArray[np.float64],  # always 1-D array now
         velocities: npt.NDArray[np.float64],
         external_archive_positions: npt.NDArray[np.float64] | None = None,
         external_archive_results: npt.NDArray[np.float64] | None = None,
@@ -28,7 +28,9 @@ class _PSOState:
         self.particles_best_positions = particles_best_positions
         self.particles_best_results = particles_best_results
         self.global_best_position = global_best_position
-        self.global_best_result = global_best_result
+        self.global_best_result = np.atleast_1d(
+            np.asarray(global_best_result, dtype=np.float64)
+        )
         self.velocities = velocities
         self.external_archive_positions = external_archive_positions
         self.external_archive_results = external_archive_results
@@ -41,6 +43,8 @@ class PSOEngine(OptimizationEngineInterface):
         w_min: float = 0.4,
         c1: float = 1.6,
         c2: float = 1.6,
+        v_max_ratio_single: float = 0.5,
+        v_max_ratio_multi: float = 0.5,
         archive_size: int = 100,
         mutation_probability: float = 0.1,
         mutation_eta: float = 20.0,
@@ -52,9 +56,8 @@ class PSOEngine(OptimizationEngineInterface):
         self.w_min = w_min
         self.c1 = c1
         self.c2 = c2
-        # For single-objective: stronger exploitation
-        self.c1_single = 1.49445  # Cognitive component
-        self.c2_single = 1.49445  # Social component (standard PSO parameters)
+        self.v_max_ratio_single = v_max_ratio_single
+        self.v_max_ratio_multi = v_max_ratio_multi
         self.archive_size = archive_size
         self.mutation_probability = mutation_probability
         self.mutation_eta = mutation_eta
@@ -62,17 +65,39 @@ class PSOEngine(OptimizationEngineInterface):
         self._state: _PSOState | None = None
         self._rng = np.random.default_rng(seed)
 
+    def reset(self) -> None:
+        """Reset internal state. Call before reusing this instance for a new problem."""
+        self._state = None
+
     @property
-    def global_best_result(self) -> float | npt.NDArray[np.float64]:
-        return ensure_not_none(
-            self._state, "PSO state not initialized"
-        ).global_best_result
+    def global_best_result(self) -> npt.NDArray[np.float64]:
+        """Return the best result(s) found.
+
+        Single-objective: shape (1,)              — the best scalar value.
+        Multi-objective:  shape (n_pareto, n_obj) — the full Pareto front results.
+        """
+        state = ensure_not_none(self._state, "PSO state not initialized")
+        if (
+            state.external_archive_results is not None
+            and len(state.external_archive_results) > 0
+        ):
+            return state.external_archive_results
+        return state.global_best_result
 
     @property
     def global_best_control_vector(self) -> npt.NDArray[np.float64]:
-        return ensure_not_none(
-            self._state, "PSO state not initialized"
-        ).global_best_position
+        """Return the best control vector(s) found.
+
+        Single-objective: shape (n_dims,)          — the single best parameter vector.
+        Multi-objective:  shape (n_pareto, n_dims) — one row per Pareto-optimal solution.
+        """
+        state = ensure_not_none(self._state, "PSO state not initialized")
+        if (
+            state.external_archive_positions is not None
+            and len(state.external_archive_positions) > 0
+        ):
+            return state.external_archive_positions
+        return state.global_best_position
 
     def update_solution_to_next_iter(
         self,
@@ -85,9 +110,8 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64] | None = None,
         iteration_ratio: float | None = None,
     ) -> npt.NDArray[np.float64]:
-        is_multi_objective = len(indexed_objectives_strategy) > 1
 
-        results = self._replace_nan_with_inf(results, indexed_objectives_strategy)
+        is_multi_objective = len(indexed_objectives_strategy) > 1
 
         if A is not None and b is not None:
             penalized_results = self._compute_penalized_results(
@@ -95,6 +119,11 @@ class PSOEngine(OptimizationEngineInterface):
             )
         else:
             penalized_results = results.copy()
+
+        # NaN replacement happens after penalisation so the scale is unaffected.
+        penalized_results = self._replace_nan_with_inf(
+            penalized_results, indexed_objectives_strategy
+        )
 
         if self._state is None:
             self._initialize_state_on_first_call(
@@ -108,7 +137,7 @@ class PSOEngine(OptimizationEngineInterface):
         # Update global best for single-objective
         if not is_multi_objective:
             self._update_global_best_single_objective(
-                penalized_results, indexed_objectives_strategy
+                parameters, penalized_results, indexed_objectives_strategy
             )
 
         if is_multi_objective:
@@ -127,14 +156,16 @@ class PSOEngine(OptimizationEngineInterface):
 
         new_positions = self._reflect_and_clip_positions(new_positions, lb, ub)
 
-        # Apply mutation for multi-objective problems
-        if is_multi_objective:
-            new_positions = self._apply_mutation(new_positions, lb, ub)
-
         if A is not None and b is not None:
             new_positions = repair_against_linear_inequalities(
                 new_positions, A, b, lb, ub
             )
+
+        if is_multi_objective:
+            new_positions = self._apply_mutation(new_positions, lb, ub)
+            # Re-clip after mutation; no full repair needed here because polynomial
+            # mutation already clips to [lb, ub], but a cheap clip is a safety net.
+            new_positions = np.clip(new_positions, lb, ub)
 
         return new_positions
 
@@ -146,29 +177,36 @@ class PSOEngine(OptimizationEngineInterface):
         return self.w_max - (self.w_max - self.w_min) * iteration_ratio
 
     def _update_global_best_single_objective(
-        self, results, indexed_objectives_strategy
-    ):
-        """Update global best for single-objective optimization."""
+        self,
+        positions: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> None:
+        """Update global best for single-objective optimisation."""
         state = ensure_not_none(self._state, "PSO state is not initialized.")
         strategy = next(iter(indexed_objectives_strategy.values()))
 
+        current_scalar = state.global_best_result[0]
         if strategy == OptimizationStrategy.MINIMIZE:
-            best_idx = np.argmin(results)
-            if results[best_idx] < state.global_best_result:
-                state.global_best_position = state.particles_best_positions[
-                    best_idx
-                ].copy()
-                state.global_best_result = float(results[best_idx].item())
+            best_idx = int(np.argmin(results))
+            candidate = float(results.ravel()[best_idx])
+            if candidate < current_scalar:
+                state.global_best_position = positions[best_idx].copy()
+                state.global_best_result = np.array([candidate])
         else:
-            best_idx = np.argmax(results)
-            if results[best_idx] > state.global_best_result:
-                state.global_best_position = state.particles_best_positions[
-                    best_idx
-                ].copy()
-                state.global_best_result = float(results[best_idx].item())
+            best_idx = int(np.argmax(results))
+            candidate = float(results.ravel()[best_idx])
+            if candidate > current_scalar:
+                state.global_best_position = positions[best_idx].copy()
+                state.global_best_result = np.array([candidate])
 
     @staticmethod
-    def _dominates(a, b, indexed_objectives_strategy, epsilon: float = EPS) -> bool:
+    def _dominates(
+        a: npt.NDArray[np.float64],
+        b: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+        epsilon: float = EPS,
+    ) -> bool:
         strictly_better = False
         for idx, strategy in indexed_objectives_strategy.items():
             if strategy == OptimizationStrategy.MINIMIZE:
@@ -183,15 +221,39 @@ class PSOEngine(OptimizationEngineInterface):
                     strictly_better = True
         return strictly_better
 
-    def _epsilon_dominates(self, a, b, indexed_objectives_strategy) -> bool:
-        """Check if 'a' epsilon-dominates 'b'."""
+    def _epsilon_dominates(
+        self,
+        a: npt.NDArray[np.float64],
+        b: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> bool:
+        """Return True if 'a' epsilon-dominates 'b'.
+
+        When epsilon_dominance is set, it is applied as a
+        *relative* epsilon scaled per objective by the current archive range,
+        rather than a raw absolute value.
+        The scale is computed lazily from the archive results when available;
+        for the first call (no archive yet) it falls back to absolute epsilon.
+        """
         if self.epsilon_dominance is None:
             return self._dominates(a, b, indexed_objectives_strategy)
 
-        epsilon = self.epsilon_dominance
         strictly_better = False
-
         for idx, strategy in indexed_objectives_strategy.items():
+            # Derive a per-objective scale from the archive if possible.
+            scale = 1.0
+            if (
+                self._state is not None
+                and self._state.external_archive_results is not None
+                and len(self._state.external_archive_results) > 1
+            ):
+                obj_vals = self._state.external_archive_results[:, idx]
+                obj_range = float(np.ptp(obj_vals))
+                if obj_range > EPS:
+                    scale = obj_range
+
+            epsilon = self.epsilon_dominance * scale
+
             if strategy == OptimizationStrategy.MINIMIZE:
                 if a[idx] > b[idx] + epsilon:
                     return False
@@ -210,10 +272,7 @@ class PSOEngine(OptimizationEngineInterface):
         results: npt.NDArray[np.float64],
         indexed_objectives_strategy: dict[int, OptimizationStrategy],
     ) -> npt.NDArray[np.float64]:
-        """
-        Replace NaN values with +inf (minimize) or -inf (maximize)
-        so they are never selected as best values.
-        """
+        """Replace NaN values with ±inf so they are never selected as best."""
         results = results.copy()
         nan_mask = np.isnan(results)
 
@@ -222,20 +281,23 @@ class PSOEngine(OptimizationEngineInterface):
 
             if is_multi_objective:
                 for idx, strategy in indexed_objectives_strategy.items():
-                    if strategy == OptimizationStrategy.MINIMIZE:
-                        results[nan_mask[:, idx], idx] = np.inf
-                    else:
-                        results[nan_mask[:, idx], idx] = -np.inf
+                    col_nan = nan_mask[:, idx]
+                    results[col_nan, idx] = (
+                        np.inf if strategy == OptimizationStrategy.MINIMIZE else -np.inf
+                    )
             else:
                 strategy = next(iter(indexed_objectives_strategy.values()))
-                if strategy == OptimizationStrategy.MINIMIZE:
-                    results[nan_mask] = np.inf
-                else:
-                    results[nan_mask] = -np.inf
+                results[nan_mask] = (
+                    np.inf if strategy == OptimizationStrategy.MINIMIZE else -np.inf
+                )
 
         return results
 
-    def _non_dominated_mask(self, results, indexed_objectives_strategy):
+    def _non_dominated_mask(
+        self,
+        results: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> npt.NDArray[np.bool_]:
         n = results.shape[0]
         dominated = np.zeros(n, dtype=bool)
 
@@ -249,12 +311,14 @@ class PSOEngine(OptimizationEngineInterface):
                     results[j], results[i], indexed_objectives_strategy
                 ):
                     dominated[i] = True
-                    break
+                    break  # early exit once a dominator is confirmed
 
         return ~dominated
 
     @staticmethod
-    def _compute_crowding_distance(results):
+    def _compute_crowding_distance(
+        results: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
         n, m = results.shape
         crowding = np.zeros(n)
 
@@ -276,8 +340,11 @@ class PSOEngine(OptimizationEngineInterface):
         return crowding
 
     def _initialize_state_on_first_call(
-        self, parameters, results, indexed_objectives_strategy
-    ):
+        self,
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> None:
         velocities = self._rng.uniform(-1, 1, parameters.shape)
 
         if len(indexed_objectives_strategy) > 1:
@@ -291,7 +358,7 @@ class PSOEngine(OptimizationEngineInterface):
                 )
 
             leader_idx = self._select_leader_from_archive(archive_results)
-            global_best_position = archive_positions[leader_idx]
+            global_best_position = archive_positions[leader_idx].copy()
             global_best_result = archive_results[leader_idx]
 
             self._state = _PSOState(
@@ -305,48 +372,91 @@ class PSOEngine(OptimizationEngineInterface):
             )
         else:
             strategy = next(iter(indexed_objectives_strategy.values()))
+            flat = results.ravel()
             best_idx = (
-                np.argmin(results)
+                int(np.argmin(flat))
                 if strategy == OptimizationStrategy.MINIMIZE
-                else np.argmax(results)
+                else int(np.argmax(flat))
             )
 
             self._state = _PSOState(
                 parameters.copy(),
                 results.copy(),
                 parameters[best_idx].copy(),
-                float(results[best_idx].item()),
+                np.array([float(flat[best_idx])]),
                 velocities,
+                np.empty((0, parameters.shape[1])),
+                np.empty((0, results.shape[1] if results.ndim > 1 else 1)),
             )
 
-    def _update_personal_bests(self, positions, results, indexed_objectives_strategy):
+    def _update_personal_bests(
+        self,
+        positions: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> None:
         state = ensure_not_none(self._state, "PSO state is not initialized.")
 
         if len(indexed_objectives_strategy) > 1:
             for i in range(len(positions)):
-                if self._epsilon_dominates(
+                new_dominates_old = self._epsilon_dominates(
                     results[i],
                     state.particles_best_results[i],
                     indexed_objectives_strategy,
-                ):
-                    state.particles_best_positions[i] = positions[i]
-                    state.particles_best_results[i] = results[i]
+                )
+                old_dominates_new = self._epsilon_dominates(
+                    state.particles_best_results[i],
+                    results[i],
+                    indexed_objectives_strategy,
+                )
+
+                if new_dominates_old:
+                    # New result strictly better: always replace.
+                    state.particles_best_positions[i] = positions[i].copy()
+                    state.particles_best_results[i] = results[i].copy()
+                elif not old_dominates_new:
+                    # allow drift across the Pareto front.
+                    if self._rng.random() < 0.5:
+                        state.particles_best_positions[i] = positions[i].copy()
+                        state.particles_best_results[i] = results[i].copy()
+                # else: old dominates new → keep personal best unchanged.
         else:
             strategy = next(iter(indexed_objectives_strategy.values()))
             current = results.ravel()
             best = state.particles_best_results.ravel()
-            if strategy == OptimizationStrategy.MINIMIZE:
-                improved = current < best
-            else:
-                improved = current > best
+            improved = (
+                current < best
+                if strategy == OptimizationStrategy.MINIMIZE
+                else current > best
+            )
             state.particles_best_positions[improved] = positions[improved]
             state.particles_best_results[improved] = results[improved]
 
-    def _update_external_archive(self, positions, results, indexed_objectives_strategy):
+    def _update_external_archive(
+        self,
+        positions: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> None:
         state = ensure_not_none(self._state, "PSO state is not initialized.")
 
-        all_positions = np.vstack([state.external_archive_positions, positions])
-        all_results = np.vstack([state.external_archive_results, results])
+        ext_arch_pos = state.external_archive_positions
+        ext_arch_res = state.external_archive_results
+
+        if ext_arch_pos is None or ext_arch_res is None or len(ext_arch_pos) == 0:
+            state.external_archive_positions = positions.copy()
+            state.external_archive_results = results.copy()
+            leader_idx = self._select_leader_from_archive(
+                state.external_archive_results
+            )
+            state.global_best_position = state.external_archive_positions[
+                leader_idx
+            ].copy()
+            state.global_best_result = state.external_archive_results[leader_idx].copy()
+            return
+
+        all_positions = np.vstack([ext_arch_pos, positions])
+        all_results = np.vstack([ext_arch_res, results])
 
         mask = self._non_dominated_mask(all_results, indexed_objectives_strategy)
         archive_positions = all_positions[mask]
@@ -361,15 +471,19 @@ class PSOEngine(OptimizationEngineInterface):
         state.external_archive_results = archive_results
 
         leader_idx = self._select_leader_from_archive(archive_results)
-        state.global_best_position = archive_positions[leader_idx]
-        state.global_best_result = archive_results[leader_idx]
+        state.global_best_position = archive_positions[leader_idx].copy()
+        state.global_best_result = archive_results[leader_idx].copy()
 
-    def _prune_archive_with_grid(self, archive_positions, archive_results):
-        """Grid-based archive pruning for better diversity."""
+    def _prune_archive_with_grid(
+        self,
+        archive_positions: npt.NDArray[np.float64],
+        archive_results: npt.NDArray[np.float64],
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        """Grid-based archive pruning for diversity preservation."""
         if len(archive_positions) <= self.archive_size:
             return archive_positions, archive_results
 
-        # Normalize objectives to [0, 1]
+        # Normalise objectives to [0, 1].
         min_vals = np.min(archive_results, axis=0)
         max_vals = np.max(archive_results, axis=0)
         range_vals = max_vals - min_vals
@@ -377,139 +491,155 @@ class PSOEngine(OptimizationEngineInterface):
 
         normalized = (archive_results - min_vals) / range_vals
 
-        # Create adaptive grid
         n_divisions = int(
             np.ceil(self.archive_size ** (1.0 / archive_results.shape[1]))
         )
 
-        # Assign solutions to grid cells
-        grid_indices = (normalized * n_divisions).astype(int)
-        grid_indices = np.clip(grid_indices, 0, n_divisions - 1)
-
-        # Convert to unique cell identifiers
+        grid_indices = np.clip(
+            (normalized * n_divisions).astype(int), 0, n_divisions - 1
+        )
         cell_ids = np.ravel_multi_index(
             grid_indices.T, (n_divisions,) * archive_results.shape[1]
         )
 
-        # Count solutions per cell
         unique_cells = np.unique(cell_ids)
+        kept_indices: list[int] = []
 
-        # Keep one solution from each cell
-        kept_indices = []
         for cell_id in unique_cells:
             cell_mask = cell_ids == cell_id
             cell_indices = np.where(cell_mask)[0]
 
             if len(cell_indices) == 1:
-                kept_indices.extend(cell_indices)
+                kept_indices.extend(int(x) for x in cell_indices)
             else:
-                # Keep solution with best crowding distance in crowded cells
                 cell_results = archive_results[cell_indices]
                 crowding = self._compute_crowding_distance(cell_results)
-                best_local = cell_indices[np.argmax(crowding)]
+                best_local = int(cell_indices[np.argmax(crowding)])
                 kept_indices.append(best_local)
 
-        kept_indices = np.array(kept_indices)
+        kept = np.array(kept_indices, dtype=int)
 
-        # If still too many, use crowding distance
-        if len(kept_indices) > self.archive_size:
-            crowding = self._compute_crowding_distance(archive_results[kept_indices])
+        # If grid pruning collapsed the archive to fewer than half
+        # the target size, fall back to global crowding
+        # distance to restore diversity.
+        if len(kept) < max(1, self.archive_size // 2):
+            crowding = self._compute_crowding_distance(archive_results)
+            kept = np.argsort(-crowding)[: self.archive_size]
+        elif len(kept) > self.archive_size:
+            crowding = self._compute_crowding_distance(archive_results[kept])
             sorted_idx = np.argsort(-crowding)[: self.archive_size]
-            kept_indices = kept_indices[sorted_idx]
+            kept = kept[sorted_idx]
 
-        return archive_positions[kept_indices], archive_results[kept_indices]
+        return archive_positions[kept], archive_results[kept]
 
-    def _select_leader_from_archive(self, archive_results):
-        """Select a single leader from archive (used for global best tracking)."""
+    def _select_leader_from_archive(
+        self,
+        archive_results: npt.NDArray[np.float64],
+    ) -> int:
+        """Select a single leader for global-best tracking, using tournament selection."""
         if len(archive_results) == 1:
             return 0
+        return int(self._tournament_select(archive_results))
 
-        crowding = self._compute_crowding_distance(archive_results)
-        crowding[np.isinf(crowding)] = (
-            np.max(crowding[np.isfinite(crowding)]) * 2
-            if np.any(np.isfinite(crowding))
-            else 1.0
-        )
-
-        total = np.sum(crowding)
-        if total < EPS:
-            return self._rng.integers(0, len(archive_results))
-
-        probabilities = crowding / total
-        return self._rng.choice(len(archive_results), p=probabilities)
-
-    def _select_leaders_for_particles(self, n_particles, archive_results):
-        """Select a leader from archive for each particle independently."""
+    def _select_leaders_for_particles(
+        self,
+        n_particles: int,
+        archive_results: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.int_]:
+        """Select one leader per particle via tournament selection."""
         if len(archive_results) == 0:
-            return None
-
+            raise ValueError("Archive is empty; cannot select leaders.")
         if len(archive_results) == 1:
             return np.zeros(n_particles, dtype=int)
 
-        crowding = self._compute_crowding_distance(archive_results)
-        crowding[np.isinf(crowding)] = (
-            np.max(crowding[np.isfinite(crowding)]) * 2
-            if np.any(np.isfinite(crowding))
-            else 1.0
-        )
+        leaders = np.empty(n_particles, dtype=int)
+        for i in range(n_particles):
+            leaders[i] = self._tournament_select(archive_results)
+        return leaders
 
-        total = np.sum(crowding)
-        if total < EPS:
-            return self._rng.integers(0, len(archive_results), size=n_particles)
+    def _tournament_select(
+        self,
+        archive_results: npt.NDArray[np.float64],
+        k: int = 2,
+    ) -> int:
+        """Return the index of the archive member with highest crowding distance
+        among k randomly chosen candidates (tournament selection)."""
+        n = len(archive_results)
+        k = min(k, n)
+        candidates = self._rng.choice(n, size=k, replace=False)
+        crowding = self._compute_crowding_distance(archive_results[candidates])
+        return int(candidates[np.argmax(crowding)])
 
-        probabilities = crowding / total
-        return self._rng.choice(len(archive_results), size=n_particles, p=probabilities)
-
-    def _calculate_new_velocity(self, old_positions, is_multi_objective, w, lb, ub):
-        state = ensure_not_none(self._state)
+    def _calculate_new_velocity(
+        self,
+        old_positions: npt.NDArray[np.float64],
+        is_multi_objective: bool,
+        w: float,
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        state = ensure_not_none(self._state, "PSO state is not initialize")
         r1 = self._rng.uniform(size=state.velocities.shape)
         r2 = self._rng.uniform(size=state.velocities.shape)
 
         if is_multi_objective:
-            # Each particle gets its own leader for multi-objective
-            leader_indices = self._select_leaders_for_particles(
-                len(old_positions), state.external_archive_results
+            arch_res = ensure_not_none(
+                state.external_archive_results,
+                "External archive results is not initialized",
             )
-            global_best = state.external_archive_positions[leader_indices]
-            c1, c2 = self.c1, self.c2
+            leader_indices = self._select_leaders_for_particles(
+                len(old_positions), arch_res
+            )
+            global_best = ensure_not_none(
+                state.external_archive_positions,
+                "External archive positions is not initialized",
+            )[leader_indices]
         else:
-            # Single-objective: all particles follow the same global best
             global_best = state.global_best_position
-            # Use stronger parameters for single-objective
-            c1, c2 = self.c1_single, self.c2_single
+
+        v_max_ratio = (
+            self.v_max_ratio_multi if is_multi_objective else self.v_max_ratio_single
+        )
+        v_max = v_max_ratio * (ub - lb)
 
         new_velocities = (
             w * state.velocities
-            + c1 * r1 * (state.particles_best_positions - old_positions)
-            + c2 * r2 * (global_best - old_positions)
+            + self.c1 * r1 * (state.particles_best_positions - old_positions)
+            + self.c2 * r2 * (global_best - old_positions)
         )
 
-        # Velocity clamping
-        v_max = 0.5 * (ub - lb) if not is_multi_objective else 0.2 * (ub - lb)
-        return np.clip(new_velocities, -v_max, v_max)
+        return np.clip(new_velocities, -v_max, v_max).astype(np.float64)
 
-    def _update_state_velocities(self, new_velocity):
+    def _update_state_velocities(self, new_velocity: npt.NDArray[np.float64]) -> None:
         ensure_not_none(
             self._state, "PSO state is not initialized."
         ).velocities = new_velocity
 
     @staticmethod
-    def _calculate_new_position(old_positions, velocities):
-        return old_positions + velocities
+    def _calculate_new_position(
+        old_positions: npt.NDArray[np.float64],
+        velocities: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        out = old_positions + velocities
+        return out.astype(np.float64)
 
-    def _apply_mutation(self, positions, lb, ub):
-        """Apply polynomial mutation to maintain diversity."""
+    def _apply_mutation(
+        self,
+        positions: npt.NDArray[np.float64],
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Polynomial mutation for diversity maintenance."""
         n_particles, n_dims = positions.shape
         mutated = positions.copy()
 
-        # Determine which elements mutate
         mutation_mask = (
             self._rng.random((n_particles, n_dims)) < self.mutation_probability
         )
 
         delta_max = ub - lb
         valid = delta_max > EPS
-        mutation_mask &= valid  # Skip dimensions with zero range
+        mutation_mask &= valid
 
         if not np.any(mutation_mask):
             return mutated
@@ -543,12 +673,24 @@ class PSOEngine(OptimizationEngineInterface):
 
     @staticmethod
     def _compute_penalized_results(
-        parameters, results, A, b, indexed_objectives_strategy
-    ):
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        A: npt.NDArray[np.float64],
+        b: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+    ) -> npt.NDArray[np.float64]:
+        """Apply constraint violation penalty to raw results."""
         violations = (A @ parameters.T - b[:, None]).T
         violations = np.maximum(violations, 0.0)
         total_violation = violations.sum(axis=1, keepdims=True)
-        penalty_factor = 1e6 * (np.median(np.abs(results)) + 1.0)
+
+        # Use only finite values to compute the scale.
+        finite_mask = np.isfinite(results)
+        finite_vals = results[finite_mask]
+        scale_base = (
+            float(np.median(np.abs(finite_vals))) if finite_vals.size > 0 else 1.0
+        )
+        penalty_factor = 1e6 * (scale_base + 1.0)
 
         penalized = results.copy()
 
@@ -560,8 +702,14 @@ class PSOEngine(OptimizationEngineInterface):
 
         return penalized
 
-    def _reflect_and_clip_positions(self, new_positions, lb, ub):
+    def _reflect_and_clip_positions(
+        self,
+        new_positions: npt.NDArray[np.float64],
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Reflect positions at boundaries and negate velocity for reflected particles."""
         clipped, out_of_bounds = reflect_and_clip(new_positions, lb, ub)
-        if self._state:
+        if self._state is not None and np.any(out_of_bounds):
             self._state.velocities[out_of_bounds] *= -1
         return clipped

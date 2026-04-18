@@ -345,8 +345,10 @@ class TestSelectLeaderFromArchive:
 class TestSelectLeadersForParticles:
     def test_empty_archive_returns_none(self):
         engine = _make_engine(seed=0)
-        result = engine._select_leaders_for_particles(5, np.empty((0, 2)))
-        assert result is None
+        with pytest.raises(
+            ValueError, match="Archive is empty; cannot select leaders."
+        ):
+            _ = engine._select_leaders_for_particles(5, np.empty((0, 2)))
 
     def test_single_archive_entry_returns_zeros(self):
         engine = _make_engine(seed=0)

@@ -434,7 +434,7 @@ def test_managed_subprocess_exit_terminates_process(mock_popen):
     )
 
     # Use the context manager and trigger __exit__
-    with patch.object(manager, "logger_warning_func", lambda msg: None):
+    with patch.object(manager, "log_warning", lambda msg: None):
         try:
             with manager:
                 pass

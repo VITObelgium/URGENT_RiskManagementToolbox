@@ -6,14 +6,16 @@ import numpy as np
 import numpy.typing as npt
 
 from logger import get_csv_logger, get_logger
+from services.shared import ensure_not_none
 from services.solution_updater_service.core.reports import PopulationStatistic
-from services.solution_updater_service.core.utils import ensure_not_none
+
 
 LOG_PRECISION = 5
 
 
 class ReportGenerator:
-    def __init__(self) -> None:
+    def __init__(self, is_multi_objective: bool = False) -> None:
+        self._is_multi_objective = is_multi_objective
         self._logger = get_logger(__name__)
         self._control_vector_logger: logging.Logger | None = None
         self._population_statistic_logger: logging.Logger | None = None
@@ -108,28 +110,71 @@ class ReportGenerator:
         best_result: float | npt.NDArray[np.float64],
         results_name: list[str],
     ) -> None:
-        if self._best_result_logger is None:
-            self._best_result_logger = get_csv_logger(
-                "best_result_logger.csv",
-                logger_name="best_result_logger",
-                columns=["generation", *results_name],
+        """Log the best result(s) found so far.
+
+        Single-objective: best_result shape (1,) — logs one row without pareto_rank.
+        Multi-objective:  best_result shape (n_pareto, n_obj) — logs one row per
+                          Pareto-optimal solution, each prefixed with its rank.
+
+        The CSV schema (with or without pareto_rank column) is determined by
+        self._is_multi_objective set at construction
+        """
+        arr = np.atleast_2d(np.asarray(best_result, dtype=float))
+        n_solutions, n_obj = arr.shape
+
+        if self._is_multi_objective:
+            if self._best_result_logger is None:
+                self._best_result_logger = get_csv_logger(
+                    "best_result_logger.csv",
+                    logger_name="best_result_logger",
+                    columns=["generation", "pareto_rank", *results_name],
+                )
+
+            self._logger.info(
+                f"Generation {generation} Pareto front: {n_solutions} solution(s) "
+                f"across {n_obj} objective(s)"
             )
 
-        arr = np.asarray(best_result, dtype=float).ravel()
-
-        if arr.size != len(results_name):
-            raise ValueError(
-                f"Expected {len(results_name)} values, got {arr.size}: {arr!r}"
+            logger = ensure_not_none(
+                self._best_result_logger, "Best result logger not initialized"
             )
+            for rank, row in enumerate(arr):
+                if row.size != len(results_name):
+                    raise ValueError(
+                        f"Pareto solution {rank}: expected {len(results_name)} "
+                        f"objective values, got {row.size}: {row!r}"
+                    )
+                self._logger.debug(
+                    f"  Pareto rank {rank}: "
+                    f"{ {k: float(v) for k, v in zip(results_name, row.tolist())} }"
+                )
+                row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in row.tolist())
+                logger.info(f"{generation},{rank},{row_str}")
 
-        best_results_dsc = {k: float(v) for k, v in zip(results_name, arr.tolist())}
-        self._logger.info(f"Best result so far: {best_results_dsc}")
+        else:
+            # Single-objective: one row, no pareto_rank column.
+            if self._best_result_logger is None:
+                self._best_result_logger = get_csv_logger(
+                    "best_result_logger.csv",
+                    logger_name="best_result_logger",
+                    columns=["generation", *results_name],
+                )
 
-        row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in arr.tolist())
+            flat = arr.ravel()
+            if flat.size != len(results_name):
+                raise ValueError(
+                    f"Expected {len(results_name)} values, got {flat.size}: {flat!r}"
+                )
 
-        ensure_not_none(
-            self._best_result_logger, "Best result logger not initialized"
-        ).info(f"{generation},{row_str}")
+            best_results_dsc = {
+                k: float(v) for k, v in zip(results_name, flat.tolist())
+            }
+            self._logger.info(f"Best result so far: {best_results_dsc}")
+
+            row_str = ",".join(f"{v:.{LOG_PRECISION}f}" for v in flat.tolist())
+            ensure_not_none(
+                self._best_result_logger, "Best result logger not initialized"
+            ).info(f"{generation},{row_str}")
 
 
 def _to_obj_list(
@@ -140,7 +185,8 @@ def _to_obj_list(
         return [float(arr[0])]
     if arr.size != n_objectives:
         raise ValueError(
-            f"Expected {name} to have {n_objectives} objective values, got {arr.size}: {arr!r}"
+            f"Expected {name} to have {n_objectives} objective values, "
+            f"got {arr.size}: {arr!r}"
         )
     return [float(v) for v in arr.tolist()]
 

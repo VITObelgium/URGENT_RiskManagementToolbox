@@ -26,23 +26,22 @@ def _make_managed(command_args, **kwargs) -> ManagedSubprocess:
 class TestManagedSubprocessBasic:
     def test_starts_subprocess_and_returns_popen(self):
         ms = _make_managed(["echo", "hello"])
-        with ms as proc:
-            assert isinstance(proc, subprocess.Popen)
-        proc.wait()
+        with ms as m:
+            assert isinstance(m, ManagedSubprocess)
+            assert isinstance(m.process, subprocess.Popen)
+            m.process.wait()
 
     def test_stdout_lines_collected(self):
         ms = _make_managed(["echo", "hello_test"])
-        with ms as proc:
-            proc.wait()
-        # Give threads a moment to flush
-        if ms.stdout_thread:
-            ms.stdout_thread.join(timeout=1)
-        assert any("hello_test" in line for line in ms.stdout_lines)
+        with ms as m:
+            m.process.wait()
+        # Threads are automatically joined on __exit__
+        assert any("hello_test" in line for line in m.stdout_lines)
 
     def test_exit_with_no_exception(self):
         ms = _make_managed(["echo", "done"])
-        with ms as proc:
-            proc.wait()
+        with ms as m:
+            m.process.wait()
 
     def test_default_thread_names_set(self):
         ms = _make_managed(["echo", "hi"])
@@ -67,17 +66,16 @@ class TestManagedSubprocessBasic:
             ["printenv", "TEST_MANAGED_SUBPROCESS"],
             env=env,
         )
-        with ms as proc:
-            proc.wait()
-        if ms.stdout_thread:
-            ms.stdout_thread.join(timeout=1)
+        with ms as m:
+            m.process.wait()
+        # automatically joined on exit
         assert any("yes" in line for line in ms.stdout_lines)
 
     def test_no_env_uses_default(self):
         """No env kwarg should succeed without passing env to Popen."""
         ms = _make_managed(["echo", "default_env"])
-        with ms as proc:
-            proc.wait()
+        with ms as m:
+            m.process.wait()
 
 
 class TestManagedSubprocessFailure:
@@ -114,8 +112,8 @@ class TestManagedSubprocessExit:
 
     def test_exit_joins_threads(self):
         ms = _make_managed(["echo", "join_test"])
-        with ms as proc:
-            proc.wait()
+        with ms as m:
+            m.process.wait()
         # After exit, threads should be done
         if ms.stdout_thread:
             assert not ms.stdout_thread.is_alive()
@@ -123,9 +121,9 @@ class TestManagedSubprocessExit:
             assert not ms.stderr_thread.is_alive()
 
     def test_exit_returns_false(self):
-        """__exit__ should return False (not suppress exceptions)."""
+        """__exit__ should return None (not suppress exceptions)."""
         ms = _make_managed(["echo", "hi"])
-        with ms as proc:
-            proc.wait()
+        with ms as m:
+            m.process.wait()
         result = ms.__exit__(None, None, None)
-        assert result is False
+        assert result is None

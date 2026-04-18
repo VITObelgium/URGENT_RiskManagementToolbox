@@ -215,6 +215,11 @@ class ProcessClusterManager(ClusterManager):
         for ev in self._worker_stops:
             ev.set()
 
+        try:
+            request_server_shutdown(timeout=1.0)
+        except Exception:
+            logger.debug("request_server_shutdown not available or failed; proceeding")
+
         # Join all threads against a single shared deadline.
         deadline = time.monotonic() + timeout
         for th in self._worker_threads:
@@ -228,11 +233,6 @@ class ProcessClusterManager(ClusterManager):
 
         if self.run_mode == RunMode.Optimization:
             self._cleanup_worker_directories()
-
-        try:
-            request_server_shutdown(timeout=1.0)
-        except Exception:
-            logger.debug("request_server_shutdown not available or failed; proceeding")
 
         if self._server_thread and self._server_thread.is_alive():
             logger.info("Waiting for server thread to shut down…")

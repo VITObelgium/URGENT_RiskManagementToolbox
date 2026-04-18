@@ -25,7 +25,6 @@ class GrpcStubManager:
     @classmethod
     @contextmanager
     def get_stub(cls, server_host, server_port):
-        # ... existing code ...
         with cls._lock:
             if cls._channel is None or cls._stub is None:
                 config = get_simulation_config()
@@ -49,10 +48,10 @@ class GrpcStubManager:
             except Exception:
                 pass
 
-            # These can be "expected" in your design:
-            # - ABORTED: server intentionally aborted due to critical worker exception
-            # - CANCELLED: shutdown in progress / RPC cancelled
-            if code in (grpc.StatusCode.ABORTED, grpc.StatusCode.CANCELLED):
+            if code in (grpc.StatusCode.ABORTED, grpc.StatusCode.CANCELLED) or (
+                code == grpc.StatusCode.UNAVAILABLE
+                and details == "Server shutting down"
+            ):
                 logger.info(
                     "gRPC call ended intentionally (code=%s, details=%s).",
                     code,
@@ -66,7 +65,6 @@ class GrpcStubManager:
                     e,
                 )
 
-            # If there's a connection error, close and reset the channel and stub
             with cls._lock:
                 if cls._channel is not None:
                     cls._channel.close()

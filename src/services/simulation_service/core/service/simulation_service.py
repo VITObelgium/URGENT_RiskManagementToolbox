@@ -153,10 +153,15 @@ class SimulationService:
                 except Exception:
                     pass
 
-                # ABORTED is what the server should return for "critical failure, shutting down".
                 if code == grpc.StatusCode.ABORTED:
                     logger.critical(
                         "Simulations aborted by server (code=%s, details=%s).",
+                        code,
+                        details,
+                    )
+                elif code in (grpc.StatusCode.CANCELLED, grpc.StatusCode.UNAVAILABLE):
+                    logger.info(
+                        "Simulations ended due to server shutdown (code=%s, details=%s).",
                         code,
                         details,
                     )

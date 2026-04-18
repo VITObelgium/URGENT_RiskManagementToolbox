@@ -2,6 +2,7 @@ import asyncio
 import collections
 import os
 import time
+from contextlib import suppress
 from typing import Any
 
 import grpc
@@ -17,6 +18,7 @@ logger = get_logger("threading-server", filename=__name__)
 _SERVER_LOOP: asyncio.AbstractEventLoop | None = None
 _SERVER: aio.Server | None = None
 _SERVER_READY: asyncio.Event | None = None
+_HANDLER: "SimulationMessagingHandler | None" = None
 
 
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
@@ -26,9 +28,13 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._timeout_handles: dict[int, asyncio.TimerHandle] = {}
         self._completed_jobs: dict[int, sm.SimulationJob] = {}
         self._job_event: asyncio.Event = asyncio.Event()
+        self._shutdown_event: asyncio.Event = asyncio.Event()
         self._simulation_model_archive: bytes | None = None
         self._job_timeout_seconds: float = get_simulation_config().job_timeout_seconds
         self._log_interval_seconds: int = get_simulation_config().log_interval_seconds
+        self._long_poll_timeout_seconds: float = (
+            get_simulation_config().long_poll_timeout_seconds
+        )
         self._critical_error: RuntimeError | None = None
         self._total_simulations: int = 0
 
@@ -62,6 +68,15 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     def _all_done(self) -> bool:
         return self._pending_jobs.empty() and not self._running_jobs
 
+    @staticmethod
+    def _no_job_available_response(worker_id: str) -> sm.SimulationJob:
+        return sm.SimulationJob(
+            simulation=sm.Simulation(),
+            status=sm.JobStatus.NO_JOB_AVAILABLE,
+            worker_id=worker_id,
+            simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
+        )
+
     async def TransferSimulationModel(self, request, context):
         size_mb = len(getattr(request, "package_archive", b"")) / (1024 * 1024)
         logger.info("Received simulation model archive of size %.2f MB.", size_mb)
@@ -76,7 +91,12 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._total_simulations = total
         logger.info("Initializing simulations with %d job(s)", total)
 
-        self._pending_jobs = asyncio.Queue()
+        while not self._pending_jobs.empty():
+            try:
+                self._pending_jobs.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
         self._running_jobs.clear()
         for h in self._timeout_handles.values():
             h.cancel()
@@ -84,6 +104,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         self._completed_jobs.clear()
         self._critical_error = None
         self._job_event.clear()
+        self._shutdown_event.clear()
 
         for i, sim in enumerate(request.simulations, start=1):
             await self._pending_jobs.put((i, sim))
@@ -134,7 +155,27 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                     await context.abort(grpc.StatusCode.ABORTED, details)
                     return sm.Simulations(simulations=[])
 
-                await self._job_event.wait()
+                job_fut = asyncio.ensure_future(self._job_event.wait())
+                shutdown_fut = asyncio.ensure_future(self._shutdown_event.wait())
+                try:
+                    await asyncio.wait(
+                        [job_fut, shutdown_fut],
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    # Always cancel whichever future didn't fire to avoid leaking tasks.
+                    job_fut.cancel()
+                    shutdown_fut.cancel()
+
+                if self._shutdown_event.is_set():
+                    logger.info(
+                        "Shutdown requested; aborting PerformSimulations RPC cleanly."
+                    )
+                    await context.abort(
+                        grpc.StatusCode.UNAVAILABLE, "Server shutting down"
+                    )
+                    return sm.Simulations(simulations=[])
+
                 self._job_event.clear()
         finally:
             if _log_handle[0] is not None:
@@ -174,21 +215,49 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         return sm.Simulations(simulations=simulations)
 
     async def RequestSimulationJob(self, request, context):
+        worker_id = request.worker_id
         try:
-            worker_id = request.worker_id
-
-            try:
-                job_id, simulation = self._pending_jobs.get_nowait()
-            except asyncio.QueueEmpty:
-                logger.info("Worker %s: No jobs available in queue", worker_id)
-                if self._running_jobs:
-                    logger.info("Jobs still in-flight: %s", list(self._running_jobs))
-                return sm.SimulationJob(
-                    simulation=sm.Simulation(),
-                    status=sm.JobStatus.NO_JOB_AVAILABLE,
-                    worker_id=worker_id,
-                    simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
+            if self._shutdown_event.is_set():
+                logger.debug(
+                    "Worker %s: Shutdown already requested, not assigning new jobs",
+                    worker_id,
                 )
+                return self._no_job_available_response(worker_id)
+
+            job_task = asyncio.create_task(self._pending_jobs.get())
+            shutdown_task = asyncio.create_task(self._shutdown_event.wait())
+            try:
+                done, pending = await asyncio.wait(
+                    [job_task, shutdown_task],
+                    timeout=self._long_poll_timeout_seconds,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                pending = locals().get("pending", set())
+                for task in pending:
+                    task.cancel()
+                for task in pending:
+                    with suppress(asyncio.CancelledError):
+                        await task
+
+            if shutdown_task in done and self._shutdown_event.is_set():
+                if not job_task.done():
+                    job_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await job_task
+                logger.info(
+                    "Worker %s: Server shutdown requested, ending job long-poll.",
+                    worker_id,
+                )
+                return self._no_job_available_response(worker_id)
+
+            if job_task not in done:
+                logger.debug(
+                    "Worker %s: Long-poll timed out, no jobs available", worker_id
+                )
+                return self._no_job_available_response(worker_id)
+
+            job_id, simulation = job_task.result()
 
             self._running_jobs[job_id] = simulation
             self._schedule_timeout(job_id)
@@ -203,17 +272,16 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             )
 
         except asyncio.CancelledError:
+            logger.info(
+                "Worker %s: RequestSimulationJob cancelled during shutdown.",
+                worker_id,
+            )
             try:
                 context.set_code(grpc.StatusCode.CANCELLED)
                 context.set_details("Server shutting down")
             except Exception:
                 pass
-            return sm.SimulationJob(
-                simulation=sm.Simulation(),
-                status=sm.JobStatus.NO_JOB_AVAILABLE,
-                worker_id=getattr(request, "worker_id", ""),
-                simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
-            )
+            return self._no_job_available_response(worker_id)
 
     async def SubmitSimulationJob(self, request, context):
         job_id = request.job_id
@@ -293,7 +361,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
 
 
 async def serve() -> None:
-    global _SERVER_LOOP, _SERVER, _SERVER_READY
+    global _SERVER_LOOP, _SERVER, _SERVER_READY, _HANDLER
 
     logger.info("Initializing Async gRPC Server setup...")
     mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
@@ -329,9 +397,9 @@ async def serve() -> None:
         logger.debug("gRPC server options: %s", server_options)
 
         server = aio.server(options=server_options)
-        sm_grpc.add_SimulationMessagingServicer_to_server(
-            SimulationMessagingHandler(), server
-        )
+        handler = SimulationMessagingHandler()
+        _HANDLER = handler
+        sm_grpc.add_SimulationMessagingServicer_to_server(handler, server)
 
         manager_port = os.environ.get("SERVER_PORT", "50051")
         logger.info(
@@ -344,7 +412,7 @@ async def serve() -> None:
 
         _SERVER_LOOP = loop
         _SERVER = server
-        _SERVER_READY.set()  # unblock any readiness waiters
+        _SERVER_READY.set()
 
         try:
             await server.wait_for_termination()
@@ -357,6 +425,7 @@ async def serve() -> None:
     finally:
         _SERVER_LOOP = None
         _SERVER = None
+        _HANDLER = None
         if _SERVER_READY is not None:
             _SERVER_READY.clear()
         logger.info("Server serve() routine completed or interrupted.")
@@ -382,13 +451,28 @@ def request_server_shutdown(timeout: float | None = 2.0) -> None:
         )
         return
 
+    if _HANDLER is not None:
+
+        def _set_shutdown() -> None:
+            _HANDLER._shutdown_event.set()
+            _HANDLER._job_event.set()
+
+        try:
+            _SERVER_LOOP.call_soon_threadsafe(_set_shutdown)
+        except Exception:
+            logger.exception("Failed to signal handler shutdown event")
+
     def _stop() -> None:
         try:
             if _SERVER is not None:
+                shutdown_grace = max(0.1, float(timeout or 0.0))
                 logger.info(
-                    "request_server_shutdown: initiating graceful server.stop()"
+                    "request_server_shutdown: initiating graceful server.stop(grace=%.1f)",
+                    shutdown_grace,
                 )
-                asyncio.ensure_future(_SERVER.stop(grace=0.0), loop=_SERVER_LOOP)
+                asyncio.ensure_future(
+                    _SERVER.stop(grace=shutdown_grace), loop=_SERVER_LOOP
+                )
         except Exception:
             logger.exception("Error while requesting server shutdown")
 

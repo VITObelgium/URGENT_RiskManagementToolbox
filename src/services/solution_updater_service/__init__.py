@@ -17,12 +17,10 @@ from services.solution_updater_service.core.api import (  # noqa: F401, E402
     ControlVector,
     OptimizationEngine,
     SolutionUpdaterService,
-    ensure_not_none,
 )
 
 __all__ = [
     "SolutionUpdaterService",
     "OptimizationEngine",
     "ControlVector",
-    "ensure_not_none",
 ]

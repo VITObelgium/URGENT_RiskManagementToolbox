@@ -5,7 +5,7 @@ from services.solution_updater_service.core.engines.factory import (
 )
 from services.solution_updater_service.core.engines.pso import PSOEngine
 from services.solution_updater_service.core.models.user import OptimizationEngine
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
+from services.shared.type_checks import ensure_not_none
 
 
 class TestOptimizationEngineFactory:

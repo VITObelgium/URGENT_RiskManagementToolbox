@@ -74,6 +74,11 @@ def risk_management(
                 details,
             )
             return None
+        elif code == grpc.StatusCode.UNAVAILABLE and details == "Server shutting down":
+            logger.info(
+                "Risk management stopped because simulation server is shutting down."
+            )
+            return None
 
         logger.error("An error occurred: %s", e)
         raise

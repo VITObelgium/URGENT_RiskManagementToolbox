@@ -102,7 +102,7 @@ pixi install
 
 ### 1. Supported Reservoir Simulators
 #### OPEN-DARTS
-- OpenDarts (1.1.3) [open_darts-1.1.3-cp310-cp310-linux_x86_64] (default)
+- OpenDarts (1.1.3) [open_darts-1.1.3-cp312-cp312-linux_x86_64.whl] (default)
 
 ### 2. Execution modes
 
@@ -111,20 +111,14 @@ The toolbox supports two execution modes for running simulations:
 - Threaded runner (default): local execution without containers.
 
 ```shell
-pixi run src/main.py --config-file <config_filepath> --model-file <model_filepath>
+pixi run python src/main.py --config-file <config_filepath> --model-file <model_filepath>
 ```
 
 - Docker runner: containerized workers (required Docker installation).
 
 ```shell
-pixi run src/main.py --config-file <config_filepath> --model-file <model_filepath> --use-docker
+pixi run python src/main.py --config-file <config_filepath> --model-file <model_filepath> --use-docker
 ```
-
->**Note**: If you encounter Error launching 'src/main.py': Permission denied (os error 13), invoke the command using Python explicitly:
-``` shell
-pixi run python --config-file ...
-```
-
 
 ### 3. Reservoir simulation interoperability
 

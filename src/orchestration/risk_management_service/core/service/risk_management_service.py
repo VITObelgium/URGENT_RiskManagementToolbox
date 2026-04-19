@@ -59,6 +59,9 @@ def run_risk_management(
 
     runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
     os.environ["RUN_MODE"] = problem_definition.run_mode.value
+    os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
+        problem_definition.worker_simulation_timeout_seconds
+    )
 
     worker_count = problem_definition.optimization_parameters.worker_count
     cm = (

@@ -152,7 +152,9 @@ class OpenDartsConnector(ConnectorInterface):
         # Choose runner implementation via environment. Default uses subprocess runner.
         runner_mode = os.environ.get("OPEN_DARTS_RUNNER", "thread").lower()
 
+        timeout = int(os.environ.get("WORKER_SIMULATION_TIMEOUT_SECONDS", "900"))
         subprocess_runner = SubprocessRunner(
+            worker_simulation_timeout_seconds=timeout,
             managed_subprocess_factory=lambda *a, **k: ManagedSubprocess(*a, **k),
             broadcast_results_parser=OpenDartsConnector._get_broadcast_results,
             repo_root_getter=OpenDartsConnector._repo_root,

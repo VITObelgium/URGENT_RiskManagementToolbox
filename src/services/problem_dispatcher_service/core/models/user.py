@@ -117,6 +117,13 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     optimization_parameters: OptimizationParameters = Field(
         default_factory=OptimizationParameters
     )
+    worker_simulation_timeout_seconds: int = Field(
+        default=900,
+        description=(
+            "Worker-side timeout in seconds for the local simulation subprocess "
+            "to complete (default: 15 minutes)"
+        ),
+    )
 
     @model_validator(mode="after")
     def apply_task_overrides(self) -> Self:

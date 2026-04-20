@@ -21,12 +21,6 @@ class SimulationServiceConfig(BaseSettings):
     server_startup_timeout: float = Field(
         default=25.0, description="Timeout in seconds for server startup"
     )
-
-    job_timeout_seconds: float = Field(
-        default=3600.0,
-        validation_alias="JOB_TIMEOUT_SECONDS",
-        description="Timeout in seconds for simulation jobs (default: 1 hour)",
-    )
     log_interval_seconds: int = Field(
         default=30,
         description="Interval in seconds for logging progress (default: 30 seconds)",

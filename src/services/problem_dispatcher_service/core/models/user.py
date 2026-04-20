@@ -44,32 +44,19 @@ class WellDesignItem(BaseModel, extra="forbid"):
         return values
 
 
-class OptimizationParameters(BaseModel, extra="forbid"):
-    """
-    Represents the optimization parameters for the problem dispatcher service.
+class SimulationConfig(BaseModel, extra="forbid"):
+    """Simulation config parameters.
 
     Attributes:
-        objectives (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
-        max_generations (int): The maximum number of generations for the optimization algorithm.
-        population_size (int): The size of the population in each generation.
-        max_stall_generations (int): The number of generations to wait for improvement before stopping.
+        worker_simulation_timeout_seconds (int): Worker-side timeout in seconds for the local simulation subprocess to complete (default: 15 minutes)
+        server_job_timeout_seconds (int): Server-side watchdog timeout in seconds for assigned jobs (default: 1 hour)
         worker_count (int): The number of parallel workers to use for simulations.
-        linear_inequalities (LinearInequalities | None): The linear inequality constraints
-            for the optimization problem. An example structure is:
-                "A": [
-                    {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0}
-                ],
-                "b": [30.0, 3000.0],
-                "sense": [">=", "<="]
+
     """
 
-    objectives: dict[ObjectiveFnName, OptimizationStrategy] | None = Field(default=None)
-    max_generations: PositiveInt = Field(default=10, ge=1)
-    population_size: PositiveInt = Field(default=10, ge=2, le=200)
-    max_stall_generations: PositiveInt = Field(default=10, ge=1)
+    server_job_timeout_seconds: PositiveInt = Field(default=3600)
+    worker_simulation_timeout_seconds: PositiveInt = Field(default=900)
     worker_count: PositiveInt = Field(default=4, ge=1)
-    linear_inequalities: LinearInequalities | None = Field(default=None)
-    seed: int | None = Field(default=None)
 
     @field_validator("worker_count", mode="before")
     @classmethod
@@ -83,15 +70,39 @@ class OptimizationParameters(BaseModel, extra="forbid"):
         return value
 
     @model_validator(mode="after")
-    def validate_worker_count_not_greater_than_population_size(
-        self,
-    ) -> Self:
-        if self.worker_count > self.population_size:
-            logger.warning(
-                f"Worker_count {self.worker_count} exceeds population_size {self.population_size}. Setting worker_count to population_size."
+    def validate_timeouts(self) -> SimulationConfig:
+        if self.server_job_timeout_seconds < self.worker_simulation_timeout_seconds:
+            raise ValueError(
+                "server_job_timeout_seconds must be greater than or equal to "
+                "worker_simulation_timeout_seconds"
             )
-            self.worker_count = self.population_size
         return self
+
+
+class OptimizationParameters(BaseModel, extra="forbid"):
+    """
+    Represents the optimization parameters for the problem dispatcher service.
+
+    Attributes:
+        objectives (dict[ObjectiveFnName, OptimizationStrategy]): The objective function(s) with their respective optimization strategy. If multiple objective functions are provided, the optimization algorithm uses pareto front approximation.
+        max_generations (int): The maximum number of generations for the optimization algorithm.
+        population_size (int): The size of the population in each generation.
+        max_stall_generations (int): The number of generations to wait for improvement before stopping.
+        linear_inequalities (LinearInequalities | None): The linear inequality constraints
+            for the optimization problem. An example structure is:
+                "A": [
+                    {"INJ.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0}
+                ],
+                "b": [30.0, 3000.0],
+                "sense": [">=", "<="]
+    """
+
+    objectives: dict[ObjectiveFnName, OptimizationStrategy] | None = Field(default=None)
+    max_generations: PositiveInt = Field(default=10, ge=1)
+    population_size: PositiveInt = Field(default=10, ge=2, le=200)
+    max_stall_generations: PositiveInt = Field(default=10, ge=1)
+    linear_inequalities: LinearInequalities | None = Field(default=None)
+    seed: int | None = Field(default=None)
 
 
 def _unique_items(seq: list[WellDesignItem]) -> list[WellDesignItem]:
@@ -117,6 +128,14 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     optimization_parameters: OptimizationParameters = Field(
         default_factory=OptimizationParameters
     )
+    worker_simulation_timeout_seconds: int = Field(
+        default=900,
+        description=(
+            "Worker-side timeout in seconds for the local simulation subprocess "
+            "to complete (default: 15 minutes)"
+        ),
+    )
+    simulation_config: SimulationConfig = Field(default_factory=SimulationConfig)
 
     @model_validator(mode="after")
     def apply_task_overrides(self) -> Self:
@@ -125,7 +144,23 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
             self.optimization_parameters.population_size = 1
             self.optimization_parameters.max_generations = 1
             self.optimization_parameters.max_stall_generations = 1
-            self.optimization_parameters.worker_count = 1
+            self.simulation_config.worker_count = 1
+        return self
+
+    @model_validator(mode="after")
+    def validate_worker_count_not_greater_than_population_size(
+        self,
+    ) -> Self:
+        if (
+            self.simulation_config.worker_count
+            > self.optimization_parameters.population_size
+        ):
+            logger.warning(
+                f"Worker_count {self.simulation_config.worker_count} exceeds population_size {self.optimization_parameters.population_size}. Setting worker_count to population_size."
+            )
+            self.simulation_config.worker_count = (
+                self.optimization_parameters.population_size
+            )
         return self
 
     @model_validator(mode="after")

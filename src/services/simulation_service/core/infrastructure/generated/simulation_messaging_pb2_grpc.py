@@ -1,7 +1,6 @@
 """Client and server classes corresponding to protobuf-defined services."""
 
 import grpc
-
 from . import simulation_messaging_pb2 as simulation__messaging__pb2
 
 GRPC_GENERATED_VERSION = "1.69.0"

@@ -311,13 +311,6 @@
           "title": "Max Stall Generations",
           "type": "integer"
         },
-        "worker_count": {
-          "default": 4,
-          "exclusiveMinimum": 0,
-          "minimum": 1,
-          "title": "Worker Count",
-          "type": "integer"
-        },
         "linear_inequalities": {
           "anyOf": [
             {
@@ -416,6 +409,14 @@
       ],
       "title": "PositionModel",
       "type": "object"
+    },
+    "RunMode": {
+      "enum": [
+        "evaluation",
+        "optimization"
+      ],
+      "title": "RunMode",
+      "type": "string"
     },
     "SWellModel": {
       "additionalProperties": false,
@@ -516,6 +517,32 @@
       "title": "SWellModel",
       "type": "object"
     },
+    "SimulationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "server_job_timeout_seconds": {
+          "default": 3600,
+          "exclusiveMinimum": 0,
+          "title": "Server Job Timeout Seconds",
+          "type": "integer"
+        },
+        "worker_simulation_timeout_seconds": {
+          "default": 900,
+          "exclusiveMinimum": 0,
+          "title": "Worker Simulation Timeout Seconds",
+          "type": "integer"
+        },
+        "worker_count": {
+          "default": 4,
+          "exclusiveMinimum": 0,
+          "minimum": 1,
+          "title": "Worker Count",
+          "type": "integer"
+        }
+      },
+      "title": "SimulationConfig",
+      "type": "object"
+    },
     "VariableName": {
       "type": "string"
     },
@@ -574,14 +601,9 @@
   },
   "additionalProperties": false,
   "properties": {
-    "task": {
-      "default": "train",
-      "enum": [
-        "eval",
-        "train"
-      ],
-      "title": "Task",
-      "type": "string"
+    "run_mode": {
+      "$ref": "#/$defs/RunMode",
+      "default": "optimization"
     },
     "well_design": {
       "items": {
@@ -592,6 +614,14 @@
     },
     "optimization_parameters": {
       "$ref": "#/$defs/OptimizationParameters"
+    },
+    "worker_simulation_timeout_seconds": {
+      "default": 900,
+      "title": "Worker Simulation Timeout Seconds",
+      "type": "integer"
+    },
+    "simulation_config": {
+      "$ref": "#/$defs/SimulationConfig"
     }
   },
   "required": [

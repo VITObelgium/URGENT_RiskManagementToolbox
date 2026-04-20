@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/Version-0.2.0-orange">
+  <img alt="Version" src="https://img.shields.io/badge/Version-0.3.0-orange">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
   <img alt="Code Quality" src="https://img.shields.io/badge/Code%20Quality-80%25%2B-yellow">
@@ -24,7 +24,6 @@
   - [Execution modes](#execution-modes)
   - [Reservoir simulation interoperability](#reservoir-simulation-interoperability)
     - [OpenDarts Connector](#opendarts-connector)
-  - [Global Configuration](#global-configuration)
   - [Run configuration file](#run-configuration-file)
     - [Input file schemas](#input-file-schemas)
 - [Implemented services](#implemented-services)
@@ -102,7 +101,7 @@ pixi install
 
 ### 1. Supported Reservoir Simulators
 #### OPEN-DARTS
-- OpenDarts (1.1.3) [open_darts-1.1.3-cp310-cp310-linux_x86_64] (default)
+- OpenDarts (1.1.3) [open_darts-1.1.3-cp312-cp312-linux_x86_64.whl] (default)
 
 ### 2. Execution modes
 
@@ -111,20 +110,14 @@ The toolbox supports two execution modes for running simulations:
 - Threaded runner (default): local execution without containers.
 
 ```shell
-pixi run src/main.py --config-file <config_filepath> --model-file <model_filepath>
+pixi run python src/main.py --config-file <config_filepath> --model-file <model_filepath>
 ```
 
 - Docker runner: containerized workers (required Docker installation).
 
 ```shell
-pixi run src/main.py --config-file <config_filepath> --model-file <model_filepath> --use-docker
+pixi run python src/main.py --config-file <config_filepath> --model-file <model_filepath> --use-docker
 ```
-
->**Note**: If you encounter Error launching 'src/main.py': Permission denied (os error 13), invoke the command using Python explicitly:
-``` shell
-pixi run python --config-file ...
-```
-
 
 ### 3. Reservoir simulation interoperability
 
@@ -246,16 +239,8 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    All simulation model files must be archived in a single `.zip` file.
    After extraction, all files must be located directly in the root directory (no nested subfolders).
 
-### 4. Global Configuration
 
-Global toolbox settings are defined in `pyproject.toml` under the `[toolbox-config]` table.
-
-| Parameter                    | Type | Description|
-|-----|----|----|
-| `simulation_timeout_seconds` | int  | Maximum allowed time (in seconds) for a single simulation run before it is terminated. |
-
-
-### 5. Run configuration file
+### 4. Run configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s), initial state, and variable constraints.
 
 Configuration file define services to be used for simulation and optimization as well as the global optimization parameters as objectives or linear inequality constraints.
@@ -273,9 +258,10 @@ Input configuration file is a JSON file with the structures presented in `schema
 
 ```json
 {
-  "run_mode": "optimization",
-  "=== SERVICE NAME ===": service item(s),
-  "optimization_parameters": { ... }
+   "run_mode": "optimization",
+   "=== SERVICE NAME ===": service item(s),
+   "optimization_parameters": { ... },
+   "simulation_config": { ... }
 }
 ```
 
@@ -556,14 +542,14 @@ The toolbox uses the `optimization_parameters` block to define how the optimizat
 ####
 These settings control the execution and termination of the optimization process.
 
-| Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
-| :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `objectives` | dict[str, str] | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength": "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
-| `max_generations` | Integer        | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
-| `population_size` | Integer        | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
-| `max_stall_generations` | Integer        | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
-| `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
+| Parameter | Type            | Default  | Description                                                                                                                                                                                                                                                                                                              |
+| :--- |:----------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `objectives` | dict[str, str]  | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength": "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
+| `max_generations` | Integer         | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
+| `population_size` | Integer         | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
+| `max_stall_generations` | Integer         | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
 | `seed` | Integer \| null | `null`   | Random seed for the optimization algorithm. Set to an integer value to make runs reproducible. When `null`, results will vary between runs.                                                                                                                                                                              |
+| `linear_inequalities` | see below       |`null` | Dictionary of linear inequality constraints.
 
 #### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 
@@ -575,6 +561,27 @@ These settings control the execution and termination of the optimization process
 >> The number of rows in `A` and `b` must match the number of variables in the optimization space.
 
 >> For perforation optimization make sure that end_md of perforation is greater than start_md
+
+### Simulation Config Section
+
+The `simulation_config` block defines the execution environment parameters, such as the number of parallel simulator instances and timeout thresholds for simulations.
+
+| Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
+| :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
+| `worker_simulation_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for a single simulation worker to complete its assigned simulation run before it is forcefully terminated. |
+| `server_job_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for the entire server batch job to complete completion. |
+
+Example:
+```json
+"simulation_config": {
+  "worker_simulation_timeout_seconds": 900,
+  "server_job_timeout_seconds": 3600,
+  "worker_count": 2
+}
+```
+
+
 
 #### Example: Combined Depth Constraint
 To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5000m:
@@ -686,7 +693,9 @@ The Well design service will be use to determine the optimal wells placement and
     }
   ],
   "optimization_parameters": {
-  "objectives": {"HEAT": "maximize"},
+    "objectives": {
+      "HEAT": "maximize"
+    },
     "max_generations": 50,
     "population_size": 20,
     "max_stall_generations": 5,
@@ -705,6 +714,10 @@ The Well design service will be use to determine the optimal wells placement and
         "<="
       ]
     }
+  },
+  "simulation_config": {
+    "worker_simulation_timeout_seconds": 900,
+    "worker_count": 4
   }
 }
 
@@ -712,7 +725,7 @@ The Well design service will be use to determine the optimal wells placement and
 ```
 
 ## Known Issues
- - DRMT with docker backend cannot start simulation server
+ - RMT with docker backend cannot start simulation server
 
 ## Contact
 For issues or contributions, please open a GitHub issue or contact the maintainers.

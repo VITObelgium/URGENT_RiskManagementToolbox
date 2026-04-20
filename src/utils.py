@@ -29,5 +29,5 @@ if __name__ == "__main__":
     project_root = Path(__file__).resolve().parent.parent  # src/ -> project root
     schemas_folder = project_root / "schemas"
 
-    version = "0.2.0"
+    version = "0.3.0"
     write_schema_rmt_schema(schemas_folder, version)

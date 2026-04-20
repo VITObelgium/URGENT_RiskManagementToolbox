@@ -98,8 +98,8 @@ class TestWriteSchemaRmtSchema:
 
     def test_written_file_has_no_description_keys(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            write_schema_rmt_schema(tmpdir, "0.2.0")
-            out_path = Path(tmpdir) / "0.2.0.json"
+            write_schema_rmt_schema(tmpdir, "0.3.0")
+            out_path = Path(tmpdir) / "0.3.0.json"
             content = json.loads(out_path.read_text())
 
             def has_description(obj):

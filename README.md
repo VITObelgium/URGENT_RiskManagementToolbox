@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/Version-0.2.0-orange">
+  <img alt="Version" src="https://img.shields.io/badge/Version-0.3.0-orange">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
   <img alt="Code Quality" src="https://img.shields.io/badge/Code%20Quality-80%25%2B-yellow">
@@ -258,10 +258,10 @@ Input configuration file is a JSON file with the structures presented in `schema
 
 ```json
 {
-  "run_mode": "optimization",
-  "=== SERVICE NAME ===": service item(s),
-  "simulation_config": { ... },
-  "optimization_parameters": { ... }
+   "run_mode": "optimization",
+   "=== SERVICE NAME ===": service item(s),
+   "optimization_parameters": { ... },
+   "simulation_config": { ... }
 }
 ```
 
@@ -542,13 +542,25 @@ The toolbox uses the `optimization_parameters` block to define how the optimizat
 ####
 These settings control the execution and termination of the optimization process.
 
-| Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
-| :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `objectives` | dict[str, str] | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength": "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
-| `max_generations` | Integer        | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
-| `population_size` | Integer        | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
-| `max_stall_generations` | Integer        | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
+| Parameter | Type            | Default  | Description                                                                                                                                                                                                                                                                                                              |
+| :--- |:----------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `objectives` | dict[str, str]  | REQUIRED | Dictionary of objective to optimize with optimization strategy ex. {"Heat": "maximize", "WellLength": "minimize"}. The objective names must match the values broadcasted from connector, otherwise the optimization run will be aborded. If multiple objectives are present the RMT will run in pareto optimization mode. |
+| `max_generations` | Integer         | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
+| `population_size` | Integer         | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
+| `max_stall_generations` | Integer         | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
 | `seed` | Integer \| null | `null`   | Random seed for the optimization algorithm. Set to an integer value to make runs reproducible. When `null`, results will vary between runs.                                                                                                                                                                              |
+| `linear_inequalities` | see below       |`null` | Dictionary of linear inequality constraints.
+
+#### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
+
+- **A**: List of coefficient maps. Variables must be named as `service_name.attribute.subattribute` (e.g., `well_design.PRO.md` or `well_design.INJ.perforations.p1.start_md`).
+- **b**: List of constant values (right-hand side of the inequality).
+- **sense**: List of operators (`<=`, `>=`, `<`, `>`). Defaults to `<=` if omitted.
+
+> Important!
+>> The number of rows in `A` and `b` must match the number of variables in the optimization space.
+
+>> For perforation optimization make sure that end_md of perforation is greater than start_md
 
 ### Simulation Config Section
 
@@ -569,16 +581,7 @@ Example:
 }
 ```
 
-#### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 
-- **A**: List of coefficient maps. Variables must be named as `service_name.attribute.subattribute` (e.g., `well_design.PRO.md` or `well_design.INJ.perforations.p1.start_md`).
-- **b**: List of constant values (right-hand side of the inequality).
-- **sense**: List of operators (`<=`, `>=`, `<`, `>`). Defaults to `<=` if omitted.
-
-> Important!
->> The number of rows in `A` and `b` must match the number of variables in the optimization space.
-
->> For perforation optimization make sure that end_md of perforation is greater than start_md
 
 #### Example: Combined Depth Constraint
 To ensure the total length of two wells (`INJ` and `PRO`) is between 1200m and 5000m:
@@ -690,7 +693,9 @@ The Well design service will be use to determine the optimal wells placement and
     }
   ],
   "optimization_parameters": {
-  "objectives": {"HEAT": "maximize"},
+    "objectives": {
+      "HEAT": "maximize"
+    },
     "max_generations": 50,
     "population_size": 20,
     "max_stall_generations": 5,
@@ -709,6 +714,10 @@ The Well design service will be use to determine the optimal wells placement and
         "<="
       ]
     }
+  },
+  "simulation_config": {
+    "worker_simulation_timeout_seconds": 900,
+    "worker_count": 4
   }
 }
 
@@ -716,7 +725,7 @@ The Well design service will be use to determine the optimal wells placement and
 ```
 
 ## Known Issues
- - DRMT with docker backend cannot start simulation server
+ - RMT with docker backend cannot start simulation server
 
 ## Contact
 For issues or contributions, please open a GitHub issue or contact the maintainers.

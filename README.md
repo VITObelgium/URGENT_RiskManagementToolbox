@@ -24,7 +24,6 @@
   - [Execution modes](#execution-modes)
   - [Reservoir simulation interoperability](#reservoir-simulation-interoperability)
     - [OpenDarts Connector](#opendarts-connector)
-  - [Global Configuration](#global-configuration)
   - [Run configuration file](#run-configuration-file)
     - [Input file schemas](#input-file-schemas)
 - [Implemented services](#implemented-services)
@@ -241,20 +240,7 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
    After extraction, all files must be located directly in the root directory (no nested subfolders).
 
 
-### 4. Global Configuration
-
-The `SimulationServiceConfig` (found in `src/services/simulation_service/core/config.py`) class manages global network and timeout settings for the simulation service. These can be configured via environment variables or a local `.env` file.
-
-- **`worker_simulation_timeout_seconds`**: Worker-side subprocess timeout. Maximum time in seconds allowed for a worker to run the local simulation process before the worker terminates that process and reports a `TIMEOUT` result upstream (default: 900 or 15 minutes). Environment variable: `WORKER_SIMULATION_TIMEOUT_SECONDS`.
-- **`server_job_timeout_seconds`**: Server-side watchdog timeout. Maximum time in seconds the gRPC server will wait for a worker to return a terminal status for an assigned job before the server marks that job as `TIMEOUT` itself (default: 3600 or 1 hour). Environment variable: `SERVER_JOB_TIMEOUT_SECONDS`.
-- **`log_interval_seconds`**: Time interval in seconds for the orchestrator to log simulation progress to the console/log file (default: 30 seconds). This is unrelated to the simulation execution itself.
-- **`server_port`**: The port used by the internal gRPC server for communication between the orchestrator and simulation workers (default: `50051`).
-- **`model_config`**: Pydantic model configuration dictating how settings are loaded (for example, reading from a `.env` file, ignoring extra variables, and being case-insensitive).
-
-For safety, `server_job_timeout_seconds` must be greater than or equal to `worker_simulation_timeout_seconds`. In normal operation, the worker timeout should fire first and the server timeout acts as a fallback if a worker hangs or disappears without reporting back.
-
-
-### 5. Run configuration file
+### 4. Run configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s), initial state, and variable constraints.
 
 Configuration file define services to be used for simulation and optimization as well as the global optimization parameters as objectives or linear inequality constraints.
@@ -274,6 +260,7 @@ Input configuration file is a JSON file with the structures presented in `schema
 {
   "run_mode": "optimization",
   "=== SERVICE NAME ===": service item(s),
+  "simulation_config": { ... },
   "optimization_parameters": { ... }
 }
 ```
@@ -561,8 +548,26 @@ These settings control the execution and termination of the optimization process
 | `max_generations` | Integer        | `10`     | Maximum number of iterations for the algorithm.                                                                                                                                                                                                                                                                          |
 | `population_size` | Integer        | `10`     | Number of solution candidates to evaluate per generation.                                                                                                                                                                                                                                                                |
 | `max_stall_generations` | Integer        | `10`     | Generations to wait for improvement before early stopping.                                                                                                                                                                                                                                                               |
-| `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
 | `seed` | Integer \| null | `null`   | Random seed for the optimization algorithm. Set to an integer value to make runs reproducible. When `null`, results will vary between runs.                                                                                                                                                                              |
+
+### Simulation Config Section
+
+The `simulation_config` block defines the execution environment parameters, such as the number of parallel simulator instances and timeout thresholds for simulations.
+
+| Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
+| :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
+| `worker_simulation_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for a single simulation worker to complete its assigned simulation run before it is forcefully terminated. |
+| `server_job_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for the entire server batch job to complete completion. |
+
+Example:
+```json
+"simulation_config": {
+  "worker_simulation_timeout_seconds": 900,
+  "server_job_timeout_seconds": 3600,
+  "worker_count": 2
+}
+```
 
 #### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
 

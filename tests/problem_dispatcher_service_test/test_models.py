@@ -1,5 +1,3 @@
-import math
-
 import psutil
 import pytest
 from pydantic import ValidationError
@@ -125,7 +123,6 @@ def test_optimization_parameters_defaults():
     assert params.max_generations == 10
     assert params.population_size == 10
     assert params.max_stall_generations == 10
-    assert params.worker_count == 4
 
 
 # Tests for positive integer validation
@@ -176,31 +173,13 @@ def test_worker_count_exceeds_physical_cores():
         )
 
 
-def test_worker_count_within_limits():
-    physical_cores = psutil.cpu_count(logical=False)
-    max_allowed = max(1, math.floor(physical_cores / 2))
-
-    # Should not raise an error
-    params = OptimizationParameters(
-        worker_count=max_allowed, objectives={"metrics1": "minimize"}
-    )
-    assert params.worker_count == max_allowed
-
-    # Test with 1 worker (always valid)
-    params = OptimizationParameters(worker_count=1, objectives={"metrics1": "minimize"})
-    assert params.worker_count == 1
-
-
-# Tests for valid custom values
 def test_optimization_parameters_with_valid_custom_values():
     params = OptimizationParameters(
         max_generations=50,
         population_size=100,
         max_stall_generations=15,
-        worker_count=1,
         objectives={"metrics1": "minimize"},
     )
     assert params.max_generations == 50
     assert params.population_size == 100
     assert params.max_stall_generations == 15
-    assert params.worker_count == 1

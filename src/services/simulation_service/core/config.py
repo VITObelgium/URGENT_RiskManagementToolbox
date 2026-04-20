@@ -1,4 +1,4 @@
-from pydantic import AliasChoices, Field, computed_field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common.models import RunMode
@@ -21,16 +21,6 @@ class SimulationServiceConfig(BaseSettings):
     server_startup_timeout: float = Field(
         default=25.0, description="Timeout in seconds for server startup"
     )
-
-    server_job_timeout_seconds: int = Field(
-        default=3600,
-        validation_alias=AliasChoices("SERVER_JOB_TIMEOUT_SECONDS"),
-        description=(
-            "Server-side watchdog timeout in seconds for assigned jobs "
-            "(default: 1 hour)"
-        ),
-    )
-
     log_interval_seconds: int = Field(
         default=30,
         description="Interval in seconds for logging progress (default: 30 seconds)",

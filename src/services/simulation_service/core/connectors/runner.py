@@ -39,6 +39,7 @@ class SubprocessRunner:
 
     def __init__(
         self,
+        worker_simulation_timeout_seconds: int,
         repo_root_getter: Callable[[], Path],
         worker_id_getter: Callable[[], str | None],
         managed_subprocess_factory: Callable[..., ManagedSubprocess] | None = None,

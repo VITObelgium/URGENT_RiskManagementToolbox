@@ -52,12 +52,12 @@
     }
   ],
   "optimization_parameters": {
-		"objectives": {
-			"f1": "minimize",
-			"f2": "minimize"
-		},
-    "population_size" : 200,
-    "max_generations" : 300,
-    "max_stall_generations" : 301
+    "objectives": {
+      "f1": "minimize",
+      "f2": "minimize"
+    },
+    "population_size": 200,
+    "max_generations": 300,
+    "max_stall_generations": 301
   }
 }

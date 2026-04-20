@@ -12,7 +12,7 @@
           "y": 2900.0,
           "z": 0.0
         },
-      "perforations": {
+        "perforations": {
           "p1": {
             "start_md": 3250.0,
             "end_md": 3609.0
@@ -43,7 +43,7 @@
           "y": 1950.0,
           "z": 0.0
         },
-      "perforations": {
+        "perforations": {
           "p1": {
             "start_md": 3250.0,
             "end_md": 3609.0
@@ -65,10 +65,15 @@
     }
   ],
   "optimization_parameters": {
-    "objectives":{"Heat": "maximize"},
+    "objectives": {
+      "Heat": "maximize"
+    },
     "max_generations": 20,
     "population_size": 10,
-    "max_stall_generations": 10,
-    "worker_count": 2
-    }
+    "max_stall_generations": 10
+  },
+  "simulation_config": {
+    "worker_simulation_timeout_seconds": 900,
+    "worker_count": 4
+  }
 }

@@ -1,8 +1,3 @@
-from typing import TypeVar
-
-T = TypeVar("T")
-
-
 def ensure_not_none[T](
     obj: T | None, error_message: str = "Expected a non-None object"
 ) -> T:

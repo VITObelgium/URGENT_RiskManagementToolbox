@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import subprocess
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from collections.abc import Callable
 
 
 def _default_stream_reader(stream, lines: list[str], log_func: Callable) -> None:
@@ -55,12 +54,21 @@ class ManagedSubprocess:
         self.stdout_lines: list[str] = []
         self.stderr_lines: list[str] = []
 
-    def __enter__(self) -> subprocess.Popen:
+    def log_info(self, message: str) -> None:
+        self.logger_info_func(message)
+
+    def log_warning(self, message: str) -> None:
+        self.logger_warning_func(message)
+
+    def log_error(self, message: str) -> None:
+        self.logger_error_func(message)
+
+    def __enter__(self) -> ManagedSubprocess:
         try:
             command = " ".join(self.command_args)
         except Exception:
             command = str(self.command_args)
-        self.logger_info_func("Starting subprocess...")
+        self.logger_info_func(f"Starting subprocess: {command}")
         try:
             popen_kwargs: dict = {
                 "stdout": subprocess.PIPE,
@@ -104,28 +112,28 @@ class ManagedSubprocess:
 
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type, _exc_val, _exc_tb) -> None:
         if self.process is not None and self.process.poll() is None:
-            self.logger_warning_func(
+            self.log_warning(
                 f"Subprocess (PID {self.process.pid}) still running on context exit "
                 f"(exc={exc_type}). Terminating."
             )
             try:
                 self.process.terminate()
             except OSError as e:
-                self.logger_warning_func(f"terminate() failed: {e}")
+                self.log_warning(f"terminate() failed: {e}")
 
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.logger_warning_func(
+                self.log_warning(
                     f"Subprocess (PID {self.process.pid}) did not terminate "
                     "gracefully after 5 s — killing."
                 )
                 try:
                     self.process.kill()
                 except OSError as e:
-                    self.logger_warning_func(f"kill() failed: {e}")
+                    self.log_warning(f"kill() failed: {e}")
                 self.process.wait()
 
         if self._stdout_thread is not None:

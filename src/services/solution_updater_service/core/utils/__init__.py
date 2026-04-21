@@ -7,7 +7,6 @@ from services.solution_updater_service.core.utils.converters import (
     get_numpy_values,
     numpy_to_dict,
 )
-from services.solution_updater_service.core.utils.type_checks import ensure_not_none
 from services.solution_updater_service.core.utils.types import Idx, Param
 
 __all__ = [

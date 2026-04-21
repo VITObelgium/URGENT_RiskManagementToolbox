@@ -21,6 +21,16 @@ _SERVER_READY: asyncio.Event | None = None
 _HANDLER: "SimulationMessagingHandler | None" = None
 
 
+def _request_server_shutdown(timeout: float = 2.0) -> None:
+    shutdown_fn = globals().get("request_server_shutdown")
+    if callable(shutdown_fn):
+        shutdown_fn(timeout=timeout)
+    else:
+        logger.warning(
+            "request_server_shutdown not available; skipping server shutdown request"
+        )
+
+
 class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     def __init__(self) -> None:
         self._pending_jobs: asyncio.Queue[tuple[int, Any]] = asyncio.Queue()
@@ -153,12 +163,12 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                     logger.critical(
                         "Critical worker exception; aborting RPC. details=%s", details
                     )
-                    request_server_shutdown(timeout=2.0)
+                    _request_server_shutdown(timeout=2.0)
                     await context.abort(grpc.StatusCode.ABORTED, details)
                     return sm.Simulations(simulations=[])
 
-                job_fut = asyncio.ensure_future(self._job_event.wait())
-                shutdown_fut = asyncio.ensure_future(self._shutdown_event.wait())
+                job_fut = asyncio.create_task(self._job_event.wait())
+                shutdown_fut = asyncio.create_task(self._shutdown_event.wait())
                 try:
                     await asyncio.wait(
                         [job_fut, shutdown_fut],
@@ -337,7 +347,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             if self._critical_error is None:
                 self._critical_error = RuntimeError(msg)
             self._job_event.set()
-            request_server_shutdown(timeout=2.0)
+            _request_server_shutdown(timeout=2.0)
 
         self._cancel_timeout(job_id)
         self._completed_jobs[job_id] = request
@@ -454,10 +464,11 @@ def request_server_shutdown(timeout: float | None = 2.0) -> None:
         return
 
     if _HANDLER is not None:
+        handler = _HANDLER
 
         def _set_shutdown() -> None:
-            _HANDLER._shutdown_event.set()
-            _HANDLER._job_event.set()
+            handler._shutdown_event.set()
+            handler._job_event.set()
 
         try:
             _SERVER_LOOP.call_soon_threadsafe(_set_shutdown)
@@ -472,9 +483,7 @@ def request_server_shutdown(timeout: float | None = 2.0) -> None:
                     "request_server_shutdown: initiating graceful server.stop(grace=%.1f)",
                     shutdown_grace,
                 )
-                asyncio.ensure_future(
-                    _SERVER.stop(grace=shutdown_grace), loop=_SERVER_LOOP
-                )
+                asyncio.create_task(_SERVER.stop(grace=shutdown_grace))
         except Exception:
             logger.exception("Error while requesting server shutdown")
 

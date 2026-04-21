@@ -1,8 +1,3 @@
-"""
-NOTE:
-This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
-"""
-
 from __future__ import annotations
 
 import shutil
@@ -20,21 +15,7 @@ def static_workspace(work_dir: Path | None) -> Generator[Path | None, None, None
 
 @contextmanager
 def docker_job_workspace(template_dir: Path) -> Generator[Path, None, None]:
-    """
-    Context manager that creates an isolated workspace for a Docker simulation job.
-
-    Creates a temporary copy of the template directory, prepares it for execution,
-    yields the workspace path, and cleans up afterwards.
-
-    Args:
-        template_dir: Path to the template directory containing the simulation model
-
-    Yields:
-        Path to the prepared workspace directory
-
-    Raises:
-        FileNotFoundError: If template_dir doesn't exist
-    """
+    """Isolated per-job copy of template_dir; cleaned up on exit."""
     if not template_dir.exists():
         raise FileNotFoundError(
             f"Docker simulation template directory does not exist: {template_dir}"

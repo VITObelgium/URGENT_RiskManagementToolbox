@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections import deque
 from typing import Any
 from collections.abc import Mapping, Sequence
 
@@ -29,7 +30,6 @@ from services.solution_updater_service.core.reports import (
 from services.solution_updater_service.core.utils import (
     Idx,
     Param,
-    ensure_not_none,
     get_mapping,
     get_numpy_values,
     numpy_to_dict,
@@ -51,9 +51,6 @@ class _MapperState:
 
 
 class _Mapper:
-    def __init__(self) -> None:
-        self._state: _MapperState | None = None
-
     def __init__(self) -> None:
         self._state: _MapperState | None = None
 

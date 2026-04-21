@@ -1,5 +1,4 @@
 import logging
-import shutil
 import subprocess
 from logging import Logger
 from pathlib import Path
@@ -23,39 +22,38 @@ def _start_external_log_terminal(title: str, command: str) -> bool:
     """Best-effort external terminal launch for log tails.
     Returns True when a terminal was successfully opened, otherwise False.
     """
-
-    wt_path = shutil.which("wt.exe")
-    wsl_path = shutil.which("wsl.exe")
     try:
-        if wt_path and wsl_path:
-            subprocess.run(
-                [
-                    wt_path,
-                    "-w",
-                    str(TERMINAL_WINDOW_ID),
-                    "--title",
-                    title,
-                    wsl_path,
-                    "bash",
-                    "-lc",
-                    command,
-                ],
-                check=True,
-            )
-            return True
+        escaped_command = command.replace('"', '\\"')
+        wt_command = (
+            f"wt.exe -w {TERMINAL_WINDOW_ID} "
+            f'--title "{title}" '
+            f'wsl.exe bash -c "{escaped_command}"'
+        )
+        subprocess.run(wt_command, shell=True, check=True)
 
-        if shutil.which("xterm"):
+        return False
+
+    except (OSError, subprocess.SubprocessError) as wt_error:
+        module_logger.debug(
+            "Failed to open Windows Terminal: %s. Falling back to xterm.", wt_error
+        )
+
+        try:
             _start_external_xterm_log_terminal(title, command)
             return True
 
-        module_logger.info(
-            "External docker log console requested, but no supported terminal launcher was found. Continuing with file logging only."
-        )
-        return False
+        except OSError as xterm_error:
+            module_logger.warning(
+                "Failed to open both Windows Terminal and xterm: %s. Continuing with file logging only.",
+                xterm_error,
+            )
+            return False
+
     except Exception as e:
-        module_logger.warning(
-            "Failed to open external terminal for logging: %s. Continuing with file logging only.",
+        module_logger.error(
+            "Unexpected error launching terminal: %s. Continuing with file logging only.",
             e,
+            exc_info=True,
         )
         return False
 

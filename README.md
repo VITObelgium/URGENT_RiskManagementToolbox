@@ -1,5 +1,7 @@
+# URGENT Risk Management Toolbox
+
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/d25f9fd7-7610-4725-9a8e-bead501ce568" width="250">
+  <img src="assets/URGENT_RMT_LOGO.png" width="300">
 </p>
 
 <p align="center">
@@ -11,8 +13,6 @@
   <img alt="Pixi" src=https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square>
   <img alt="Status" src="https://img.shields.io/badge/Status-Development-pink">
 </p>
-
-# URGENT Risk Management Toolbox
 
 ## Table of Contents
 - [Introduction](#introduction)

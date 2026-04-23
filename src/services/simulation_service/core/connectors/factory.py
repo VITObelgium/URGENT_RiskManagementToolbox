@@ -1,15 +1,10 @@
-"""
-NOTE:
-This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
-"""
-
-from enum import Enum
+from enum import IntEnum
 
 from .common import ConnectorInterface
 from .open_darts import OpenDartsConnector
 
 
-class Simulator(Enum):
+class Simulator(IntEnum):
     # order must be the same as in .proto
     UNDEFINED = 0
     OPENDARTS = 1

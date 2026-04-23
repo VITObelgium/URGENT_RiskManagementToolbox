@@ -723,8 +723,5 @@ The Well design service will be use to determine the optimal wells placement and
 
 ```
 
-## Known Issues
- - RMT with docker backend cannot start simulation server
-
 ## Contact
 For issues or contributions, please open a GitHub issue or contact the maintainers.

@@ -3,8 +3,8 @@ from __future__ import annotations
 import inspect
 import logging
 from collections import deque
-from collections.abc import Mapping, Sequence
 from typing import Any
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
@@ -28,13 +28,12 @@ from services.solution_updater_service.core.reports import (
     ReportGenerator,
 )
 from services.solution_updater_service.core.utils import (
+    Idx,
+    Param,
     get_mapping,
     get_numpy_values,
     numpy_to_dict,
 )
-
-type Param = str
-type Idx = int
 
 
 class _MapperState:
@@ -55,6 +54,10 @@ class _Mapper:
     def __init__(self) -> None:
         self._state: _MapperState | None = None
 
+    def _state_keys(self, attr: str) -> list[str]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return list(getattr(m, attr).keys())
+
     @property
     def is_initialized(self) -> bool:
         return self._state is not None
@@ -65,8 +68,7 @@ class _Mapper:
 
     @property
     def parameters_name(self) -> list[str]:
-        m = ensure_not_none(self._state, "Mapper state is not initialized.")
-        return list(m.control_vector_mapping.keys())
+        return self._state_keys("control_vector_mapping")
 
     @property
     def results_name(self) -> list[str]:

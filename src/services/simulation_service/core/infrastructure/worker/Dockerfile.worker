@@ -1,4 +1,4 @@
-FROM python:3.10.12-slim AS builder
+FROM python:3.12.12-slim AS builder
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ COPY src/services/simulation_service/core/infrastructure/worker/worker_requireme
 RUN pip install --no-cache-dir uv && \
     uv pip install --no-cache-dir -r worker_requirements.txt --target /install
 
-FROM python:3.10.12-slim
+FROM python:3.12.12-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libgomp1 && \
@@ -16,17 +16,32 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY --from=builder /install /usr/local/lib/python3.10/site-packages
-COPY src/services/simulation_service/core/infrastructure/worker/src/ /app/services/simulation_service/core/infrastructure/worker/src/
-COPY src/services/simulation_service/core/infrastructure/generated/ /app/services/simulation_service/core/infrastructure/generated/
-COPY src/services/simulation_service/core/connectors/ /app/services/simulation_service/core/connectors/
-COPY src/services/simulation_service/core/utils/ /app/services/simulation_service/core/utils/
-# Copying again, so that the model main.py imports resolve
-COPY src/services/simulation_service/core/connectors/ /app/connectors/
+COPY --from=builder /install /usr/local/lib/python3.12/site-packages
+COPY pyproject.toml /app/pyproject.toml
 
-COPY src/logger /app/logger
+# Copy only necessary source files to minimize python dependency mismatch
+COPY src/logger/ /app/src/logger/
 
-ENV PYTHONPATH=/app:/app/generated
+COPY src/common/__init__.py /app/src/common/__init__.py
+COPY src/common/models/ /app/src/common/models/
+
+COPY src/services/__init__.py /app/src/services/__init__.py
+COPY src/services/simulation_service/__init__.py /app/src/services/simulation_service/__init__.py
+
+COPY src/services/simulation_service/core/__init__.py /app/src/services/simulation_service/core/__init__.py
+COPY src/services/simulation_service/core/config.py /app/src/services/simulation_service/core/config.py
+
+COPY src/services/simulation_service/core/connectors/ /app/src/services/simulation_service/core/connectors/
+
+COPY src/services/simulation_service/core/utils/__init__.py /app/src/services/simulation_service/core/utils/__init__.py
+COPY src/services/simulation_service/core/utils/converters.py /app/src/services/simulation_service/core/utils/converters.py
+
+COPY src/services/simulation_service/core/infrastructure/__init__.py /app/src/services/simulation_service/core/infrastructure/__init__.py
+COPY src/services/simulation_service/core/infrastructure/generated/ /app/src/services/simulation_service/core/infrastructure/generated/
+
+COPY src/services/simulation_service/core/infrastructure/worker/src/ /app/src/services/simulation_service/core/infrastructure/worker/src/
+
+ENV PYTHONPATH=/app/src
 ENV URGENT_LOGGER_PROFILE=worker
 
 ARG _SERVER_PORT
@@ -35,4 +50,4 @@ ARG _SERVER_HOST
 ENV SERVER_PORT=${_SERVER_PORT}
 ENV SERVER_HOST=${_SERVER_HOST}
 
-CMD ["python", "-u", "/app/services/simulation_service/core/infrastructure/worker/src/_simulation_worker_grpc.py"]
+CMD ["python", "-u", "/app/src/services/simulation_service/core/infrastructure/worker/src/_simulation_worker_grpc.py"]

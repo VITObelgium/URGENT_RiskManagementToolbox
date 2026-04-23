@@ -1,10 +1,13 @@
 import os
+import socket
 import subprocess
+import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
+from collections.abc import Generator
 
 from logger import get_logger, log_docker_logs
+from services.simulation_service.core.config import get_simulation_config
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
 
 logger = get_logger(__name__)
@@ -40,12 +43,49 @@ def core_directory() -> Generator[None, None, None]:
 
 class SimulationClusterManager:
     @staticmethod
+    def wait_for_server_readiness(timeout: float | None = None, interval: float = 0.25):
+        config = get_simulation_config()
+        deadline = time.time() + (
+            timeout if timeout is not None else config.server_startup_timeout
+        )
+        last_error: OSError | None = None
+
+        while time.time() < deadline:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(interval)
+                try:
+                    sock.connect((config.server_host, config.server_port))
+                    logger.info(
+                        "Docker simulation server is ready on %s:%s",
+                        config.server_host,
+                        config.server_port,
+                    )
+                    return
+                except OSError as exc:
+                    last_error = exc
+            time.sleep(interval)
+
+        detail = f" Last socket error: {last_error}" if last_error else ""
+        raise TimeoutError(
+            "Docker simulation cluster server did not become ready within "
+            f"{timeout if timeout is not None else config.server_startup_timeout} seconds."
+            f"{detail}"
+        )
+
+    @staticmethod
     def build_simulation_cluster_images() -> None:
         logger.info("Building simulation cluster images...")
         with core_directory():
             try:
                 result = subprocess.run(
-                    ["docker", "compose", "build", "--progress", "plain", "--force-rm"],
+                    [
+                        "docker",
+                        "compose",
+                        "--progress",
+                        "plain",
+                        "build",
+                        "--force-rm",
+                    ],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -79,7 +119,7 @@ class SimulationClusterManager:
         """
         Start the Docker-based simulation cluster with the specified worker count.
         """
-        logger.info(f"Starting the simulation cluster with {worker_count} workers...")
+        logger.info("Starting the simulation cluster with %d workers...", worker_count)
 
         with core_directory():
             try:
@@ -97,17 +137,14 @@ class SimulationClusterManager:
                     text=True,
                 )
                 logger.debug("Docker compose output:\n%s", result.stdout)
+                SimulationClusterManager.wait_for_server_readiness()
                 logger.info("Simulation cluster successfully started.")
                 log_docker_logs(logger)
-            except Exception as e:
-                logger.error(
-                    "Error starting the simulation cluster: %s",
-                    getattr(e, "stderr", str(e)),
-                )
-                raise
-
             except subprocess.CalledProcessError as e:
                 logger.error("Error starting the simulation cluster:\n%s", e.stderr)
+                raise
+            except Exception as e:
+                logger.error("Error starting the simulation cluster: %s", str(e))
                 raise
 
     @staticmethod

@@ -28,6 +28,11 @@ def cli():
         action="store_true",
         help="Flag to indicate whether to use Docker for simulations, or use multi-threading-based local execution. Default is False (i.e., use multi-threading).",
     )
+    parser.add_argument(
+        "--no-external-log-terminals",
+        action="store_true",
+        help="Disable opening extra terminal windows for Docker/server log tails and keep file logging only.",
+    )
 
     args = parser.parse_args()
 
@@ -36,6 +41,7 @@ def cli():
             config_file=args.config_file,
             model_file=args.model_file,
             use_docker=args.use_docker,
+            disable_external_log_terminals=args.no_external_log_terminals,
         )
     except Exception:
         exit(1)

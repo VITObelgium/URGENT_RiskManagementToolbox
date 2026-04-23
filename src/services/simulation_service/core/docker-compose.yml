@@ -16,7 +16,13 @@ services:
     environment:
       - OPEN_DARTS_RUNNER=${OPEN_DARTS_RUNNER:-docker}
     healthcheck:
-      test: [ "CMD", "nc", "-z", "localhost", "50051" ]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, socket; socket.create_connection(('127.0.0.1', int(os.environ.get('SERVER_PORT', '50051'))), timeout=5).close()",
+        ]
       interval: 10s
       timeout: 5s
       start_period: 0s

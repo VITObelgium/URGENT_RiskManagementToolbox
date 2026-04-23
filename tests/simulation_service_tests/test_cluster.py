@@ -40,7 +40,7 @@ class TestSimulationClusterManager:
         )
         SimulationClusterManager.build_simulation_cluster_images()
         mock_subprocess_run.assert_called_once_with(
-            ["docker", "compose", "build", "--progress", "plain", "--force-rm"],
+            ["docker", "compose", "--progress", "plain", "build", "--force-rm"],
             check=True,
             capture_output=True,
             text=True,
@@ -68,9 +68,14 @@ class TestSimulationClusterManager:
         self, mock_subprocess_run, mock_core_directory
     ):
         worker_count = 5
-        with patch(
-            "services.simulation_service.core.service.simulation_cluster_manager.log_docker_logs"
-        ) as mock_log_docker_logs:
+        with (
+            patch(
+                "services.simulation_service.core.service.simulation_cluster_manager.SimulationClusterManager.wait_for_server_readiness"
+            ) as mock_wait_for_server_readiness,
+            patch(
+                "services.simulation_service.core.service.simulation_cluster_manager.log_docker_logs"
+            ) as mock_log_docker_logs,
+        ):
             SimulationClusterManager.start_simulation_cluster(worker_count)
             mock_subprocess_run.assert_called_once_with(
                 [
@@ -85,6 +90,7 @@ class TestSimulationClusterManager:
                 capture_output=True,
                 text=True,
             )
+            mock_wait_for_server_readiness.assert_called_once()
             mock_log_docker_logs.assert_called_once()
 
     def test_start_simulation_cluster_failure(

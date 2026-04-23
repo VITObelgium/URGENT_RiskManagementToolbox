@@ -1,19 +1,85 @@
 import copy
 from collections.abc import MutableMapping, Sequence
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 
-from services.problem_dispatcher_service.core.models import LinearInequalities
 from services.problem_dispatcher_service.core.utils.keys import (
     DEFAULT_SEPARATOR,
     convert_key_separator,
     split_key,
 )
-from services.shared import Boundaries, ServiceType
+from services.shared import Boundaries, LinearInequalities, ServiceType
 from services.solution_updater_service.core.utils import (
     repair_against_linear_inequalities,
 )
+
+
+def is_bounds_dict(value: Any) -> bool:
+    """Check if a value is a Boundaries-like dict with 'lb' and 'ub' keys."""
+    return (
+        isinstance(value, dict) and "lb" in value and "ub" in value and len(value) == 2
+    )
+
+
+def validate_bounds(lb: float, ub: float, key: str = "") -> None:
+    """
+    Validate that lower bound is less than or equal to upper bound.
+
+    Args:
+        lb: Lower bound value
+        ub: Upper bound value
+        key: Optional key/path for error message context
+
+    Raises:
+        ValueError: If lb > ub
+    """
+    if lb > ub:
+        key_info = f" for '{key}'" if key else ""
+        raise ValueError(
+            f"Lower bound must be less than or equal to upper bound{key_info}. "
+            f"Got lb={lb}, ub={ub}"
+        )
+
+
+def validate_bounds_finite(lb: float, ub: float, key: str = "") -> None:
+    """
+    Validate that bounds are finite values.
+
+    Args:
+        lb: Lower bound value
+        ub: Upper bound value
+        key: Optional key/path for error message context
+
+    Raises:
+        ValueError: If bounds are not finite
+    """
+    if not (np.isfinite(lb) and np.isfinite(ub)):
+        key_info = f" for {key}" if key else ""
+        raise ValueError(
+            f"Invalid boundary{key_info}: bounds must be finite. Got lb={lb}, ub={ub}"
+        )
+
+
+def validate_bounds_recursive(bounds: dict[str, Any], path: str = "") -> None:
+    """
+    Recursively validate that all boundary dicts have lb <= ub.
+
+    Args:
+        bounds: Dictionary containing nested boundary definitions
+        path: Current path in the nested structure (for error messages)
+
+    Raises:
+        ValueError: If any boundary has lb > ub
+    """
+    for key, value in bounds.items():
+        current_path = f"{path}.{key}" if path else key
+        if isinstance(value, dict):
+            if is_bounds_dict(value):
+                validate_bounds(value["lb"], value["ub"], current_path)
+            else:
+                validate_bounds_recursive(value, current_path)
 
 
 def update_initial_state(
@@ -129,14 +195,8 @@ class CandidateGenerator:
         """
 
         for key, bnd in full_key_boundaries.items():
-            if bnd.lb > bnd.ub:
-                raise ValueError(
-                    f"Invalid boundary for {key}: lower bound ({bnd.lb}) > upper bound ({bnd.ub})"
-                )
-            if not (np.isfinite(bnd.lb) and np.isfinite(bnd.ub)):
-                raise ValueError(
-                    f"Invalid boundary for {key}: bounds must be finite. Got lb={bnd.lb}, ub={bnd.ub}"
-                )
+            validate_bounds(bnd.lb, bnd.ub, key)
+            validate_bounds_finite(bnd.lb, bnd.ub, key)
 
         user_initial_candidate = get_corresponding_initial_state_as_flat_dict(
             initial_state, list(full_key_boundaries.keys()), separator=separator

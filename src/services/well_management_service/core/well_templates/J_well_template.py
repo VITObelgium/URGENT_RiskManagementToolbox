@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import MutableMapping
+from collections.abc import MutableMapping
 
 from logger import get_logger
 from services.well_management_service.core.models import (

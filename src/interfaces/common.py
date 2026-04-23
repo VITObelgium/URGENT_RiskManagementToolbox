@@ -13,7 +13,10 @@ from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
 
 def risk_management(
-    config_file: str, model_file: str, use_docker: bool = False
+    config_file: str,
+    model_file: str,
+    use_docker: bool = False,
+    disable_external_log_terminals: bool = False,
 ) -> tuple[float | npt.NDArray[np.float64], dict[str, Any]] | None:
     """
     Run risk management with specified parameters without using argparse.
@@ -22,10 +25,15 @@ def risk_management(
         config_file (str): Path to the configuration file (JSON format) for risk management.
         model_file (str): Path to the simulation model archive file.
         use_docker (bool): Flag to indicate whether to use Docker for simulations. Default is False.
+        disable_external_log_terminals (bool): Disable opening extra terminal windows for log tails.
     """
     configure_logger()
     logger = get_logger(__name__)
     logger.info("Risk management toolbox started programmatically.")
+
+    if disable_external_log_terminals:
+        os.environ["URGENT_EXTERNAL_DOCKER_LOG_CONSOLE"] = "false"
+        logger.info("External log terminals disabled; using file logging only.")
 
     if use_docker:
         logger.info("Using Docker for simulations.")
@@ -36,7 +44,7 @@ def risk_management(
 
     # Load the problem_definition from the JSON file
     try:
-        with open(config_file, "r") as file:
+        with open(config_file) as file:
             problem_definition = ProblemDispatcherDefinition.model_validate(
                 json.load(file)
             )

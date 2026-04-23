@@ -7,7 +7,7 @@ from services.solution_updater_service.core.utils.converters import (
     get_numpy_values,
     numpy_to_dict,
 )
-
+from services.solution_updater_service.core.utils.types import Idx, Param
 
 __all__ = [
     "get_mapping",
@@ -15,4 +15,6 @@ __all__ = [
     "numpy_to_dict",
     "reflect_and_clip",
     "repair_against_linear_inequalities",
+    "Param",
+    "Idx",
 ]

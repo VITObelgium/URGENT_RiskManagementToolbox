@@ -1,3 +1,4 @@
+import logging
 import subprocess
 from logging import Logger
 from pathlib import Path
@@ -9,15 +10,18 @@ WORKER_PREFIX = "simulation-worker"
 SIM_SERVICE_NAME = "simulation-server"
 TERMINAL_WINDOW_ID = 999  # big number to avoid conflicts with user terminals
 
+module_logger = logging.getLogger(__name__)
+
 
 def _start_external_xterm_log_terminal(title: str, command: str) -> None:
     """Start an xterm window with the specified log command."""
     subprocess.Popen(["xterm", "-hold", "-T", title, "-e", "bash", "-c", command])
 
 
-def _start_external_log_terminal(title: str, command: str) -> None:
-    """Start an external terminal session with the specified log command."""
-
+def _start_external_log_terminal(title: str, command: str) -> bool:
+    """Best-effort external terminal launch for log tails.
+    Returns True when a terminal was successfully opened, otherwise False.
+    """
     try:
         escaped_command = command.replace('"', '\\"')
         wt_command = (
@@ -27,11 +31,31 @@ def _start_external_log_terminal(title: str, command: str) -> None:
         )
         subprocess.run(wt_command, shell=True, check=True)
 
-    except (OSError, subprocess.SubprocessError):
-        _start_external_xterm_log_terminal(title, command)
+        return False
+
+    except (OSError, subprocess.SubprocessError) as wt_error:
+        module_logger.debug(
+            "Failed to open Windows Terminal: %s. Falling back to xterm.", wt_error
+        )
+
+        try:
+            _start_external_xterm_log_terminal(title, command)
+            return True
+
+        except OSError as xterm_error:
+            module_logger.warning(
+                "Failed to open both Windows Terminal and xterm: %s. Continuing with file logging only.",
+                xterm_error,
+            )
+            return False
 
     except Exception as e:
-        raise RuntimeError(f"Failed to open external terminal for logging: {e}") from e
+        module_logger.error(
+            "Unexpected error launching terminal: %s. Continuing with file logging only.",
+            e,
+            exc_info=True,
+        )
+        return False
 
 
 def _start_file_logging(command: str) -> None:
@@ -78,13 +102,17 @@ def log_docker_logs(logger: Logger, disperse_worker_logs: bool = True) -> None:
                     f"docker logs --tail {TAIL_LINES} --follow {worker_service}"
                 )
 
-                if get_external_console_logging():
-                    _start_external_log_terminal(
-                        f"Docker Logs: {worker_service}",
-                        f"{worker_cmd} | stdbuf -oL -eL tee '{worker_log_path}'",
-                    )
+                if get_external_console_logging() and _start_external_log_terminal(
+                    f"Docker Logs: {worker_service}",
+                    f"{worker_cmd} | stdbuf -oL -eL tee '{worker_log_path}'",
+                ):
                     logger.info(
                         f"Opened external terminal for {worker_service} logs (also logging to {worker_log_path})."
+                    )
+                elif get_external_console_logging():
+                    logger.info(
+                        "External terminal logging unavailable for %s; continuing with file logging only.",
+                        worker_service,
                     )
 
                 _start_file_logging(f"{worker_cmd} > '{worker_log_path}'")
@@ -98,13 +126,16 @@ def log_docker_logs(logger: Logger, disperse_worker_logs: bool = True) -> None:
             logger.info(f"Aggregating logs for worker services: {worker_services}")
             worker_cmd = f"docker compose logs --tail {TAIL_LINES} --follow {' '.join(worker_services)}"
 
-            if get_external_console_logging():
-                _start_external_log_terminal(
-                    "Docker Worker Logs",
-                    f"{worker_cmd} | stdbuf -oL -eL tee '{worker_log_path}'",
-                )
+            if get_external_console_logging() and _start_external_log_terminal(
+                "Docker Worker Logs",
+                f"{worker_cmd} | stdbuf -oL -eL tee '{worker_log_path}'",
+            ):
                 logger.info(
                     f"Opened external terminal for aggregated worker logs (also logging to {worker_log_path})."
+                )
+            elif get_external_console_logging():
+                logger.info(
+                    "External terminal logging unavailable for aggregated worker logs; continuing with file logging only."
                 )
 
             _start_file_logging(f"{worker_cmd} > '{worker_log_path}'")
@@ -113,13 +144,16 @@ def log_docker_logs(logger: Logger, disperse_worker_logs: bool = True) -> None:
     if SIM_SERVICE_NAME in services:
         sim_cmd = f"docker logs --tail {TAIL_LINES} --follow {SIM_SERVICE_NAME}"
 
-        if get_external_console_logging():
-            _start_external_log_terminal(
-                "Docker Simulation Server Logs",
-                f"{sim_cmd} | stdbuf -oL -eL tee '{sim_log_path}'",
-            )
+        if get_external_console_logging() and _start_external_log_terminal(
+            "Docker Simulation Server Logs",
+            f"{sim_cmd} | stdbuf -oL -eL tee '{sim_log_path}'",
+        ):
             logger.info(
                 f"Opened external terminal for simulation logs (also logging to {sim_log_path})."
+            )
+        elif get_external_console_logging():
+            logger.info(
+                "External terminal logging unavailable for the simulation server; continuing with file logging only."
             )
 
         _start_file_logging(f"{sim_cmd} > '{sim_log_path}'")

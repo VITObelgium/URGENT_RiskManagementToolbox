@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterator
+from collections.abc import Iterator
 
 from services.well_management_service.core import models
 

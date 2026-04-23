@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import io
-from typing import Callable
+from collections.abc import Callable
 
 
 def stream_reader(

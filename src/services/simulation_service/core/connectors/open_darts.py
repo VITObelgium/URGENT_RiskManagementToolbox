@@ -1,7 +1,4 @@
-"""
-NOTE:
-This module must be aligned with python 3.10 syntax, as open-darts whl requires it.
-"""
+from __future__ import annotations
 
 import json
 import os
@@ -10,7 +7,8 @@ import sys
 import threading
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -104,7 +102,7 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
         json_config_str = sys.argv[1]
         if os.path.isfile(json_config_str):
             try:
-                with open(json_config_str, "r") as f:
+                with open(json_config_str) as f:
                     config = json.load(f)
                 if isinstance(config, str):
                     config = json.loads(config)
@@ -312,6 +310,9 @@ class OpenDartsConnector(ConnectorInterface):
                 return name.split("-", 1)[1]
         except Exception:
             raise RuntimeError("Failed to parse current thread name.")
+        env_worker_id = os.environ.get("SIM_WORKER_ID")
+        if env_worker_id:
+            return env_worker_id
         return None
 
 

@@ -1,10 +1,15 @@
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from services.problem_dispatcher_service.core.models import (
     ParameterBoundaries,
     WellDesignItem,
 )
-from services.problem_dispatcher_service.core.utils import DEFAULT_SEPARATOR, join_key
+from services.problem_dispatcher_service.core.utils import (
+    DEFAULT_SEPARATOR,
+    is_bounds_dict,
+    join_key,
+    validate_bounds,
+)
 from services.shared import Boundaries, ServiceType
 
 
@@ -111,10 +116,20 @@ def _flatten_optimization_parameters(
         if isinstance(value, Boundaries):
             flat[full_key] = (value.lb, value.ub)
         elif isinstance(value, dict):
-            nested_flat = _flatten_optimization_parameters(value, full_key, separator)
-            flat.update(nested_flat)
+            # Check if dict represents a Boundaries object (has lb and ub keys)
+            if is_bounds_dict(value):
+                lb = cast(float, value["lb"])
+                ub = cast(float, value["ub"])
+                validate_bounds(lb, ub, full_key)
+                flat[full_key] = (lb, ub)
+            else:
+                # Nested parameter boundaries
+                nested_flat = _flatten_optimization_parameters(
+                    value, full_key, separator
+                )
+                flat.update(nested_flat)
         else:
             raise TypeError(
-                f"Invalid type for key '{key}': expected VariableBnd or dict, got {type(value)}"
+                f"Invalid type for key '{key}': expected Boundaries or dict, got {type(value)}"
             )
     return flat

@@ -110,7 +110,6 @@ class PSOEngine(OptimizationEngineInterface):
         b: npt.NDArray[np.float64] | None = None,
         iteration_ratio: float | None = None,
     ) -> npt.NDArray[np.float64]:
-
         is_multi_objective = len(indexed_objectives_strategy) > 1
 
         if A is not None and b is not None:

@@ -456,6 +456,7 @@ log/
 
 # orchestration files
 orchestration_files/
+orchestration_files_*/
 # pixi environments
 .pixi/*
 !.pixi/config.toml

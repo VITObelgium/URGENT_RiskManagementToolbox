@@ -1,5 +1,6 @@
 import os
 import uuid
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -8,6 +9,10 @@ import numpy.typing as npt
 
 from common.models import RunMode
 from logger import get_logger
+from orchestration.risk_management_service.core.service.checkpoint import (
+    checkpoint_filename,
+    save_checkpoint,
+)
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
@@ -38,6 +43,7 @@ logger = get_logger(__name__)
 def run_risk_management(
     problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
+    checkpoint: dict[str, Any] | None = None,
 ) -> tuple[npt.NDArray[np.float64], Any] | None:
     """
     Main entry point for running risk management.
@@ -127,6 +133,19 @@ def run_risk_management(
             )
 
             next_solutions = None
+            if checkpoint is not None:
+                logger.info("Restoring optimizer state from checkpoint.")
+                next_solutions = solution_updater.restore_checkpoint_state(checkpoint)
+                logger.info(
+                    f"Resuming from generation {solution_updater.loop_controller.current_generation}."
+                )
+
+            checkpoint_interval = (
+                problem_definition.simulation_config.checkpoint_interval
+            )
+            checkpoint_dir = Path(problem_definition.simulation_config.checkpoint_path)
+            checkpoint_file = checkpoint_dir / checkpoint_filename(run_id)
+
             loop_controller = solution_updater.loop_controller
 
             while loop_controller.running():
@@ -178,10 +197,24 @@ def run_risk_management(
 
                 loop_controller.increment_generation()
 
+                if loop_controller.current_generation % checkpoint_interval == 0:
+                    try:
+                        state = solution_updater.get_checkpoint_state(next_solutions)
+                        save_checkpoint(checkpoint_file, problem_definition, state)
+                        logger.info(
+                            f"Checkpoint saved at generation {loop_controller.current_generation}."
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to save checkpoint: {e}")
+
             logger.info(
                 f"Loop controller stopped at generation {loop_controller.current_generation}. "
                 f"Info: {loop_controller.info}"
             )
+
+            if checkpoint_file.exists():
+                checkpoint_file.unlink()
+                logger.info("Checkpoint cleared after successful completion.")
 
         except KeyboardInterrupt:
             logger.warning("Risk management process interrupted by user.")

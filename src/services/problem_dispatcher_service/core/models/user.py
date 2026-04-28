@@ -71,7 +71,7 @@ class SimulationConfig(BaseModel, extra="forbid"):
     worker_simulation_timeout_seconds: PositiveInt = Field(default=900)
     worker_count: PositiveInt = Field(default=4, ge=1)
     checkpoint_interval: PositiveInt = Field(default=5, ge=1)
-    checkpoint_path: DirectoryPath = Field(default=Path("log"))
+    checkpoint_path: DirectoryPath = Field(default=Path("log").resolve())
 
     @field_validator("checkpoint_path", mode="before")
     @classmethod

@@ -130,6 +130,33 @@ class _Mapper:
             for row in parameters2d
         ]
 
+    def positions_from_control_vectors(
+        self, control_vectors: list[ControlVector]
+    ) -> npt.NDArray[np.float64]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        result = np.empty(
+            (len(control_vectors), m.control_vector_length), dtype=np.float64
+        )
+        for i, cv in enumerate(control_vectors):
+            for key, idx in m.control_vector_mapping.items():
+                result[i, idx] = cv.items[key]
+        return result
+
+    def get_checkpoint_state(self) -> dict[str, Any]:
+        m = ensure_not_none(self._state, "Mapper state is not initialized.")
+        return {
+            "control_vector_mapping": dict(m.control_vector_mapping),
+            "results_mapping": dict(m.results_mapping),
+            "population_size": m.population_size,
+        }
+
+    def restore_checkpoint_state(self, state: dict[str, Any]) -> None:
+        self._state = _MapperState(
+            control_vector_mapping=state["control_vector_mapping"],
+            results_mapping=state["results_mapping"],
+            population_size=state["population_size"],
+        )
+
     def get_variables_lb_and_ub_boundary(
         self, boundaries: dict[str, Boundaries]
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -305,6 +332,36 @@ class _SolutionUpdaterServiceLoopController:
     def _is_max_stall_reached(self) -> bool:
         return self._stall_left <= 0
 
+    def get_checkpoint_state(self) -> dict[str, Any]:
+        min_hist = list(self._pareto_min_history)
+        mean_hist = list(self._pareto_mean_history)
+        return {
+            "current_generation": self._current_generation,
+            "stall_left": self._stall_left,
+            "last_best": self._last_run_global_best_result,
+            "pareto_min_history": np.array(min_hist, dtype=np.float64)
+            if min_hist
+            else np.empty((0,), dtype=np.float64),
+            "pareto_mean_history": np.array(mean_hist, dtype=np.float64)
+            if mean_hist
+            else np.empty((0,), dtype=np.float64),
+        }
+
+    def restore_checkpoint_state(self, state: dict[str, Any]) -> None:
+        self._current_generation = state["current_generation"]
+        self._stall_left = state["stall_left"]
+        self._last_run_global_best_result = state["last_best"]
+        self._pareto_min_history.clear()
+        self._pareto_mean_history.clear()
+        min_hist: npt.NDArray[np.float64] = state["pareto_min_history"]
+        mean_hist: npt.NDArray[np.float64] = state["pareto_mean_history"]
+        if min_hist.ndim == 2:
+            for row in min_hist:
+                self._pareto_min_history.append(row)
+        if mean_hist.ndim == 2:
+            for row in mean_hist:
+                self._pareto_mean_history.append(row)
+
 
 class SolutionUpdaterService:
     def __init__(
@@ -380,6 +437,26 @@ class SolutionUpdaterService:
             return self._mapper.to_control_vectors(raw)
 
         return self._mapper.to_control_vectors(raw[np.newaxis, :])[0]
+
+    def get_checkpoint_state(
+        self, next_solutions: list[ControlVector]
+    ) -> dict[str, Any]:
+        """Return serialisable state for checkpointing."""
+        return {
+            "pso_state": self._engine.get_checkpoint_state(),
+            "mapper_state": self._mapper.get_checkpoint_state(),
+            "loop_controller_state": self.loop_controller.get_checkpoint_state(),
+            "next_positions": self._mapper.positions_from_control_vectors(
+                next_solutions
+            ),
+        }
+
+    def restore_checkpoint_state(self, state: dict[str, Any]) -> list[ControlVector]:
+        """Restore optimizer state and return next particle positions as control vectors."""
+        self._engine.restore_checkpoint_state(state["pso_state"])
+        self._mapper.restore_checkpoint_state(state["mapper_state"])
+        self.loop_controller.restore_checkpoint_state(state["loop_controller_state"])
+        return self._mapper.to_control_vectors(state["next_positions"])
 
     def process_request(
         self, request_dict: dict[str, Any]

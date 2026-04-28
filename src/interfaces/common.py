@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -9,6 +10,9 @@ import numpy.typing as npt
 from logger import configure_logger, get_logger
 from logger.utils import zip_results
 from orchestration.risk_management_service import run_risk_management
+from orchestration.risk_management_service.core.service.checkpoint import (
+    load_checkpoint,
+)
 from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
 
@@ -42,16 +46,20 @@ def risk_management(
         logger.info("Using multi-threading for simulations.")
         os.environ["OPEN_DARTS_RUNNER"] = "thread"
 
-    # Load the problem_definition from the JSON file
+    checkpoint: dict[str, Any] | None = None
     try:
-        with open(config_file) as file:
-            problem_definition = ProblemDispatcherDefinition.model_validate(
-                json.load(file)
-            )
-
+        if config_file.endswith(".npz"):
+            logger.info("Checkpoint file detected; resuming optimization.")
+            checkpoint_data = load_checkpoint(Path(config_file))
+            problem_definition = checkpoint_data["config"]
+            checkpoint = checkpoint_data
+        else:
+            with open(config_file) as file:
+                problem_definition = ProblemDispatcherDefinition.model_validate(
+                    json.load(file)
+                )
     except Exception as e:
         logger.error(f"Failed to load configuration file: {e}")
-        # Always attempt to zip (even on failure)
         try:
             zip_path = zip_results()
             logger.info("Created results archive: %s", zip_path)
@@ -64,6 +72,7 @@ def risk_management(
         result = run_risk_management(
             problem_definition=problem_definition,
             simulation_model_archive=model_file,
+            checkpoint=checkpoint,
         )
         logger.info("Risk management process completed successfully.")
         return result

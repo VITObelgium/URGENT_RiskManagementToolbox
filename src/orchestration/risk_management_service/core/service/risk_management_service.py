@@ -1,4 +1,5 @@
 import os
+import uuid
 from typing import Any
 
 import grpc
@@ -50,7 +51,10 @@ def run_risk_management(
         Multi-objective:  (pareto_results_array, list[nested_control_vector_dict])
         None on evaluation mode or keyboard interrupt.
     """
-    logger.info("Starting risk management process...")
+    run_id = uuid.uuid4().hex[:8]
+    os.environ["URGENT_RUN_ID"] = run_id
+
+    logger.info("Starting risk management process (run_id=%s)...", run_id)
     logger.debug(
         "Input problem definition: %s, simulation_model_archive: %s",
         problem_definition,

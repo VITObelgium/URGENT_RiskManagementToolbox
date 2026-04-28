@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -94,7 +95,9 @@ def configure_worker_logger(worker_id: int) -> Path:
         return _pytest_log_path()
 
     log_dir = _ensure_log_dir()
-    file_path = log_dir / f"simulation_worker_{worker_id}.log"
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    run_suffix = f"_{run_id}" if run_id else ""
+    file_path = log_dir / f"simulation_worker{run_suffix}_{worker_id}.log"
 
     thread_filter = _ThreadNameFilter(f"worker-{worker_id}")
     tw_logger = logging.getLogger("threading-worker")
@@ -131,7 +134,9 @@ def configure_server_logger() -> Path:
         return _pytest_log_path()
 
     log_dir = _ensure_log_dir()
-    file_path = log_dir / "simulation_server.log"
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    run_suffix = f"_{run_id}" if run_id else ""
+    file_path = log_dir / f"simulation_server{run_suffix}.log"
 
     thread_filter = _ThreadNameFilter("server")
     ts_logger = logging.getLogger("threading-server")

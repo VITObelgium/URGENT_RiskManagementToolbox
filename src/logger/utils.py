@@ -303,6 +303,10 @@ def _ensure_logfile_path() -> str | None:
         file_name = (
             datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
         )
+    elif "pytest" not in sys.modules:
+        run_id = os.environ.get("URGENT_RUN_ID", "")
+        if run_id:
+            file_name = f"{run_id}_main_urgent_log.log"
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         full_path = log_dir / file_name

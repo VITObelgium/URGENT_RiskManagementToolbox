@@ -298,7 +298,7 @@ class OpenDartsConnector(ConnectorInterface):
     def _repo_root() -> Path:
         here = Path(__file__).resolve()
         for parent in here.parents:
-            if (parent / "orchestration_files").exists():
+            if (parent / "pyproject.toml").exists():
                 return parent
         raise RuntimeError("Failed to locate repository root directory.")
 

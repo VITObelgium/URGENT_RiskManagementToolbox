@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shutil
 import signal
 import socket
@@ -246,13 +247,14 @@ class ProcessClusterManager(ClusterManager):
         and does not mutate any shared instance variables, making it safe for
         concurrent execution.
         """
+        run_id = os.environ.get("URGENT_RUN_ID", "default")
         scripts_path = Path(__file__).parent
+        repo_root = scripts_path.parent.parent.parent.parent.parent
         target_dir = (
-            scripts_path.parent.parent.parent.parent.parent
-            / f"orchestration_files/.worker_{worker_id}_temp"
+            repo_root / f"orchestration_files_{run_id}" / f".worker_{worker_id}_temp"
         )
         connectors_dir = scripts_path.parent / "connectors"
-        logger_dir = target_dir.parent.parent / "src" / "logger"
+        logger_dir = repo_root / "src" / "logger"
         logger.info("Copying worker dependencies to %s", target_dir)
 
         try:
@@ -284,10 +286,12 @@ class ProcessClusterManager(ClusterManager):
             _replace_tree(src, target_dir / dst_name)
 
     def _cleanup_worker_directories(self) -> None:
-        """Remove all per-worker temp directories in parallel."""
+        """Remove all per-worker temp directories for this run in parallel."""
+        run_id = os.environ.get("URGENT_RUN_ID", "default")
         scripts_path = Path(__file__).parent
         orchestration_files = (
-            scripts_path.parent.parent.parent.parent.parent / "orchestration_files"
+            scripts_path.parent.parent.parent.parent.parent
+            / f"orchestration_files_{run_id}"
         )
 
         if not orchestration_files.exists():

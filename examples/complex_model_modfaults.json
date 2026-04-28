@@ -74,6 +74,6 @@
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 900,
-    "worker_count": 8
+    "worker_count": 4
   }
 }

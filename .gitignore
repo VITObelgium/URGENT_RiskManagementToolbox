@@ -462,3 +462,11 @@ orchestration_files/
 pixi.lock
 # lsp pyright custom config
 pyrightconfig.json
+
+# slurm output and error files
+*.out
+*.err
+
+# apptainer files
+rmt.sif
+RMT.def

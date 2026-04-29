@@ -2,6 +2,8 @@
 ## Production model setup
 ###############
 
+import os
+
 # import RMT connector for DARTS
 from connectors.open_darts import OpenDartsConnector
 
@@ -342,6 +344,8 @@ class ProductionModel(DartsModel):
         rho,
         bc_params=None,
         solver_params=None,
+        cache_dir=None,
+        rebuild_cache=False,
     ):
         """
         Initialize FEM geomechanics backend.
@@ -399,7 +403,18 @@ class ProductionModel(DartsModel):
             bc_params=bc_params or {},
             solver_params=merged_solver_params,
         )
-        self.fem_geo.setup()
+        #self.fem_geo.setup()
+        if cache_dir and os.path.exists(os.path.join(cache_dir, "A_ff.npz")) and not rebuild_cache:
+            print(f"[FEM] Loading cached FEM setup from {cache_dir}")
+            self.fem_geo.load_cache(cache_dir)
+        else:
+            print("[FEM] Building FEM setup from scratch")
+            self.fem_geo.setup()
+
+        if cache_dir:
+            print(f"[FEM] Saving FEM setup cache to {cache_dir}")
+            self.fem_geo.save_cache(cache_dir)
+
 
     # custom vtk output
     def initialize_vtk_data(self,P=None, T=None, F=None):

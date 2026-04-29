@@ -5,6 +5,12 @@
 import os
 import shutil
 
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+
 # import other libraries
 import numpy as np
 import pandas as pd
@@ -100,17 +106,30 @@ def run_darts(well_data) -> None:
     # Initialize fem geomechanics
     #print_mem('In geomechanics init')
     print("Initializing FEM geomechanics module...")
+    # m.init_fem_geomech(
+    #     fault_df=fault_stress_df,
+    #     P0=initcond_df['P'].values,
+    #     T0=initcond_df['T'].values,
+    #     E=9e9,
+    #     nu=0.25,
+    #     alpha_b=1.0,
+    #     alpha_T=1e-5,
+    #     rho=1300.0,
+    #     solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
+    # )
     m.init_fem_geomech(
         fault_df=fault_stress_df,
-        P0=initcond_df['P'].values,
-        T0=initcond_df['T'].values,
+        P0=initcond_df["P"].values,
+        T0=initcond_df["T"].values,
         E=9e9,
         nu=0.25,
         alpha_b=1.0,
         alpha_T=1e-5,
         rho=1300.0,
         solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
-    )
+        cache_dir="input/fem_cache_PROD",
+        rebuild_cache=False,
+        )
     print("FEM geomechanics initialization completed.")
     print("Setting up initial VTK... ")
     m.initialize_vtk_data(P=initcond_df['P'].values, T=initcond_df['T'].values, F=fault_df['ID'].values)  # update cell_data for vtk output with initial conditions
@@ -190,10 +209,10 @@ def run_darts(well_data) -> None:
 
     # # Get and writting well vectors
     td = pd.DataFrame.from_dict(m.physics.engine.time_data)
-    # address = out_root + os.sep + "well_data_volumetric_mass_control.xlsx"
-    # writer = pd.ExcelWriter(address)
-    # td.to_excel(excel_writer=writer, sheet_name="Sheet1")
-    # writer.close()
+    address = out_root + os.sep + "well_data_volumetric_mass_control.xlsx"
+    writer = pd.ExcelWriter(address)
+    td.to_excel(excel_writer=writer, sheet_name="Sheet1")
+    writer.close()
 
     ## Cumulative heat production (MWy)
     Heat = func_heat.cumulative_heat(

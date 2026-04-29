@@ -14,6 +14,7 @@ from element_hex8 import (
     GetElementStiffness,
 )
 from scipy.sparse import coo_matrix
+from scipy.sparse import save_npz, load_npz
 from scipy.sparse.linalg import LinearOperator, cg
 
 # global variables 
@@ -293,6 +294,74 @@ class FEMGeomechanics:
         gc.collect()
         
         return self
+    
+    def save_cache(self, cache_dir):
+        os.makedirs(cache_dir, exist_ok=True)
+
+        save_npz(os.path.join(cache_dir, "A_ff.npz"), self.A_ff)
+        save_npz(os.path.join(cache_dir, "Fp_free.npz"), self.Fp_free)
+        save_npz(os.path.join(cache_dir, "Ft_free.npz"), self.Ft_free)
+
+        np.savez(
+            os.path.join(cache_dir, "fem_arrays.npz"),
+            free_dofs=self.free_dofs,
+            fixed_dofs=self.fixed_dofs,
+            sizes=self.sizes,
+            fault_e=self.fault_e,
+            fault_normals=self.fault_normals,
+            fault_edofs=self.fault_edofs,
+            fault_B=self.fault_B,
+            fault_D=self.fault_D,
+            fault_alpha_T=self.fault_alpha_T,
+            fault_SV=self.fault_SV,
+            fault_SH=self.fault_SH,
+            fault_Sh=self.fault_Sh,
+            P0=self.P0,
+            T0=self.T0,
+        )
+
+
+    def load_cache(self, cache_dir):
+        self.numelem = self.hex_conn.shape[0]
+        nnodes = self.pts.shape[0]
+        self.numeqns = nnodes * self.ndof
+
+        self.A_ff = load_npz(os.path.join(cache_dir, "A_ff.npz"))
+        self.Fp_free = load_npz(os.path.join(cache_dir, "Fp_free.npz"))
+        self.Ft_free = load_npz(os.path.join(cache_dir, "Ft_free.npz"))
+
+        data = np.load(os.path.join(cache_dir, "fem_arrays.npz"), allow_pickle=True)
+
+        self.free_dofs = data["free_dofs"]
+        self.fixed_dofs = data["fixed_dofs"]
+        self.sizes = data["sizes"]
+
+        self.fault_e = data["fault_e"]
+        self.fault_normals = data["fault_normals"]
+        self.fault_edofs = data["fault_edofs"]
+        self.fault_B = data["fault_B"]
+        self.fault_D = data["fault_D"]
+        self.fault_alpha_T = data["fault_alpha_T"]
+
+        self.fault_SV = data["fault_SV"]
+        self.fault_SH = data["fault_SH"]
+        self.fault_Sh = data["fault_Sh"]
+
+        self.P0 = data["P0"]
+        self.T0 = data["T0"]
+
+        diag = self.A_ff.diagonal()
+        M_inv_diag = 1.0 / diag
+
+        def M_inv(x):
+            return M_inv_diag * x
+
+        self.M = LinearOperator(self.A_ff.shape, matvec=M_inv)
+
+        self._u_free_prev = None
+        self._sigma_init_cache = {}
+
+        return self   
 
     def _get_sigma_init_global(self, orientation_degrees: float) -> np.ndarray:
         """Return cached initial effective stress tensors on faults in global coordinates."""

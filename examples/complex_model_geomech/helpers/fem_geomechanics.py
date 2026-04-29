@@ -1,11 +1,15 @@
 # fem_geomechanics.py
 from __future__ import annotations
 
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+
 import gc
 
 import numpy as np
-from fem_helpers.boundaries import BC_dict, SetDirichletBCs, get_boundary_nodelists
-from fem_helpers.element_hex8 import (
+from boundaries import BC_dict, SetDirichletBCs, get_boundary_nodelists
+from element_hex8 import (
     GetElementForces,
     GetElementStiffness,
 )

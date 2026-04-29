@@ -19,7 +19,7 @@ redirect_darts_output("run_urgent.log")
 import meshio
 import numpy as np
 import pandas as pd
-from fem_geomechanics import FEMGeomechanics
+from examples.complex_model_geomech.helpers.fem_geomechanics import FEMGeomechanics
 from iapws.iapws95 import IAPWS95
 
 import reservoir_modelling.helpers.helper_modelling as func

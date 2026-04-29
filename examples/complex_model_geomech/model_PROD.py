@@ -16,6 +16,7 @@ redirect_darts_output("run_urgent.log")
 
 # import other libraries
 import helpers.helper_modelling as func
+from helpers.fem_geomechanics import FEMGeomechanics
 import meshio
 import numpy as np
 import pandas as pd
@@ -91,9 +92,10 @@ class ProductionModel(DartsModel):
 
     ## Structured reservoir setup
     def set_reservoir(self):
-        mesh = meshio.read(self.mesh_file)
+        self.mesh = meshio.read(self.mesh_file)
         blk = 0  # hexahedron cell block index
-        pts = mesh.points
+        pts = self.mesh.points
+        self.pts = pts
 
         # Structured axes from input mesh
         x_edges = np.unique(pts[:, 0])
@@ -122,10 +124,11 @@ class ProductionModel(DartsModel):
         z_cent = 0.5 * (z_edges[:-1] + z_edges[1:])
 
         # geometry for initial conditions (centroids)
-        hex_conn = mesh.cells[blk].data
-        cell_pts = pts[hex_conn]
+        hex_conn = self.mesh.cells[blk].data                               
+        cell_pts = self.pts[hex_conn]                        
         centroids = cell_pts.mean(axis=1)
         self.centroids = centroids
+        self.hex_conn = hex_conn
 
         depth_raw = np.asarray(centroids[:, 2], dtype=float)
         self.ztop = float(
@@ -141,16 +144,15 @@ class ProductionModel(DartsModel):
             )
 
         # read properties from mesh cell data
-        # op_num = np.asarray(mesh.cell_data["num"][blk], dtype=float)
-        permx_raw = np.asarray(mesh.cell_data["permx"][blk], dtype=float)
-        permy_raw = np.asarray(mesh.cell_data["permy"][blk], dtype=float)
-        permz_raw = np.asarray(mesh.cell_data["permz"][blk], dtype=float)
-        poro_raw = np.asarray(mesh.cell_data["pore"][blk], dtype=float)
-        hcap_raw = np.asarray(mesh.cell_data["hcap"][blk], dtype=float)
+        permx_raw = np.asarray(self.mesh.cell_data["permx"][blk], dtype=float)
+        permy_raw = np.asarray(self.mesh.cell_data["permy"][blk], dtype=float)
+        permz_raw = np.asarray(self.mesh.cell_data["permz"][blk], dtype=float)
+        poro_raw = np.asarray(self.mesh.cell_data["pore"][blk], dtype=float)
+        hcap_raw = np.asarray(self.mesh.cell_data["hcap"][blk], dtype=float)
         rcond_raw = (
-            np.asarray(mesh.cell_data["cond"][blk], dtype=float) * 24 * 3600 / 1000
+            np.asarray(self.mesh.cell_data["cond"][blk], dtype=float) * 24 * 3600 / 1000
         )  # Unit conversion for cond * 24*3600/1000 [[kJ/(m-d-K)]]
-        rocknum_raw = np.asarray(mesh.cell_data["num"][blk], dtype=int)
+        rocknum_raw = np.asarray(self.mesh.cell_data["num"][blk], dtype=int)
 
         # property mapping from vtu to DARTS structure grid
         i = np.searchsorted(x_cent, self.centroids[:, 0])
@@ -275,54 +277,175 @@ class ProductionModel(DartsModel):
                     f"[ProductionModel] Well {w.name} set to production rate {vol_rate_prod:.2f} m3/day"
                 )
 
-    ## Analytical stress computation method
-    def compute_analytical_stress_vect(
+    # ## Analytical stress computation method
+    # def compute_analytical_stress_vect(
+    #     self,
+    #     dff,
+    #     stress_df="",
+    #     solution_df="",
+    # ):
+    #     # orientation of MIN PRINCIPAL STRESS (CLOCKWISE FROM NORTH)
+    #     orientation_degrees = 120.0
+    #     orientation_rad = orientation_degrees * np.pi / 180.0
+
+    #     dff["P"] = solution_df.loc[dff["ID"], "P"].values * 1e5
+    #     dff["T"] = solution_df.loc[dff["ID"], "T"].values
+    #     dff["dP"] = dff["P"] - dff["P0"]
+    #     dff["dT"] = dff["T"] - dff["T0"]
+
+    #     # Vectorized stress computation in cells's fault option
+    #     ## inputs transformed to matrix and vector for every cell
+    #     SV, SH, Sh = func.stress_initialization(
+    #         stress_df, dff
+    #     )  # Size number of faults elements
+    #     normal = func.normals(dff)  # could be out
+    #     p_sigma = func.principal_stress_tensor(
+    #         SV, SH, Sh
+    #     )  # could be out Size number of faults elements
+    #     p_faults = dff["P"].values  # pressure in fault blocks
+    #     pressure = func.principal_stress_tensor(
+    #         p_faults, p_faults, p_faults
+    #     )  # we used the same function that before
+    #     alpha, E, v = (
+    #         1.0e-5,
+    #         40.0e9,
+    #         0.3,
+    #     )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
+    #     dS_T = func.dS_T(alpha, E, v, dff)  # Following dS_T = alpha*E/(1.-v)*dT
+    #     eigenvec = func.eigenvec(orientation_rad, len(dff["ID"]))
+    #     eigenvec_t = np.transpose(eigenvec, axes=(0, 2, 1))
+
+    #     # computing effective stress for all cells
+    #     effective_p_sigma = p_sigma - pressure + dS_T
+    #     effective_stress = np.einsum("ijk,ikl->ijl", effective_p_sigma, eigenvec)
+    #     effective_stress = np.einsum("ijk,ikl->ijl", eigenvec_t, effective_stress)
+
+    #     # computing traction vector on the fault cells
+    #     Tv = np.einsum("ijk,ik->ij", effective_stress, normal)
+    #     Sn_f = np.einsum("ij,ij->i", Tv, normal)
+    #     Tv_mag = np.einsum("ij,ij->i", Tv, Tv)
+    #     Tau_f = np.sqrt(Tv_mag - (np.einsum("ij,ij->i", Tv, normal)) ** 2)
+    #     mu_vec = Tau_f / Sn_f  # value for reporting reactivation criteria
+
+    #     return mu_vec
+    
+    # FEM geomechanics initialization method
+    def init_fem_geomech(
         self,
-        dff,
-        stress_df="",
-        solution_df="",
+        fault_df,
+        P0,
+        T0,
+        E,
+        nu,
+        alpha_b,
+        alpha_T,
+        rho,
+        bc_params=None,
+        solver_params=None,
     ):
-        # orientation of MIN PRINCIPAL STRESS (CLOCKWISE FROM NORTH)
-        orientation_degrees = 120.0
-        orientation_rad = orientation_degrees * np.pi / 180.0
+        """
+        Initialize FEM geomechanics backend.
 
-        dff["P"] = solution_df.loc[dff["ID"], "P"].values * 1e5
-        dff["T"] = solution_df.loc[dff["ID"], "T"].values
-        dff["dP"] = dff["P"] - dff["P0"]
-        dff["dT"] = dff["T"] - dff["T0"]
+        Parameters can be scalars or 1D arrays of length = #hex cells.
+        - E: Young's modulus
+        - nu: Poisson ratio
+        - alpha_b: Biot coefficient
+        - alpha_T: coefficient of thermal expansion (CTE)
+        - rho: density for body forces (e.g. gravity)
+        """
+        if not hasattr(self, "hex_conn") or not hasattr(self, "pts"):
+            raise RuntimeError("init_fem_geomech() called before set_reservoir(): self.pts/self.hex_conn not found")
 
-        # Vectorized stress computation in cells's fault option
-        ## inputs transformed to matrix and vector for every cell
-        SV, SH, Sh = func.stress_initialization(
-            stress_df, dff
-        )  # Size number of faults elements
-        normal = func.normals(dff)  # could be out
-        p_sigma = func.principal_stress_tensor(
-            SV, SH, Sh
-        )  # could be out Size number of faults elements
-        p_faults = dff["P"].values  # pressure in fault blocks
-        pressure = func.principal_stress_tensor(
-            p_faults, p_faults, p_faults
-        )  # we used the same function that before
-        alpha, E, v = (
-            1.0e-5,
-            40.0e9,
-            0.3,
-        )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
-        dS_T = func.dS_T(alpha, E, v, dff)  # Following dS_T = alpha*E/(1.-v)*dT
-        eigenvec = func.eigenvec(orientation_rad, len(dff["ID"]))
-        eigenvec_t = np.transpose(eigenvec, axes=(0, 2, 1))
+        n_cells = self.hex_conn.shape[0]
 
-        # computing effective stress for all cells
-        effective_p_sigma = p_sigma - pressure + dS_T
-        effective_stress = np.einsum("ijk,ikl->ijl", effective_p_sigma, eigenvec)
-        effective_stress = np.einsum("ijk,ikl->ijl", eigenvec_t, effective_stress)
+        def as_cell_array(x, name):
+            arr = np.asarray(x, dtype=float)
+            if arr.ndim == 0:
+                out = np.empty(n_cells, dtype=float)
+                out.fill(float(arr))
+                return out
+            if arr.ndim == 1 and arr.size == n_cells:
+                return np.ascontiguousarray(arr)
+            raise ValueError(f"{name} must be a scalar or a 1D array of length {n_cells}. Got shape {arr.shape}")
 
-        # computing traction vector on the fault cells
-        Tv = np.einsum("ijk,ik->ij", effective_stress, normal)
-        Sn_f = np.einsum("ij,ij->i", Tv, normal)
-        Tv_mag = np.einsum("ij,ij->i", Tv, Tv)
-        Tau_f = np.sqrt(Tv_mag - (np.einsum("ij,ij->i", Tv, normal)) ** 2)
-        mu_vec = Tau_f / Sn_f  # value for reporting reactivation criteria
+        E_arr = as_cell_array(E, "E")
+        nu_arr = as_cell_array(nu, "nu")
+        alpha_b_arr = as_cell_array(alpha_b, "alpha_b")
+        alpha_T_arr = as_cell_array(alpha_T, "alpha_T")
+        rho_arr = as_cell_array(rho, "rho")
 
-        return mu_vec
+        P0 = np.ascontiguousarray(np.asarray(P0, dtype=float).reshape(-1)[:n_cells])
+        T0 = np.ascontiguousarray(np.asarray(T0, dtype=float).reshape(-1)[:n_cells])
+        if P0.size != n_cells:
+            raise ValueError(f"P0 must contain at least {n_cells} values, got {P0.size}")
+        if T0.size != n_cells:
+            raise ValueError(f"T0 must contain at least {n_cells} values, got {T0.size}")
+
+        merged_solver_params = {"rtol": 1e-7, "maxiter": 1500, "warm_start": True}
+        if solver_params:
+            merged_solver_params.update(solver_params)
+
+        self.fem_geo = FEMGeomechanics(
+            pts=self.pts,
+            hex_conn=self.hex_conn,
+            fault_df=fault_df,
+            P0=P0,
+            T0=T0,
+            E=E_arr,
+            nu=nu_arr,
+            alpha_b=alpha_b_arr,
+            alpha_T=alpha_T_arr,
+            rho=rho_arr,
+            bc_params=bc_params or {},
+            solver_params=merged_solver_params,
+        )
+        self.fem_geo.setup()
+
+    # custom vtk output
+    def initialize_vtk_data(self,P=None, T=None, F=None):
+        numele = len(self.hex_conn)
+        
+        self.point_data = {}
+        self.point_data['Random'] = np.random.rand(len(self.pts)) # just placeholder if point data required (displacements eventually)
+        
+        self.cell_data = {}
+        self.cell_data['Pressure'] = [P[:len(self.hex_conn)]]  # pressure is primary var 0
+        self.cell_data['Temperature'] = [T[:len(self.hex_conn)]]  # temperature from property container
+        self.cell_data['dP'] = [np.zeros(numele)]
+        self.cell_data['dT'] = [np.zeros(numele)]
+        self.cell_data['mu_vec'] = [np.zeros(numele)]  # for reporting reactivation criteria
+        self.cell_data['sigma_11'] = [np.zeros(numele)]  # diagonal stress component 1
+        self.cell_data['sigma_22'] = [np.zeros(numele)]  # diagonal stress component 2
+        self.cell_data['sigma_33'] = [np.zeros(numele)]  # diagonal stress component 3
+        self.cell_data['S0_11'] = [np.zeros(numele)]  # initial diagonal stress component 1
+        self.cell_data['S0_22'] = [np.zeros(numele)]  # initial diagonal stress component 2
+        self.cell_data['S0_33'] = [np.zeros(numele)]  # initial diagonal stress component 3
+        self.cell_data['mu_tangent'] = [np.zeros(numele)]  # tangent modulus based on stress state
+        F = np.asarray(F).ravel().astype(int)   # make it 1D int indices
+        arr = np.zeros(numele, dtype=np.int8)
+        arr[F] = 1
+        self.cell_data["FaultID"] = [arr]
+
+    def write_vtk(self, step, filename):
+        mesh = meshio.Mesh(self.pts,
+                           [("hexahedron",self.hex_conn)],
+                           point_data=self.point_data,
+                           cell_data=self.cell_data
+                           )
+        mesh.write(filename+'.vtu')
+        return
+
+    @staticmethod
+    def compute_mu_tangent(principal_stresses):
+        """
+        Compute tangent slope from origin to Mohr circle.
+        principal_stresses: (n_elements, 3) array in bar, sorted [max, mid, min]
+        Returns: mu_tangent array (n_elements,)
+        """
+        all_positive = np.all(principal_stresses > 0, axis=1)
+        mu_tangent = np.ones(len(principal_stresses))
+        if np.any(all_positive):
+            sigma_max = principal_stresses[all_positive, 0]
+            sigma_min = principal_stresses[all_positive, 2]
+            mu_tangent[all_positive] = (sigma_max - sigma_min) / (2.0 * np.sqrt(sigma_max * sigma_min))
+        return mu_tangent    

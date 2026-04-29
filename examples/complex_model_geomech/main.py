@@ -18,6 +18,7 @@ from connectors.open_darts import (
 
 # import DARTS libraries
 from darts.physics.properties.iapws.iapws_property_vec import _Backward1_T_Ph_vec
+from darts.engines import set_num_threads
 
 # import helper functions
 import helpers.helper_heatproduction as func_heat
@@ -29,6 +30,10 @@ from model_PROD import ProductionModel
 
 @open_darts_input_configuration_injector
 def run_darts(well_data) -> None:
+
+    # disable multi-threaded runs
+    set_num_threads(1)
+
     # output file location
     out_root = os.path.join(os.getcwd(), "output_PROD")
     vtk_dir = os.path.join(out_root, "vtk_PROD")
@@ -86,17 +91,50 @@ def run_darts(well_data) -> None:
         fault_df, depth_reservoir, initcond_df, stress_df=stress_df
     )
 
+    # Extract initial stresses for VTK output (only once)
+    idx = fault_df["ID"].to_numpy(dtype=int).ravel()
+    SV_init = fault_stress_df['SV'].values / 1e5  # Convert Pa to bar
+    SH_init = fault_stress_df['SH'].values / 1e5
+    Sh_init = fault_stress_df['Sh'].values / 1e5
+
+    # Initialize fem geomechanics
+    #print_mem('In geomechanics init')
+    print("Initializing FEM geomechanics module...")
+    m.init_fem_geomech(
+        fault_df=fault_stress_df,
+        P0=initcond_df['P'].values,
+        T0=initcond_df['T'].values,
+        E=9e9,
+        nu=0.25,
+        alpha_b=1.0,
+        alpha_T=1e-5,
+        rho=1300.0,
+        solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
+    )
+    print("FEM geomechanics initialization completed.")
+    print("Setting up initial VTK... ")
+    m.initialize_vtk_data(P=initcond_df['P'].values, T=initcond_df['T'].values, F=fault_df['ID'].values)  # update cell_data for vtk output with initial conditions
+    # Store initial stresses to VTK (these don't change during simulation)
+    m.cell_data["S0_11"][0][idx] = SV_init
+    m.cell_data["S0_22"][0][idx] = SH_init
+    m.cell_data["S0_33"][0][idx] = Sh_init
+    m.write_vtk(0, vtk_dir)
+
     mu_crit = 0.6  # critical friction coefficient for fault reactivation
     flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
     t_cum = 0.0  # cumulative time tracker for reporting
 
+    nx = len(m.hex_conn)
+    init_P = initcond_df['P'].values[:nx]
+    init_T = initcond_df['T'].values[:nx]
+
     for i, t in enumerate(Dtimes):
         m.run(days=t, restart_dt=0, verbose=True)
-        # m.output_to_vtk(
-        #     ith_step=i + 1,
-        #     output_directory=vtk_dir,
-        #     output_properties=["temperature"],
-        # )  # pressure/enthalpy are primary vars
+        m.output_to_vtk(
+            ith_step=i + 1,
+            output_directory=vtk_dir,
+            output_properties=["temperature"],
+        )  # pressure/enthalpy are primary vars
 
         # Getting primary variables
         P = np.array(m.physics.engine.X[0::2], copy=False)  # pressure in bar
@@ -107,20 +145,36 @@ def run_darts(well_data) -> None:
         #     os.path.join(out_root, f"solution_PROD_{i + 1}.csv"), sep=","
         # )
 
-        # Computing stress state on faults
-        mu_vec = m.compute_analytical_stress_vect(
-            fault_stress_df, stress_df=stress_df, solution_df=solution_df
-        )
-        n_cells = m.reservoir.mesh.n_res_blocks
-        mu_full = np.full(n_cells, np.nan, dtype=float)
-        fault_ids = fault_stress_df["ID"].to_numpy(dtype=int)
-        mu_full[fault_ids] = mu_vec
+        # # Computing stress state on faults
+        # mu_vec = m.compute_analytical_stress_vect(
+        #     fault_stress_df, stress_df=stress_df, solution_df=solution_df
+        # )
+        # n_cells = m.reservoir.mesh.n_res_blocks
+        # mu_full = np.full(n_cells, np.nan, dtype=float)
+        # fault_ids = fault_stress_df["ID"].to_numpy(dtype=int)
+        # mu_full[fault_ids] = mu_vec
 
-        func.output_darts_vtk_with_cell_prop(model=m, ith_step=i + 1, vtk_dir=vtk_dir, cell_prop=mu_full, field_name="mu_fault", output_properties=("temperature",),)
+        # func.output_darts_vtk_with_cell_prop(model=m, ith_step=i + 1, vtk_dir=vtk_dir, cell_prop=mu_full, field_name="mu_fault", output_properties=("temperature",),)
+
+        # Compute FEM geomechanics
+        print("Solving FEM geomechanics...")
+        u = m.fem_geo.solve(P, T)        
+        mu_vec, principal_stresses, mu_tangent = m.fem_geo.compute_mu(P,T,u=u)
+
+        # Update VTK cell data for fault cells
+        m.cell_data["mu_vec"][0][idx] = mu_vec
+        m.cell_data["sigma_11"][0][idx] = principal_stresses[:, 0]  # Max principal stress
+        m.cell_data["sigma_22"][0][idx] = principal_stresses[:, 1]  # Intermediate principal stress
+        m.cell_data["sigma_33"][0][idx] = principal_stresses[:, 2]  # Min principal stress
+        m.cell_data["mu_tangent"][0][idx] = mu_tangent
+        m.cell_data["dP"][0][:] = P[:nx] - init_P  # update dP for vtk output
+        m.cell_data["dT"][0][:] = T[:nx] - init_T  # update dT for vtk output
+        m.write_vtk(i+1, filename=vtk_dir+os.sep+'production_'+str(i+1))  # write vtk with updated mu_vec for visualization
 
         # Fault reactivation check and well control adjustment
         Max_mu = mu_vec.max()
         t_cum = t_cum + t
+        print(f"Time {t_cum} days: Max displacement = {u.max():.3f}")
         print(f"Time {t_cum} days: Max friction coefficient on faults = {Max_mu:.3f}")
 
         # Check failure criteria
@@ -134,12 +188,12 @@ def run_darts(well_data) -> None:
             print(f"New injection rate: {Qinj:.2f} ton/day")
             m.set_well_controls()
 
-    # Get and writting well vectors
+    # # Get and writting well vectors
     td = pd.DataFrame.from_dict(m.physics.engine.time_data)
-    address = out_root + os.sep + "well_data_volumetric_mass_control.xlsx"
-    writer = pd.ExcelWriter(address)
-    td.to_excel(excel_writer=writer, sheet_name="Sheet1")
-    writer.close()
+    # address = out_root + os.sep + "well_data_volumetric_mass_control.xlsx"
+    # writer = pd.ExcelWriter(address)
+    # td.to_excel(excel_writer=writer, sheet_name="Sheet1")
+    # writer.close()
 
     ## Cumulative heat production (MWy)
     Heat = func_heat.cumulative_heat(

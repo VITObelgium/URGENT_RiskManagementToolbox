@@ -18,6 +18,16 @@ export VECLIB_MAXIMUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 export TMPDIR=${TMPDIR:-/tmp}
 
+if [ -d "$TMPDIR" ]; then
+  cp examples/complex_model.json "$TMPDIR"/
+  cp examples/complex_model.zip "$TMPDIR"/
+  CFG="$TMPDIR/complex_model.json"
+  MODEL="$TMPDIR/complex_model.zip"
+else
+  CFG="/opt/rmt/examples/complex_model.json"
+  MODEL="/opt/rmt/examples/complex_model.zip"
+fi
+
 echo "Running on node: $(hostname)"
 echo "CPUs: $SLURM_CPUS_PER_TASK"
 echo "Memory requested: 16G"

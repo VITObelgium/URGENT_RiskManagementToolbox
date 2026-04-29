@@ -18,6 +18,7 @@ from connectors.open_darts import (
 
 # import DARTS libraries
 from darts.physics.properties.iapws.iapws_property_vec import _Backward1_T_Ph_vec
+from darts.engines import set_num_threads
 
 # import helper functions
 import helpers.helper_heatproduction as func_heat
@@ -29,6 +30,10 @@ from model_PROD import ProductionModel
 
 @open_darts_input_configuration_injector
 def run_darts(well_data) -> None:
+
+    # diable multi-threaded runs
+    set_num_threads(1)
+
     # output file location
     out_root = os.path.join(os.getcwd(), "output_PROD")
     vtk_dir = os.path.join(out_root, "vtk_PROD")

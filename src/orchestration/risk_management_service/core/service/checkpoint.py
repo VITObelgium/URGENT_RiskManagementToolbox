@@ -84,9 +84,8 @@ def load_checkpoint(checkpoint_file: Path) -> dict[str, Any]:
     """
     data = np.load(checkpoint_file)
 
-    config = ProblemDispatcherDefinition.model_validate_json(
-        _decode(data["config_json"])
-    )
+    config_dict = json.loads(_decode(data["config_json"]))
+    config = ProblemDispatcherDefinition.model_validate(config_dict)
 
     last_best_val = float(data["lc_last_best"][0])
     last_best: float | None = None if np.isnan(last_best_val) else last_best_val

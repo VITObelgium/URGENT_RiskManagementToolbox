@@ -1,5 +1,5 @@
 {
-  "run_mode": "evaluation",
+  "run_mode": "optimization",
   "well_design": [
     {
       "well_name": "INJ",
@@ -68,12 +68,12 @@
     "objectives": {
       "Heat": "maximize"
     },
-    "max_generations": 20,
-    "population_size": 40,
+    "max_generations": 30,
+    "population_size": 20,
     "max_stall_generations": 10
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 3600,
-    "worker_count": 1
+    "worker_count": 8
   }
 }

@@ -92,7 +92,9 @@ def test_run_risk_management_happy_path(
         mock_problem_def.optimization_parameters.max_generations = 1
         mock_problem_def.run_mode.value = "optimization"
 
-        rms.run_risk_management(mock_problem_def, b"model")
+        rms.run_risk_management(
+            mock_problem_def, b"model", model_hash="brooks_was_here"
+        )
 
     mock_sim_service.transfer_simulation_model.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1

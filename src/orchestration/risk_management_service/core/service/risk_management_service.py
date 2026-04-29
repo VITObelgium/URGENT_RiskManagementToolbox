@@ -43,6 +43,7 @@ logger = get_logger(__name__)
 def run_risk_management(
     problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
+    model_hash: str,
     checkpoint: dict[str, Any] | None = None,
 ) -> tuple[npt.NDArray[np.float64], Any] | None:
     """
@@ -200,7 +201,9 @@ def run_risk_management(
                 if loop_controller.current_generation % checkpoint_interval == 0:
                     try:
                         state = solution_updater.get_checkpoint_state(next_solutions)
-                        save_checkpoint(checkpoint_file, problem_definition, state)
+                        save_checkpoint(
+                            checkpoint_file, problem_definition, state, model_hash
+                        )
                         logger.info(
                             f"Checkpoint saved at generation {loop_controller.current_generation}."
                         )

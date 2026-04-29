@@ -12,6 +12,7 @@ from logger.utils import zip_results
 from orchestration.risk_management_service import run_risk_management
 from orchestration.risk_management_service.core.service.checkpoint import (
     load_checkpoint,
+    compute_file_hash,
 )
 from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
@@ -46,11 +47,20 @@ def risk_management(
         logger.info("Using multi-threading for simulations.")
         os.environ["OPEN_DARTS_RUNNER"] = "thread"
 
+    model_hash = compute_file_hash(model_file)
+
     checkpoint: dict[str, Any] | None = None
     try:
         if config_file.endswith(".npz"):
             logger.info("Checkpoint file detected; resuming optimization.")
             checkpoint_data = load_checkpoint(Path(config_file))
+
+            cp_hash = checkpoint_data.get("model_hash")
+            if cp_hash and cp_hash != model_hash:
+                raise ValueError(
+                    "Model mismatch! Make sure the model file used for this checkpoint is the same as the one provided now."
+                )
+
             problem_definition = checkpoint_data["config"]
             checkpoint = checkpoint_data
         else:
@@ -72,6 +82,7 @@ def risk_management(
         result = run_risk_management(
             problem_definition=problem_definition,
             simulation_model_archive=model_file,
+            model_hash=model_hash,
             checkpoint=checkpoint,
         )
         logger.info("Risk management process completed successfully.")

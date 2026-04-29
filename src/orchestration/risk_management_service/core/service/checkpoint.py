@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -22,10 +23,21 @@ def _decode(arr: npt.NDArray[np.uint8]) -> str:
     return bytes(arr).decode("utf-8")
 
 
+def compute_file_hash(file_path: str | Path, chunk_size: int = 8192) -> str:
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as file:
+        chunk = file.read(chunk_size)
+        while chunk:
+            sha256_hash.update(chunk)
+            chunk = file.read(chunk_size)
+    return sha256_hash.hexdigest()
+
+
 def save_checkpoint(
     checkpoint_path: Path,
     config: ProblemDispatcherDefinition,
     state: dict[str, Any],
+    model_hash: str,
 ) -> None:
     """Write optimizer state to checkpoint_path atomically.
 
@@ -43,6 +55,7 @@ def save_checkpoint(
 
     arrays = {
         "config_json": _encode(config.model_dump_json()),
+        "model_hash": _encode(model_hash),
         "next_positions": state["next_positions"],
         # PSO
         "pso_particles_best_positions": pso["particles_best_positions"],
@@ -90,8 +103,11 @@ def load_checkpoint(checkpoint_file: Path) -> dict[str, Any]:
     last_best_val = float(data["lc_last_best"][0])
     last_best: float | None = None if np.isnan(last_best_val) else last_best_val
 
+    model_hash = _decode(data["model_hash"]) if "model_hash" in data else None
+
     return {
         "config": config,
+        "model_hash": model_hash,
         "pso_state": {
             "particles_best_positions": data["pso_particles_best_positions"],
             "particles_best_results": data["pso_particles_best_results"],

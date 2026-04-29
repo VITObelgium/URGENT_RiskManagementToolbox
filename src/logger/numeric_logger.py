@@ -33,9 +33,10 @@ def get_csv_logger(
     log_dir = os.path.normpath(os.path.abspath(log_dir))
 
     run_id = os.environ.get("URGENT_RUN_ID", "")
-    run_suffix = f"_{run_id}" if run_id else ""
-    base_name, ext = os.path.splitext(filename)
-    actual_filename = f"{base_name}{run_suffix}{ext}"
+    if run_id:
+        log_dir = os.path.join(log_dir, run_id)
+
+    actual_filename = filename
     output_path = os.path.join(log_dir, actual_filename)
 
     logger_mode = get_file_log_mode()

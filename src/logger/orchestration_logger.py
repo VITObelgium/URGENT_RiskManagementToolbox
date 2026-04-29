@@ -1,3 +1,4 @@
+import os
 import logging
 import subprocess
 from logging import Logger
@@ -73,8 +74,10 @@ def log_docker_logs(logger: Logger, disperse_worker_logs: bool = True) -> None:
     assert logger is not None, "Logger must be initialized before logging Docker logs."
 
     project_root = Path(__file__).resolve().parents[2]
-    log_dir = project_root / "log"
-    log_dir.mkdir(exist_ok=True)
+    base_log_dir = project_root / "log"
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    log_dir = base_log_dir / run_id if run_id else base_log_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         services = get_services(logger)

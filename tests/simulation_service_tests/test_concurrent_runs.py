@@ -206,13 +206,15 @@ class TestLogFileNames:
 
         with (
             patch.object(pl, "_is_pytest_env", return_value=False),
-            patch.object(pl, "_ensure_log_dir", return_value=tmp_path),
+            patch.object(pl, "_project_root", return_value=tmp_path.parent / "project"),
             patch.object(pl, "_add_unique_file_handler"),
             patch.object(pl, "get_external_console_logging", return_value=False),
         ):
             result = pl.configure_worker_logger(1)
 
-        assert "abc123" in result.name
+        # Instead of matching the file name, we match the run_id in the resulting path
+        assert "abc123" in str(result)
+        assert result.name == "simulation_worker_1.log"
         assert "simulation_worker" in result.name
         assert "_1.log" in result.name
 
@@ -222,13 +224,15 @@ class TestLogFileNames:
 
         with (
             patch.object(pl, "_is_pytest_env", return_value=False),
-            patch.object(pl, "_ensure_log_dir", return_value=tmp_path),
+            patch.object(pl, "_project_root", return_value=tmp_path.parent / "project"),
             patch.object(pl, "_add_unique_file_handler"),
             patch.object(pl, "get_external_console_logging", return_value=False),
         ):
             result = pl.configure_server_logger()
 
-        assert "def456" in result.name
+        # Match directory instead of filename
+        assert "def456" in str(result)
+        assert result.name == "simulation_server.log"
         assert "simulation_server" in result.name
 
     def test_different_runs_produce_distinct_log_paths(self, tmp_path, monkeypatch):
@@ -239,7 +243,9 @@ class TestLogFileNames:
             monkeypatch.setenv("URGENT_RUN_ID", run_id)
             with (
                 patch.object(pl, "_is_pytest_env", return_value=False),
-                patch.object(pl, "_ensure_log_dir", return_value=tmp_path),
+                patch.object(
+                    pl, "_project_root", return_value=tmp_path.parent / "project"
+                ),
                 patch.object(pl, "_add_unique_file_handler"),
                 patch.object(pl, "get_external_console_logging", return_value=False),
             ):

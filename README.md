@@ -26,6 +26,7 @@
     - [OpenDarts Connector](#opendarts-connector)
   - [Run configuration file](#run-configuration-file)
     - [Input file schemas](#input-file-schemas)
+  - [Checkpointing and resuming runs](#checkpointing-and-resuming-runs)
 - [Implemented services](#implemented-services)
    - [Well design service](#well-design-service)
 - [Configuration example](#configuration-example)
@@ -118,6 +119,14 @@ pixi run python src/main.py --config-file <config_filepath> --model-file <model_
 ```shell
 pixi run python src/main.py --config-file <config_filepath> --model-file <model_filepath> --use-docker
 ```
+
+To resume an interrupted optimization run from a checkpoint file, use `--resume` instead of `--config-file` (see [Checkpointing and resuming runs](#checkpointing-and-resuming-runs)):
+
+```shell
+pixi run python src/main.py --resume <checkpoint_filepath.npz> --model-file <model_filepath>
+```
+
+> **Note:** `--config-file` and `--resume` are mutually exclusive. Exactly one must be supplied.
 
 ### 3. Reservoir simulation interoperability
 
@@ -274,6 +283,47 @@ The optional `run_mode` field controls how the toolbox executes. It accepts two 
 | `evaluation` | Runs a single simulation using the `initial_state` values without optimization. Useful for validating that the simulation model and connector are correctly configured before committing to a full optimization run. In this mode `objectives` and `parameter_bounds` are not required, and all loop-control parameters (`population_size`, `max_generations`, `max_stall_generations`, `worker_count`) are automatically set to `1`. |
 
 > **Note:** Omitting `run_mode` is equivalent to `"run_mode": "optimization"`.
+
+### 5. Checkpointing and resuming runs
+
+Long optimization runs can be interrupted at any time (e.g., due to a crash, timeout, or manual stop). The toolbox saves periodic **checkpoints** so that work is not lost and the run can be continued from where it left off, rather than starting from scratch.
+
+#### How checkpoints work
+
+- A checkpoint is saved every `checkpoint_interval` completed generations (configured in `simulation_config`).
+- Checkpoints capture the full optimizer state: PSO particle positions and velocities, personal and global bests, generation counter, stall counter, and the problem configuration.
+- Files are written atomically to `checkpoint_path` and named `checkpoint_<run_id>.npz`.
+- On successful completion the toolbox deletes the checkpoint file automatically.
+
+#### Resuming a run
+
+Pass the checkpoint file with `--resume` instead of `--config-file`:
+
+```shell
+pixi run python src/main.py \
+    --resume checkpoints/checkpoint_a1b2c3d4.npz \
+    --model-file path/to/model.zip
+```
+
+The problem configuration (objectives, well design, bounds, etc.) is restored directly from the checkpoint — no separate `--config-file` is needed.
+
+> **Note:** The toolbox validates that the model file provided at resume time matches the one used when the checkpoint was created, using a SHA-256 hash. Providing a different model will raise an error.
+
+#### Checkpoint configuration example
+
+```json
+"simulation_config": {
+  "worker_count": 4,
+  "worker_simulation_timeout_seconds": 900,
+  "server_job_timeout_seconds": 3600,
+  "checkpoint_interval": 5,
+  "checkpoint_path": "checkpoints"
+}
+```
+
+With `checkpoint_interval: 5`, a checkpoint is saved after generations 5, 10, 15, and so on. If the run is interrupted at generation 13, resuming will continue from generation 10 (the most recent saved checkpoint).
+
+---
 
 ## Implemented services
 
@@ -568,15 +618,19 @@ The `simulation_config` block defines the execution environment parameters, such
 | Parameter | Type           | Default  | Description                                                                                                                                                                                                                                                                                                              |
 | :--- |:---------------|:---------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `worker_count` | Integer        | `4`      | Number of parallel simulation workers (limited by physical CPU cores).                                                                                                                                                                                                                                                   |
-| `worker_simulation_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for a single simulation worker to complete its assigned simulation run before it is forcefully terminated. |
-| `server_job_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for the entire server batch job to complete completion. |
+| `worker_simulation_timeout_seconds` | Integer | `900` | Maximum time allowed (in seconds) for a single simulation worker to complete its assigned simulation run before it is forcefully terminated. |
+| `server_job_timeout_seconds` | Integer | `3600` | Maximum time allowed (in seconds) for the entire server batch job to complete. |
+| `checkpoint_interval` | Integer | `5` | Save an optimizer checkpoint every N completed generations. |
+| `checkpoint_path` | String (path) | `checkpoints/` | Directory where checkpoint `.npz` files are written. Created automatically if it does not exist. |
 
 Example:
 ```json
 "simulation_config": {
   "worker_simulation_timeout_seconds": 900,
   "server_job_timeout_seconds": 3600,
-  "worker_count": 2
+  "worker_count": 2,
+  "checkpoint_interval": 10,
+  "checkpoint_path": "checkpoints"
 }
 ```
 
@@ -716,7 +770,10 @@ The Well design service will be use to determine the optimal wells placement and
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 900,
-    "worker_count": 4
+    "server_job_timeout_seconds": 3600,
+    "worker_count": 4,
+    "checkpoint_interval": 5,
+    "checkpoint_path": "checkpoints"
   }
 }
 

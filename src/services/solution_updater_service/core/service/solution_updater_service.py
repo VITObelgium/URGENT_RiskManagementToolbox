@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections import deque
-from typing import Any
+from typing import Any, TypedDict
 from collections.abc import Mapping, Sequence
 
 import numpy as np
@@ -34,6 +34,13 @@ from services.solution_updater_service.core.utils import (
     get_numpy_values,
     numpy_to_dict,
 )
+
+
+class UpdaterCheckpointState(TypedDict):
+    engine_state: dict[str, Any]
+    mapper_state: dict[str, Any]
+    loop_controller_state: dict[str, Any]
+    next_positions: npt.NDArray[np.float64]
 
 
 class _MapperState:
@@ -339,12 +346,16 @@ class _SolutionUpdaterServiceLoopController:
             "current_generation": self._current_generation,
             "stall_left": self._stall_left,
             "last_best": self._last_run_global_best_result,
-            "pareto_min_history": np.array(min_hist, dtype=np.float64)
-            if min_hist
-            else np.empty((0,), dtype=np.float64),
-            "pareto_mean_history": np.array(mean_hist, dtype=np.float64)
-            if mean_hist
-            else np.empty((0,), dtype=np.float64),
+            "pareto_min_history": (
+                np.array(min_hist, dtype=np.float64)
+                if min_hist
+                else np.empty((0,), dtype=np.float64)
+            ),
+            "pareto_mean_history": (
+                np.array(mean_hist, dtype=np.float64)
+                if mean_hist
+                else np.empty((0,), dtype=np.float64)
+            ),
         }
 
     def restore_checkpoint_state(self, state: dict[str, Any]) -> None:
@@ -440,10 +451,10 @@ class SolutionUpdaterService:
 
     def get_checkpoint_state(
         self, next_solutions: list[ControlVector]
-    ) -> dict[str, Any]:
+    ) -> UpdaterCheckpointState:
         """Return serialisable state for checkpointing."""
         return {
-            "pso_state": self._engine.get_checkpoint_state(),
+            "engine_state": self._engine.get_checkpoint_state(),
             "mapper_state": self._mapper.get_checkpoint_state(),
             "loop_controller_state": self.loop_controller.get_checkpoint_state(),
             "next_positions": self._mapper.positions_from_control_vectors(
@@ -451,9 +462,11 @@ class SolutionUpdaterService:
             ),
         }
 
-    def restore_checkpoint_state(self, state: dict[str, Any]) -> list[ControlVector]:
+    def restore_checkpoint_state(
+        self, state: UpdaterCheckpointState
+    ) -> list[ControlVector]:
         """Restore optimizer state and return next particle positions as control vectors."""
-        self._engine.restore_checkpoint_state(state["pso_state"])
+        self._engine.restore_checkpoint_state(state["engine_state"])
         self._mapper.restore_checkpoint_state(state["mapper_state"])
         self.loop_controller.restore_checkpoint_state(state["loop_controller_state"])
         return self._mapper.to_control_vectors(state["next_positions"])

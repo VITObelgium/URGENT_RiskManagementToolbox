@@ -12,6 +12,7 @@ from logger import get_logger
 from orchestration.risk_management_service.core.service.checkpoint import (
     checkpoint_filename,
     save_checkpoint,
+    LoadedCheckpointData,
 )
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
@@ -44,7 +45,7 @@ def run_risk_management(
     problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
     model_hash: str,
-    checkpoint: dict[str, Any] | None = None,
+    checkpoint: LoadedCheckpointData | None = None,
 ) -> tuple[npt.NDArray[np.float64], Any] | None:
     """
     Main entry point for running risk management.
@@ -205,7 +206,7 @@ def run_risk_management(
                             checkpoint_file, problem_definition, state, model_hash
                         )
                         logger.info(
-                            f"Checkpoint saved at generation {loop_controller.current_generation}."
+                            f"Checkpoint saved at generation {loop_controller.current_generation}: {checkpoint_file}"
                         )
                     except Exception as e:
                         logger.warning(f"Failed to save checkpoint: {e}")

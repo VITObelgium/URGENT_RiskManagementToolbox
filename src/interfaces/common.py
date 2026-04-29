@@ -13,13 +13,15 @@ from orchestration.risk_management_service import run_risk_management
 from orchestration.risk_management_service.core.service.checkpoint import (
     load_checkpoint,
     compute_file_hash,
+    LoadedCheckpointData,
 )
 from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
 
 def risk_management(
-    config_file: str,
     model_file: str,
+    config_file: str | None = None,
+    resume_file: str | None = None,
     use_docker: bool = False,
     disable_external_log_terminals: bool = False,
 ) -> tuple[float | npt.NDArray[np.float64], dict[str, Any]] | None:
@@ -27,11 +29,15 @@ def risk_management(
     Run risk management with specified parameters without using argparse.
 
     Args:
-        config_file (str): Path to the configuration file (JSON format) for risk management.
         model_file (str): Path to the simulation model archive file.
+        config_file (str | None): Path to the configuration file (JSON format) for risk management.
+        resume_file (str | None): Path to a checkpoint (.npz) file to resume an interrupted run.
         use_docker (bool): Flag to indicate whether to use Docker for simulations. Default is False.
         disable_external_log_terminals (bool): Disable opening extra terminal windows for log tails.
     """
+    if config_file is None and resume_file is None:
+        raise ValueError("Either config_file or resume_file must be provided.")
+
     configure_logger()
     logger = get_logger(__name__)
     logger.info("Risk management toolbox started programmatically.")
@@ -49,11 +55,11 @@ def risk_management(
 
     model_hash = compute_file_hash(model_file)
 
-    checkpoint: dict[str, Any] | None = None
+    checkpoint: LoadedCheckpointData | None = None
     try:
-        if config_file.endswith(".npz"):
-            logger.info("Checkpoint file detected; resuming optimization.")
-            checkpoint_data = load_checkpoint(Path(config_file))
+        if resume_file is not None:
+            logger.info("Checkpoint file provided; resuming optimization.")
+            checkpoint_data = load_checkpoint(Path(resume_file))
 
             cp_hash = checkpoint_data.get("model_hash")
             if cp_hash and cp_hash != model_hash:
@@ -64,7 +70,7 @@ def risk_management(
             problem_definition = checkpoint_data["config"]
             checkpoint = checkpoint_data
         else:
-            with open(config_file) as file:
+            with open(config_file) as file:  # type: ignore[arg-type]
                 problem_definition = ProblemDispatcherDefinition.model_validate(
                     json.load(file)
                 )

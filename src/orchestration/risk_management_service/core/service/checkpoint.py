@@ -9,6 +9,16 @@ import numpy as np
 import numpy.typing as npt
 
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
+from services.solution_updater_service.core.service.solution_updater_service import (
+    UpdaterCheckpointState,
+)
+
+
+class LoadedCheckpointData(UpdaterCheckpointState):
+    """State restored from the checkpoint file, including the configuration."""
+
+    config: ProblemDispatcherDefinition
+    model_hash: str | None
 
 
 def checkpoint_filename(run_id: str) -> str:
@@ -36,7 +46,7 @@ def compute_file_hash(file_path: str | Path, chunk_size: int = 8192) -> str:
 def save_checkpoint(
     checkpoint_path: Path,
     config: ProblemDispatcherDefinition,
-    state: dict[str, Any],
+    state: UpdaterCheckpointState,
     model_hash: str,
 ) -> None:
     """Write optimizer state to checkpoint_path atomically.
@@ -44,7 +54,7 @@ def save_checkpoint(
     checkpoint_path must be the full .npz destination (e.g. log/checkpoint_abc123.npz).
     state must be the dict returned by SolutionUpdaterService.get_checkpoint_state().
     """
-    pso = state["pso_state"]
+    engine = state["engine_state"]
     mapper = state["mapper_state"]
     lc = state["loop_controller_state"]
 
@@ -53,19 +63,16 @@ def save_checkpoint(
         [np.nan if last_best is None else last_best], dtype=np.float64
     )
 
-    arrays = {
+    arrays: dict[str, Any] = {
         "config_json": _encode(config.model_dump_json()),
         "model_hash": _encode(model_hash),
         "next_positions": state["next_positions"],
-        # PSO
-        "pso_particles_best_positions": pso["particles_best_positions"],
-        "pso_particles_best_results": pso["particles_best_results"],
-        "pso_global_best_position": pso["global_best_position"],
-        "pso_global_best_result": pso["global_best_result"],
-        "pso_velocities": pso["velocities"],
-        "pso_external_archive_positions": pso["external_archive_positions"],
-        "pso_external_archive_results": pso["external_archive_results"],
-        "pso_rng_state": _encode(pso["rng_state_json"]),
+        # Engine (e.g. PSO)
+        "engine_state_json": _encode(
+            json.dumps(
+                {k: v for k, v in engine.items() if not isinstance(v, np.ndarray)}
+            )
+        ),
         # Mapper
         "mapper_cv_mapping": _encode(json.dumps(mapper["control_vector_mapping"])),
         "mapper_results_mapping": _encode(json.dumps(mapper["results_mapping"])),
@@ -78,6 +85,10 @@ def save_checkpoint(
         "lc_pareto_mean_history": lc["pareto_mean_history"],
     }
 
+    for k, v in engine.items():
+        if isinstance(v, np.ndarray):
+            arrays[f"engine_arr_{k}"] = v
+
     tmp_path = checkpoint_path.with_suffix(".tmp")
     np.savez(tmp_path, **arrays)
     # np.savez appends .npz when not present
@@ -85,12 +96,13 @@ def save_checkpoint(
     tmp_npz.replace(checkpoint_path)
 
 
-def load_checkpoint(checkpoint_file: Path) -> dict[str, Any]:
+def load_checkpoint(checkpoint_file: Path) -> LoadedCheckpointData:
     """Load optimizer state from an .npz checkpoint file.
 
     Returns a dict with keys:
         config         – ProblemDispatcherDefinition
-        pso_state      – dict for PSOEngine.restore_checkpoint_state
+        model_hash     - string representing the hash of the model previously used
+        engine_state   – dict for OptimizationEngine.restore_checkpoint_state
         mapper_state   – dict for _Mapper.restore_checkpoint_state
         loop_controller_state – dict for loop controller restore
         next_positions – ndarray of particle positions for the next generation
@@ -105,10 +117,16 @@ def load_checkpoint(checkpoint_file: Path) -> dict[str, Any]:
 
     model_hash = _decode(data["model_hash"]) if "model_hash" in data else None
 
-    return {
-        "config": config,
-        "model_hash": model_hash,
-        "pso_state": {
+    # Load generic engine_state or fallback to legacy pso_state
+    if "engine_state_json" in data:
+        engine_state = json.loads(_decode(data["engine_state_json"]))
+        for key in data.files:
+            if key.startswith("engine_arr_"):
+                orig_key = key[11:]
+                engine_state[orig_key] = data[key]
+    else:
+        # Legacy checkpoint support
+        engine_state = {
             "particles_best_positions": data["pso_particles_best_positions"],
             "particles_best_results": data["pso_particles_best_results"],
             "global_best_position": data["pso_global_best_position"],
@@ -117,7 +135,12 @@ def load_checkpoint(checkpoint_file: Path) -> dict[str, Any]:
             "external_archive_positions": data["pso_external_archive_positions"],
             "external_archive_results": data["pso_external_archive_results"],
             "rng_state_json": _decode(data["pso_rng_state"]),
-        },
+        }
+
+    return {
+        "config": config,
+        "model_hash": model_hash,
+        "engine_state": engine_state,
         "mapper_state": {
             "control_vector_mapping": json.loads(_decode(data["mapper_cv_mapping"])),
             "results_mapping": json.loads(_decode(data["mapper_results_mapping"])),

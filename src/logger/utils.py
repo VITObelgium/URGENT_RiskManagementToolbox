@@ -410,12 +410,12 @@ def zip_results(source_path: str | Path | None = None) -> Path:
     source_path:
         File or directory to archive. If None, defaults to the project `log/` folder.
 
-    Returns
-    -------
-    Path
+    Returns:
+        Path
         Path to the created .zip file.
     """
-    zip_file_prefix = "run_results_"
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    zip_file_prefix = f"run_results_{run_id}_" if run_id else "run_results_"
     base_dir = Path(__file__).resolve().parent
     log_dir = (base_dir / "../../log").resolve()
 
@@ -452,6 +452,9 @@ def zip_results(source_path: str | Path | None = None) -> Path:
         if rp.is_file() and rp.suffix.lower() == ".zip" and rp.parent == log_dir:
             return True
 
+        if run_id and rp.is_file() and run_id not in p.name:
+            return True
+
         return False
 
     def _delete_log_if_needed(p: Path) -> None:
@@ -464,6 +467,8 @@ def zip_results(source_path: str | Path | None = None) -> Path:
         if rp.is_file() and rp.suffix in (".log", ".csv") and rp.parent == log_dir:
             # never delete the zip we're writing (paranoia guard)
             if rp == zip_path:
+                return
+            if run_id and run_id not in p.name:
                 return
             try:
                 rp.unlink(missing_ok=True)

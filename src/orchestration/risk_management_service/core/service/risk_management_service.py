@@ -1,5 +1,4 @@
 import os
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -59,8 +58,7 @@ def run_risk_management(
         Multi-objective:  (pareto_results_array, list[nested_control_vector_dict])
         None on evaluation mode or keyboard interrupt.
     """
-    run_id = uuid.uuid4().hex[:8]
-    os.environ["URGENT_RUN_ID"] = run_id
+    run_id = os.environ.get("URGENT_RUN_ID", "unknown")
 
     logger.info("Starting risk management process (run_id=%s)...", run_id)
     logger.debug(

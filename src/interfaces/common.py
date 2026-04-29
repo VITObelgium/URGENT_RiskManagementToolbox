@@ -2,6 +2,10 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+import uuid
+
+if "URGENT_RUN_ID" not in os.environ:
+    os.environ["URGENT_RUN_ID"] = uuid.uuid4().hex[:8]
 
 import grpc
 import numpy as np
@@ -53,7 +57,11 @@ def risk_management(
         logger.info("Using multi-threading for simulations.")
         os.environ["OPEN_DARTS_RUNNER"] = "thread"
 
-    model_hash = compute_file_hash(model_file)
+    try:
+        model_hash = compute_file_hash(model_file)
+    except Exception as e:
+        logger.error(f"Failed to compute model hash: {e}")
+        raise
 
     checkpoint: LoadedCheckpointData | None = None
     try:

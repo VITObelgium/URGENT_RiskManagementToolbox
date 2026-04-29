@@ -154,7 +154,7 @@ def test_save_load_preserves_generation_and_stall(
     loaded = load_checkpoint(cp)
 
     lc = loaded["loop_controller_state"]
-    assert lc["current_generation"] == 7
+    assert lc["current_generation"] == 8
     assert lc["stall_left"] == 4
     assert lc["last_best"] == pytest.approx(0.5)
 
@@ -408,7 +408,7 @@ def test_file_roundtrip_restores_generation(tmp_path: Path) -> None:
     )
     service_b.restore_checkpoint_state(loaded)
 
-    assert service_b.loop_controller.current_generation == 5
+    assert service_b.loop_controller.current_generation == 6
 
 
 def test_file_roundtrip_global_best_matches(tmp_path: Path) -> None:
@@ -483,5 +483,5 @@ def test_file_roundtrip_service_can_continue(tmp_path: Path) -> None:
     response = service_b.process_request(request)
     service_b.loop_controller.increment_generation()
 
-    assert service_b.loop_controller.current_generation == 4
+    assert service_b.loop_controller.current_generation == 5
     assert len(response.next_iter_solutions) == N_PARTICLES

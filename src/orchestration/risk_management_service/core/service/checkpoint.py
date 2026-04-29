@@ -78,7 +78,10 @@ def save_checkpoint(
         "mapper_results_mapping": _encode(json.dumps(mapper["results_mapping"])),
         "mapper_population_size": np.array([mapper["population_size"]], dtype=np.int64),
         # Loop controller
-        "lc_current_generation": np.array([lc["current_generation"]], dtype=np.int64),
+        "lc_current_generation": np.array(
+            [lc["current_generation"] + np.ones_like(lc["current_generation"])],
+            dtype=np.int64,
+        ),
         "lc_stall_left": np.array([lc["stall_left"]], dtype=np.int64),
         "lc_last_best": lc_last_best_arr,
         "lc_pareto_min_history": lc["pareto_min_history"],

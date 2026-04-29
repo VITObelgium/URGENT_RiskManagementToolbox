@@ -320,6 +320,19 @@ class ProcessClusterManager(ClusterManager):
         ) as pool:
             list(pool.map(_remove, worker_dirs))
 
+        try:
+            if not any(orchestration_files.iterdir()):
+                orchestration_files.rmdir()
+                logger.debug(
+                    "Removed empty orchestration directory: %s", orchestration_files
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to remove orchestration directory %s: %s",
+                orchestration_files,
+                e,
+            )
+
         logger.info("Worker temp directory cleanup complete.")
 
 

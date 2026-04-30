@@ -195,16 +195,15 @@ def run_risk_management(
                     f"Generation {loop_controller.current_generation} successfully completed."
                 )
 
-                _maybe_save_checkpoint(
-                    loop_controller.current_generation,
-                    checkpoint_interval,
-                    solution_updater,
-                    next_solutions,
-                    checkpoint_file,
-                    problem_definition,
-                    model_hash,
-                    run_id,
-                )
+                if loop_controller.current_generation % checkpoint_interval == 0:
+                    _save_checkpoint(
+                        solution_updater,
+                        next_solutions,
+                        checkpoint_file,
+                        problem_definition,
+                        model_hash,
+                        run_id,
+                    )
 
                 loop_controller.increment_generation()
 
@@ -312,9 +311,7 @@ def _prepare_simulation_cases(
     return sim_cases
 
 
-def _maybe_save_checkpoint(
-    generation: int,
-    checkpoint_interval: int,
+def _save_checkpoint(
     solution_updater: SolutionUpdaterService,
     next_solutions,
     checkpoint_file: Path,
@@ -322,17 +319,14 @@ def _maybe_save_checkpoint(
     model_hash: str,
     run_id: str,
 ) -> None:
-    if generation % checkpoint_interval == 0:
-        try:
-            state = solution_updater.get_checkpoint_state(next_solutions)
-            save_checkpoint(
-                checkpoint_file, problem_definition, state, model_hash, run_id
-            )
-            logger.info(
-                "Checkpoint for run ID %s saved at generation %s: %s",
-                run_id,
-                generation,
-                checkpoint_file,
-            )
-        except Exception as e:
-            logger.warning("Failed to save checkpoint: %s", e)
+    try:
+        state = solution_updater.get_checkpoint_state(next_solutions)
+        save_checkpoint(checkpoint_file, problem_definition, state, model_hash, run_id)
+        logger.info(
+            "Checkpoint for run ID %s saved at generation %s: %s",
+            run_id,
+            solution_updater.loop_controller.current_generation,
+            checkpoint_file,
+        )
+    except Exception as e:
+        logger.warning("Failed to save checkpoint: %s", e)

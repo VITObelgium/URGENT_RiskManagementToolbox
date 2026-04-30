@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    export PATH=/root/.pixi/bin:$PATH
+
+%post
+    apt-get update
+    apt-get install -y \
+        curl git build-essential ca-certificates \
+        python3 python3-pip
+
+    # install pixi
+    curl -fsSL https://pixi.sh/install.sh | sh
+
+    mkdir -p /opt/rmt
+
+%runscript
+    cd /opt/rmt
+    exec "$@"

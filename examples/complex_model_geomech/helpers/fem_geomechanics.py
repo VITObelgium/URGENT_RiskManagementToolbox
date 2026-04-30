@@ -428,7 +428,7 @@ class FEMGeomechanics:
         """Compatibility wrapper for callers expecting fem_geo.solve(...)."""
         return self.solve_u(P, T)
     
-    def compute_mu(self, P: np.ndarray, T: np.ndarray, u: np.ndarray | None = None, orientation_degrees: float = 80.0) -> tuple:
+    def compute_mu(self, P: np.ndarray, T: np.ndarray, u: np.ndarray | None = None, orientation_degrees: float = 120.0) -> tuple:
         """
         Compute mobilized friction coefficient mu on fault elements using EFFECTIVE stress.
 

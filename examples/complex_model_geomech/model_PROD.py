@@ -404,16 +404,35 @@ class ProductionModel(DartsModel):
             solver_params=merged_solver_params,
         )
         #self.fem_geo.setup()
-        if cache_dir and os.path.exists(os.path.join(cache_dir, "A_ff.npz")) and not rebuild_cache:
-            print(f"[FEM] Loading cached FEM setup from {cache_dir}")
-            self.fem_geo.load_cache(cache_dir)
-        else:
-            print("[FEM] Building FEM setup from scratch")
+        required_cache_files = [
+            "A_ff.npz",
+            "Fp_free.npz",
+            "Ft_free.npz",
+            "fem_arrays.npz",
+            ]
+
+        cache_ready = (
+            cache_dir
+            and all(os.path.exists(os.path.join(cache_dir, f)) for f in required_cache_files)
+            )
+
+        if rebuild_cache:
+            print("[FEM] Rebuilding FEM setup from scratch")
             self.fem_geo.setup()
 
-        if cache_dir:
-            print(f"[FEM] Saving FEM setup cache to {cache_dir}")
-            self.fem_geo.save_cache(cache_dir)
+            if cache_dir:
+                print(f"[FEM] Saving FEM setup cache to {cache_dir}")
+                self.fem_geo.save_cache(cache_dir)
+
+        elif cache_ready:
+            print(f"[FEM] Loading cached FEM setup from {cache_dir}")
+            self.fem_geo.load_cache(cache_dir)
+
+        else:
+            raise RuntimeError(
+                f"FEM cache not found or incomplete at {cache_dir}. "
+                "Run one single-worker rebuild_cache=True job first."
+            )
 
 
     # custom vtk output

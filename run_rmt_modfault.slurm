@@ -35,7 +35,7 @@ echo "Using config: $CFG"
 echo "Using model: $MODEL"
 echo "TMPDIR: $TMPDIR"
 
-srun --cpu-bind=cores apptainer exec \
+apptainer exec \
   --bind "$PWD:/opt/rmt" \
   --bind "$TMPDIR:$TMPDIR" \
   rmt.sif \

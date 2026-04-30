@@ -117,6 +117,10 @@ def run_darts(well_data) -> None:
     #     rho=1300.0,
     #     solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
     # )
+    cache_dir = os.environ.get(
+    "FEM_CACHE_DIR",
+    "/home/kurgyisk/projects/URGENT_RiskManagementToolbox/log/fem_cache",
+)
     m.init_fem_geomech(
         fault_df=fault_stress_df,
         P0=initcond_df["P"].values,
@@ -127,7 +131,7 @@ def run_darts(well_data) -> None:
         alpha_T=1e-5,
         rho=1300.0,
         solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
-        cache_dir="input/fem_cache_PROD",
+        cache_dir = cache_dir, 
         rebuild_cache=False,
         )
     print("FEM geomechanics initialization completed.")

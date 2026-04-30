@@ -126,7 +126,7 @@ def test_save_load_preserves_config(tmp_path: Path, full_state: dict[str, Any]) 
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "deadbeef")
+    save_checkpoint(cp, problem_def, full_state, "deadbeef", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     assert loaded["config"].model_dump_json() == problem_def.model_dump_json()
@@ -138,7 +138,7 @@ def test_save_load_preserves_model_hash(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "abc123")
+    save_checkpoint(cp, problem_def, full_state, "abc123", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     assert loaded["model_hash"] == "abc123"
@@ -150,11 +150,11 @@ def test_save_load_preserves_generation_and_stall(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "h")
+    save_checkpoint(cp, problem_def, full_state, "h", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     lc = loaded["loop_controller_state"]
-    assert lc["current_generation"] == 8
+    assert lc["current_generation"] == 7
     assert lc["stall_left"] == 4
     assert lc["last_best"] == pytest.approx(0.5)
 
@@ -166,7 +166,7 @@ def test_save_load_last_best_none_roundtrips(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "h")
+    save_checkpoint(cp, problem_def, full_state, "h", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     assert loaded["loop_controller_state"]["last_best"] is None
@@ -178,7 +178,7 @@ def test_save_load_preserves_next_positions(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "h")
+    save_checkpoint(cp, problem_def, full_state, "h", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     np.testing.assert_array_almost_equal(
@@ -192,7 +192,7 @@ def test_save_load_preserves_engine_arrays(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "h")
+    save_checkpoint(cp, problem_def, full_state, "h", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     for key in ("particles_best_positions", "global_best_position", "velocities"):
@@ -207,7 +207,7 @@ def test_save_load_preserves_mapper_state(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "h")
+    save_checkpoint(cp, problem_def, full_state, "h", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     ms = loaded["mapper_state"]
@@ -222,7 +222,7 @@ def test_save_checkpoint_writes_file(
     problem_def = _make_problem_definition(tmp_path)
     cp = tmp_path / "cp.npz"
 
-    save_checkpoint(cp, problem_def, full_state, "h")
+    save_checkpoint(cp, problem_def, full_state, "h", "2b1e7585")
 
     assert cp.exists()
     assert not (tmp_path / "cp.tmp.npz").exists(), "temp file should be cleaned up"
@@ -396,7 +396,7 @@ def test_file_roundtrip_restores_generation(tmp_path: Path) -> None:
     state = service_a.get_checkpoint_state(next_cvs)
 
     cp = tmp_path / "cp.npz"
-    save_checkpoint(cp, problem_def, state, "model_hash_abc")
+    save_checkpoint(cp, problem_def, state, "model_hash_abc", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     service_b = SolutionUpdaterService(
@@ -408,7 +408,7 @@ def test_file_roundtrip_restores_generation(tmp_path: Path) -> None:
     )
     service_b.restore_checkpoint_state(loaded)
 
-    assert service_b.loop_controller.current_generation == 6
+    assert service_b.loop_controller.current_generation == 5
 
 
 def test_file_roundtrip_global_best_matches(tmp_path: Path) -> None:
@@ -425,7 +425,7 @@ def test_file_roundtrip_global_best_matches(tmp_path: Path) -> None:
     state = service_a.get_checkpoint_state(next_cvs)
 
     cp = tmp_path / "cp.npz"
-    save_checkpoint(cp, problem_def, state, "model_hash_abc")
+    save_checkpoint(cp, problem_def, state, "model_hash_abc", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     service_b = SolutionUpdaterService(
@@ -457,7 +457,7 @@ def test_file_roundtrip_service_can_continue(tmp_path: Path) -> None:
     state = service_a.get_checkpoint_state(next_cvs)
 
     cp = tmp_path / "cp.npz"
-    save_checkpoint(cp, problem_def, state, "h")
+    save_checkpoint(cp, problem_def, state, "h", "2b1e7585")
     loaded = load_checkpoint(cp)
 
     service_b = SolutionUpdaterService(
@@ -483,5 +483,5 @@ def test_file_roundtrip_service_can_continue(tmp_path: Path) -> None:
     response = service_b.process_request(request)
     service_b.loop_controller.increment_generation()
 
-    assert service_b.loop_controller.current_generation == 5
+    assert service_b.loop_controller.current_generation == 4
     assert len(response.next_iter_solutions) == N_PARTICLES

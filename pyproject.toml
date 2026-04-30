@@ -192,6 +192,8 @@ worker = { features = ["py312"], solve-group = "worker", no-default-feature = tr
 clean-logs = { cmd = "python -c \"import shutil; shutil.rmtree('log', ignore_errors=True)\"" }
 clean-orchestration = { cmd = "python -c \"import shutil, glob; [shutil.rmtree(p, ignore_errors=True) for p in glob.glob('orchestration_files_*')]\"" }
 clean-htmlcov = { cmd = "python -c \"import shutil; shutil.rmtree('htmlcov', ignore_errors=True)\"" }
+
+clean-checkpoints= { cmd = "python -c \"import shutil; shutil.rmtree('checkpoints', ignore_errors=True)\"" }
 clean-all = { depends-on = ["clean-logs", "clean-orchestration", "clean-htmlcov"] }
 
 mypy = { cmd = "mypy" }

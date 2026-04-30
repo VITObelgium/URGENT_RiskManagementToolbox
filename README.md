@@ -286,12 +286,12 @@ The optional `run_mode` field controls how the toolbox executes. It accepts two 
 
 ### 5. Checkpointing and resuming runs
 
-Long optimization runs can be interrupted at any time (e.g., due to a crash, timeout, or manual stop). The toolbox saves periodic **checkpoints** so that work is not lost and the run can be continued from where it left off, rather than starting from scratch.
+Long optimization runs can be interrupted at any time (e.g., due to a crash or manual stop). The toolbox saves periodic **checkpoints** so that work is not lost and the run can be continued from where it left off, rather than starting from scratch.
 
 #### How checkpoints work
 
 - A checkpoint is saved every `checkpoint_interval` completed generations (configured in `simulation_config`).
-- Checkpoints capture the full optimizer state: PSO particle positions and velocities, personal and global bests, generation counter, stall counter, and the problem configuration.
+- Checkpoints capture the full optimizer state and the problem configuration.
 - Files are written atomically to `checkpoint_path` and named `checkpoint_<run_id>.npz`.
 - On successful completion the toolbox deletes the checkpoint file automatically.
 
@@ -752,7 +752,6 @@ The Well design service will be use to determine the optimal wells placement and
     "max_generations": 50,
     "population_size": 20,
     "max_stall_generations": 5,
-    "worker_count": 4,
     "linear_inequalities": {
       "A": [
         {

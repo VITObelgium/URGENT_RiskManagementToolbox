@@ -538,6 +538,19 @@
           "minimum": 1,
           "title": "Worker Count",
           "type": "integer"
+        },
+        "checkpoint_interval": {
+          "default": 5,
+          "exclusiveMinimum": 0,
+          "minimum": 1,
+          "title": "Checkpoint Interval",
+          "type": "integer"
+        },
+        "checkpoint_path": {
+          "default": "/home/octopus/Projects/URGENT_RiskManagementToolbox/checkpoints",
+          "format": "directory-path",
+          "title": "Checkpoint Path",
+          "type": "string"
         }
       },
       "title": "SimulationConfig",

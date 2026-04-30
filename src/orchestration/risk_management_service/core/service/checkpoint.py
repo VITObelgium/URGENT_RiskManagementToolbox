@@ -19,6 +19,7 @@ class LoadedCheckpointData(UpdaterCheckpointState):
 
     config: ProblemDispatcherDefinition
     model_hash: str | None
+    run_id: str
 
 
 def checkpoint_filename(run_id: str) -> str:
@@ -48,6 +49,7 @@ def save_checkpoint(
     config: ProblemDispatcherDefinition,
     state: UpdaterCheckpointState,
     model_hash: str,
+    run_id: str,
 ) -> None:
     """Write optimizer state to checkpoint_path atomically.
 
@@ -66,6 +68,7 @@ def save_checkpoint(
     arrays: dict[str, Any] = {
         "config_json": _encode(config.model_dump_json()),
         "model_hash": _encode(model_hash),
+        "run_id": _encode(run_id),
         "next_positions": state["next_positions"],
         # Engine (e.g. PSO)
         "engine_state_json": _encode(
@@ -79,7 +82,7 @@ def save_checkpoint(
         "mapper_population_size": np.array([mapper["population_size"]], dtype=np.int64),
         # Loop controller
         "lc_current_generation": np.array(
-            [lc["current_generation"] + np.ones_like(lc["current_generation"])],
+            [lc["current_generation"]],
             dtype=np.int64,
         ),
         "lc_stall_left": np.array([lc["stall_left"]], dtype=np.int64),
@@ -119,6 +122,7 @@ def load_checkpoint(checkpoint_file: Path) -> LoadedCheckpointData:
     last_best: float | None = None if np.isnan(last_best_val) else last_best_val
 
     model_hash = _decode(data["model_hash"]) if "model_hash" in data else None
+    run_id = _decode(data["run_id"])
 
     # Load generic engine_state or fallback to legacy pso_state
     if "engine_state_json" in data:
@@ -143,6 +147,7 @@ def load_checkpoint(checkpoint_file: Path) -> LoadedCheckpointData:
     return {
         "config": config,
         "model_hash": model_hash,
+        "run_id": run_id,
         "engine_state": engine_state,
         "mapper_state": {
             "control_vector_mapping": json.loads(_decode(data["mapper_cv_mapping"])),

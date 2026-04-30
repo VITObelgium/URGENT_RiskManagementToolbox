@@ -34,7 +34,6 @@ from services.solution_updater_service import (
     OptimizationEngine,
     SolutionUpdaterService,
 )
-
 from services.well_management_service import WellDesignService
 
 logger = get_logger(__name__)
@@ -58,7 +57,7 @@ def run_risk_management(
         Multi-objective:  (pareto_results_array, list[nested_control_vector_dict])
         None on evaluation mode or keyboard interrupt.
     """
-    run_id = os.environ.get("URGENT_RUN_ID", "unknown")
+    run_id = os.environ.get("URGENT_RUN_ID", "default")
 
     logger.info("Starting risk management process (run_id=%s)...", run_id)
     logger.debug(
@@ -72,7 +71,7 @@ def run_risk_management(
     os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.worker_simulation_timeout_seconds
     )
-    os.environ["SEVER_JOB_TIMEOUT_SECONDS"] = str(
+    os.environ["SERVER_JOB_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.server_job_timeout_seconds
     )
 
@@ -132,14 +131,6 @@ def run_risk_management(
                 f"Linear inequalities retrieved: {full_key_linear_inequalities}"
             )
 
-            next_solutions = None
-            if checkpoint is not None:
-                logger.info("Restoring optimizer state from checkpoint.")
-                next_solutions = solution_updater.restore_checkpoint_state(checkpoint)
-                logger.info(
-                    f"Resuming from generation {solution_updater.loop_controller.current_generation}."
-                )
-
             checkpoint_interval = (
                 problem_definition.simulation_config.checkpoint_interval
             )
@@ -147,6 +138,15 @@ def run_risk_management(
             checkpoint_file = checkpoint_dir / checkpoint_filename(run_id)
 
             loop_controller = solution_updater.loop_controller
+
+            next_solutions = None
+            if checkpoint is not None:
+                logger.info("Restoring optimizer state from checkpoint.")
+                next_solutions = solution_updater.restore_checkpoint_state(checkpoint)
+                logger.info(
+                    f"Resuming from generation {solution_updater.loop_controller.current_generation}."
+                )
+                loop_controller.increment_generation()
 
             while loop_controller.running():
                 logger.info(
@@ -195,19 +195,18 @@ def run_risk_management(
                     f"Generation {loop_controller.current_generation} successfully completed."
                 )
 
-                loop_controller.increment_generation()
+                _maybe_save_checkpoint(
+                    loop_controller.current_generation,
+                    checkpoint_interval,
+                    solution_updater,
+                    next_solutions,
+                    checkpoint_file,
+                    problem_definition,
+                    model_hash,
+                    run_id,
+                )
 
-                if loop_controller.current_generation % checkpoint_interval == 0:
-                    try:
-                        state = solution_updater.get_checkpoint_state(next_solutions)
-                        save_checkpoint(
-                            checkpoint_file, problem_definition, state, model_hash
-                        )
-                        logger.info(
-                            f"Checkpoint saved at generation {loop_controller.current_generation}: {checkpoint_file}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to save checkpoint: {e}")
+                loop_controller.increment_generation()
 
             logger.info(
                 f"Loop controller stopped at generation {loop_controller.current_generation}. "
@@ -311,3 +310,29 @@ def _prepare_simulation_cases(
 
     logger.info(f"All simulation cases prepared. Total count: {len(sim_cases)}")
     return sim_cases
+
+
+def _maybe_save_checkpoint(
+    generation: int,
+    checkpoint_interval: int,
+    solution_updater: SolutionUpdaterService,
+    next_solutions,
+    checkpoint_file: Path,
+    problem_definition: ProblemDispatcherDefinition,
+    model_hash: str,
+    run_id: str,
+) -> None:
+    if generation % checkpoint_interval == 0:
+        try:
+            state = solution_updater.get_checkpoint_state(next_solutions)
+            save_checkpoint(
+                checkpoint_file, problem_definition, state, model_hash, run_id
+            )
+            logger.info(
+                "Checkpoint for run ID %s saved at generation %s: %s",
+                run_id,
+                generation,
+                checkpoint_file,
+            )
+        except Exception as e:
+            logger.warning("Failed to save checkpoint: %s", e)

@@ -69,11 +69,12 @@
       "Heat": "maximize"
     },
     "max_generations": 20,
-    "population_size": 10,
+    "population_size": 8,
     "max_stall_generations": 10
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 900,
-    "worker_count": 4
+    "worker_count": 8,
+    "checkpoint_interval": 1
   }
 }

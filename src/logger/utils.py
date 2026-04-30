@@ -404,7 +404,9 @@ def get_log_config_path() -> Path:
     return Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 
-def zip_results(source_path: str | Path | None = None) -> Path:
+def zip_results(
+    source_path: str | Path | None = None, run_status: str | None = None
+) -> Path:
     """
     Create a timestamped ZIP archive from the selected path.
 
@@ -444,7 +446,8 @@ def zip_results(source_path: str | Path | None = None) -> Path:
         raise FileNotFoundError(f"Selected path does not exist: {src}")
 
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = base_log_dir / f"{zip_file_prefix}{ts}"
+    run_status = run_status or ""
+    output_dir = base_log_dir / f"{zip_file_prefix}{ts}_{run_status}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = output_dir.with_suffix(".zip")

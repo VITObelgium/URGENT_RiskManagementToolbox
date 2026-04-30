@@ -19,6 +19,7 @@ from connectors.open_darts import (
 # import DARTS libraries
 from darts.physics.properties.iapws.iapws_property_vec import _Backward1_T_Ph_vec
 from darts.engines import set_num_threads
+from darts.engines import set_num_threads
 
 # import helper functions
 import helpers.helper_heatproduction as func_heat

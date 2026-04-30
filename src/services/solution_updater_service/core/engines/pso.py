@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 import numpy as np
 from numpy import typing as npt
 
@@ -20,7 +23,7 @@ class _PSOState:
         particles_best_positions: npt.NDArray[np.float64],
         particles_best_results: npt.NDArray[np.float64],
         global_best_position: npt.NDArray[np.float64],
-        global_best_result: npt.NDArray[np.float64],  # always 1-D array now
+        global_best_result: npt.NDArray[np.float64],
         velocities: npt.NDArray[np.float64],
         external_archive_positions: npt.NDArray[np.float64] | None = None,
         external_archive_results: npt.NDArray[np.float64] | None = None,
@@ -68,6 +71,49 @@ class PSOEngine(OptimizationEngineInterface):
     def reset(self) -> None:
         """Reset internal state. Call before reusing this instance for a new problem."""
         self._state = None
+
+    def get_checkpoint_state(self) -> dict[str, Any]:
+        state = ensure_not_none(self._state, "PSO state not initialized")
+        _, n_dims = state.particles_best_positions.shape
+        n_obj = (
+            state.particles_best_results.shape[1]
+            if state.particles_best_results.ndim > 1
+            else 1
+        )
+        ext_pos = (
+            state.external_archive_positions
+            if state.external_archive_positions is not None
+            else np.empty((0, n_dims), dtype=np.float64)
+        )
+        ext_res = (
+            state.external_archive_results
+            if state.external_archive_results is not None
+            else np.empty((0, n_obj), dtype=np.float64)
+        )
+        return {
+            "particles_best_positions": state.particles_best_positions.copy(),
+            "particles_best_results": state.particles_best_results.copy(),
+            "global_best_position": state.global_best_position.copy(),
+            "global_best_result": state.global_best_result.copy(),
+            "velocities": state.velocities.copy(),
+            "external_archive_positions": ext_pos.copy(),
+            "external_archive_results": ext_res.copy(),
+            "rng_state_json": json.dumps(self._rng.bit_generator.state),
+        }
+
+    def restore_checkpoint_state(self, state: dict[str, Any]) -> None:
+        ext_pos: npt.NDArray[np.float64] = state["external_archive_positions"]
+        ext_res: npt.NDArray[np.float64] = state["external_archive_results"]
+        self._state = _PSOState(
+            particles_best_positions=state["particles_best_positions"].copy(),
+            particles_best_results=state["particles_best_results"].copy(),
+            global_best_position=state["global_best_position"].copy(),
+            global_best_result=state["global_best_result"].copy(),
+            velocities=state["velocities"].copy(),
+            external_archive_positions=ext_pos.copy(),
+            external_archive_results=ext_res.copy(),
+        )
+        self._rng.bit_generator.state = json.loads(state["rng_state_json"])
 
     @property
     def global_best_result(self) -> npt.NDArray[np.float64]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -29,3 +30,9 @@ class OptimizationEngineInterface(ABC):
     @property
     @abstractmethod
     def global_best_control_vector(self) -> npt.NDArray[np.float64]: ...
+
+    @abstractmethod
+    def get_checkpoint_state(self) -> dict[str, Any]: ...
+
+    @abstractmethod
+    def restore_checkpoint_state(self, state: dict[str, Any]) -> None: ...

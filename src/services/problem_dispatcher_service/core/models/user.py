@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Self
+from typing import Self, Any
 
+from pathlib import Path
 import psutil
 from pydantic import (
     BaseModel,
+    DirectoryPath,
     Field,
     PositiveInt,
     field_validator,
@@ -62,12 +64,24 @@ class SimulationConfig(BaseModel, extra="forbid"):
         worker_simulation_timeout_seconds (int): Worker-side timeout in seconds for the local simulation subprocess to complete (default: 15 minutes)
         server_job_timeout_seconds (int): Server-side watchdog timeout in seconds for assigned jobs (default: 1 hour)
         worker_count (int): The number of parallel workers to use for simulations.
-
+        checkpoint_interval (int): Save checkpoint every n generation.
     """
 
     server_job_timeout_seconds: PositiveInt = Field(default=3600)
     worker_simulation_timeout_seconds: PositiveInt = Field(default=900)
     worker_count: PositiveInt = Field(default=4, ge=1)
+    checkpoint_interval: PositiveInt = Field(default=5, ge=1)
+    checkpoint_path: DirectoryPath = Field(
+        default=Path.joinpath(Path(__file__).resolve().parents[5], "checkpoints"),
+        validate_default=True,
+    )
+
+    @field_validator("checkpoint_path", mode="before")
+    @classmethod
+    def create_log_folder_if_missing(cls, value: Any) -> Any:
+        path = Path(value)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @field_validator("worker_count", mode="before")
     @classmethod

@@ -293,16 +293,26 @@ def _start_queue_listener() -> None:
 def _ensure_logfile_path() -> str | None:
     pyproject_path = find_pyproject_toml()
     if pyproject_path is not None:
-        log_dir = (pyproject_path.parent / "log").resolve()
+        base_log_dir = (pyproject_path.parent / "log").resolve()
     else:
         base_dir = Path(__file__).resolve().parent
-        log_dir = (base_dir / "../../log").resolve()
+        base_log_dir = (base_dir / "../../log").resolve()
 
-    file_name = "pytest_log.log" if "pytest" in sys.modules else "main_urgent_log.log"
-    if "pytest" not in sys.modules and log_to_datetime_log_file():
-        file_name = (
-            datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
-        )
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    is_pytest = "pytest" in sys.modules
+
+    if is_pytest:
+        log_dir = base_log_dir
+        file_name = "pytest_log.log"
+    else:
+        log_dir = base_log_dir / run_id if run_id else base_log_dir
+        if log_to_datetime_log_file():
+            file_name = (
+                datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_main_urgent_log.log"
+            )
+        else:
+            file_name = "main_urgent_log.log"
+
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         full_path = log_dir / file_name
@@ -394,7 +404,9 @@ def get_log_config_path() -> Path:
     return Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 
-def zip_results(source_path: str | Path | None = None) -> Path:
+def zip_results(
+    source_path: str | Path | None = None, run_status: str | None = None
+) -> Path:
     """
     Create a timestamped ZIP archive from the selected path.
 
@@ -406,16 +418,26 @@ def zip_results(source_path: str | Path | None = None) -> Path:
     source_path:
         File or directory to archive. If None, defaults to the project `log/` folder.
 
-    Returns
-    -------
-    Path
+    Returns:
+        Path
         Path to the created .zip file.
     """
-    zip_file_prefix = "run_results_"
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    zip_file_prefix = f"run_results_{run_id}_" if run_id else "run_results_"
     base_dir = Path(__file__).resolve().parent
-    log_dir = (base_dir / "../../log").resolve()
+    base_log_dir = (base_dir / "../../log").resolve()
 
-    src = Path(source_path).expanduser() if source_path is not None else log_dir
+    # If source path is not provided, we target the specific run's folder inside log/
+    if source_path is None:
+        target_dir = (
+            base_log_dir / run_id
+            if run_id and "pytest" not in sys.modules
+            else base_log_dir
+        )
+        src = target_dir
+    else:
+        src = Path(source_path).expanduser()
+
     if not src.is_absolute():
         project_root = (base_dir / "../..").resolve()
         src = (project_root / src).resolve()
@@ -424,7 +446,8 @@ def zip_results(source_path: str | Path | None = None) -> Path:
         raise FileNotFoundError(f"Selected path does not exist: {src}")
 
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = log_dir / f"{zip_file_prefix}{ts}"
+    run_status = run_status or ""
+    output_dir = base_log_dir / f"{zip_file_prefix}{ts}_{run_status}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = output_dir.with_suffix(".zip")
@@ -444,20 +467,20 @@ def zip_results(source_path: str | Path | None = None) -> Path:
         if rp == zip_path:
             return True
 
-        # Skip any existing ZIPs located directly in log_dir (previous results archives, etc.)
-        if rp.is_file() and rp.suffix.lower() == ".zip" and rp.parent == log_dir:
+        if rp.is_file() and rp.suffix.lower() == ".zip" and rp.parent == base_log_dir:
             return True
 
         return False
 
     def _delete_log_if_needed(p: Path) -> None:
-        # Clean only .log files from the top-level `log/` folder (keeps other locations safe)
+        # Clean only .log and .csv files within our target log folder
         try:
             rp = p.resolve()
         except Exception:
             return
 
-        if rp.is_file() and rp.suffix in (".log", ".csv") and rp.parent == log_dir:
+        # Delete elements belonging to target run folder
+        if rp.is_file() and rp.suffix in (".log", ".csv") and str(src) in str(rp):
             # never delete the zip we're writing (paranoia guard)
             if rp == zip_path:
                 return
@@ -482,4 +505,14 @@ def zip_results(source_path: str | Path | None = None) -> Path:
                 _delete_log_if_needed(p)
 
     shutil.rmtree(output_dir, ignore_errors=True)
+
+    # If we targeted a specific run_id folder and that folder is now empty, delete it
+    if run_id and source_path is None and "pytest" not in sys.modules:
+        target_dir = base_log_dir / run_id
+        if target_dir.exists() and not any(target_dir.iterdir()):
+            try:
+                target_dir.rmdir()
+            except OSError:
+                pass
+
     return zip_path

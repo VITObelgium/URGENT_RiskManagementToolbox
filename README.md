@@ -142,7 +142,7 @@ The Connector enables bidirectional data exchange between the Toolbox and the si
 #### 3.1 OpenDarts Connector
 
 > *Note: Make sure you run OpenDarts with the set_num_threads(1) to prevent toolbox performance degradation*
-> 
+>
 > check main.py in examples/complex_model
 ``` python
 from darts.engines import set_num_threads

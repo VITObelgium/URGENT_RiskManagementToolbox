@@ -31,7 +31,14 @@ def get_csv_logger(
     # Get the log directory path (same as in u_logger.py)
     log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../log")
     log_dir = os.path.normpath(os.path.abspath(log_dir))
-    output_path = os.path.join(log_dir, filename)
+
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    if run_id:
+        log_dir = os.path.join(log_dir, run_id)
+
+    actual_filename = filename
+    output_path = os.path.join(log_dir, actual_filename)
+
     logger_mode = get_file_log_mode()
 
     # Create logger

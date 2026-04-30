@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -26,7 +27,9 @@ def _project_root() -> Path:
 
 
 def _ensure_log_dir() -> Path:
-    log_dir = _project_root() / "log"
+    base_log_dir = _project_root() / "log"
+    run_id = os.environ.get("URGENT_RUN_ID", "")
+    log_dir = base_log_dir / run_id if run_id and not _is_pytest_env() else base_log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
@@ -132,7 +135,6 @@ def configure_server_logger() -> Path:
 
     log_dir = _ensure_log_dir()
     file_path = log_dir / "simulation_server.log"
-
     thread_filter = _ThreadNameFilter("server")
     ts_logger = logging.getLogger("threading-server")
     _add_unique_file_handler(ts_logger, file_path, record_filter=thread_filter)

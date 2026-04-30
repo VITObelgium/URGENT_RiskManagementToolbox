@@ -456,9 +456,12 @@ log/
 
 # orchestration files
 orchestration_files/
+orchestration_files_*/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
 pixi.lock
 # lsp pyright custom config
 pyrightconfig.json
+#checkpoint path
+checkpoints/

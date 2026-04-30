@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -7,6 +8,11 @@ import numpy.typing as npt
 
 from common.models import RunMode
 from logger import get_logger
+from orchestration.risk_management_service.core.service.checkpoint import (
+    checkpoint_filename,
+    save_checkpoint,
+    LoadedCheckpointData,
+)
 from services.problem_dispatcher_service import (
     ProblemDispatcherService,
     ServiceType,
@@ -28,7 +34,6 @@ from services.solution_updater_service import (
     OptimizationEngine,
     SolutionUpdaterService,
 )
-
 from services.well_management_service import WellDesignService
 
 logger = get_logger(__name__)
@@ -37,6 +42,8 @@ logger = get_logger(__name__)
 def run_risk_management(
     problem_definition: ProblemDispatcherDefinition,
     simulation_model_archive: bytes | str,
+    model_hash: str,
+    checkpoint: LoadedCheckpointData | None = None,
 ) -> tuple[npt.NDArray[np.float64], Any] | None:
     """
     Main entry point for running risk management.
@@ -50,7 +57,9 @@ def run_risk_management(
         Multi-objective:  (pareto_results_array, list[nested_control_vector_dict])
         None on evaluation mode or keyboard interrupt.
     """
-    logger.info("Starting risk management process...")
+    run_id = os.environ.get("URGENT_RUN_ID", "default")
+
+    logger.info("Starting risk management process (run_id=%s)...", run_id)
     logger.debug(
         "Input problem definition: %s, simulation_model_archive: %s",
         problem_definition,
@@ -62,7 +71,7 @@ def run_risk_management(
     os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.worker_simulation_timeout_seconds
     )
-    os.environ["SEVER_JOB_TIMEOUT_SECONDS"] = str(
+    os.environ["SERVER_JOB_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.server_job_timeout_seconds
     )
 
@@ -122,8 +131,22 @@ def run_risk_management(
                 f"Linear inequalities retrieved: {full_key_linear_inequalities}"
             )
 
-            next_solutions = None
+            checkpoint_interval = (
+                problem_definition.simulation_config.checkpoint_interval
+            )
+            checkpoint_dir = Path(problem_definition.simulation_config.checkpoint_path)
+            checkpoint_file = checkpoint_dir / checkpoint_filename(run_id)
+
             loop_controller = solution_updater.loop_controller
+
+            next_solutions = None
+            if checkpoint is not None:
+                logger.info("Restoring optimizer state from checkpoint.")
+                next_solutions = solution_updater.restore_checkpoint_state(checkpoint)
+                logger.info(
+                    f"Resuming from generation {solution_updater.loop_controller.current_generation}."
+                )
+                loop_controller.increment_generation()
 
             while loop_controller.running():
                 logger.info(
@@ -172,12 +195,26 @@ def run_risk_management(
                     f"Generation {loop_controller.current_generation} successfully completed."
                 )
 
+                if loop_controller.current_generation % checkpoint_interval == 0:
+                    _save_checkpoint(
+                        solution_updater,
+                        next_solutions,
+                        checkpoint_file,
+                        problem_definition,
+                        model_hash,
+                        run_id,
+                    )
+
                 loop_controller.increment_generation()
 
             logger.info(
                 f"Loop controller stopped at generation {loop_controller.current_generation}. "
                 f"Info: {loop_controller.info}"
             )
+
+            if checkpoint_file.exists():
+                checkpoint_file.unlink()
+                logger.info("Checkpoint cleared after successful completion.")
 
         except KeyboardInterrupt:
             logger.warning("Risk management process interrupted by user.")
@@ -272,3 +309,24 @@ def _prepare_simulation_cases(
 
     logger.info(f"All simulation cases prepared. Total count: {len(sim_cases)}")
     return sim_cases
+
+
+def _save_checkpoint(
+    solution_updater: SolutionUpdaterService,
+    next_solutions,
+    checkpoint_file: Path,
+    problem_definition: ProblemDispatcherDefinition,
+    model_hash: str,
+    run_id: str,
+) -> None:
+    try:
+        state = solution_updater.get_checkpoint_state(next_solutions)
+        save_checkpoint(checkpoint_file, problem_definition, state, model_hash, run_id)
+        logger.info(
+            "Checkpoint for run ID %s saved at generation %s: %s",
+            run_id,
+            solution_updater.loop_controller.current_generation,
+            checkpoint_file,
+        )
+    except Exception as e:
+        logger.warning("Failed to save checkpoint: %s", e)

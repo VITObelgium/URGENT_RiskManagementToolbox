@@ -137,7 +137,10 @@ class SubprocessRunner:
             )
             return static_workspace(None)
 
-        work_dir = repo_root / f"orchestration_files/.worker_{worker_id}_temp"
+        run_id = os.environ.get("URGENT_RUN_ID", "default")
+        work_dir = (
+            repo_root / f"orchestration_files_{run_id}" / f".worker_{worker_id}_temp"
+        )
         return static_workspace(work_dir)
 
     def _execute_in_workspace(

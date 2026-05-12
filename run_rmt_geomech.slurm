@@ -4,7 +4,7 @@
 #SBATCH --error=rmt_%j.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=32G
+#SBATCH --mem=48G
 #SBATCH --time=48:00:00
 
 # Go to your repo directory

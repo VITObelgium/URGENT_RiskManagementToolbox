@@ -99,6 +99,7 @@ class SubprocessRunner:
                     worker_id,
                     runner_mode,
                     stop,
+                    repo_root=repo_root,
                 )
         except KeyError as e:
             logger.exception(
@@ -151,9 +152,10 @@ class SubprocessRunner:
         worker_id: str | None,
         runner_mode: str,
         stop: threading.Event | None,
+        repo_root: Path | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         command = _build_command(config, runner_mode)
-        env = _build_env(work_dir, runner_mode)
+        env = _build_env(work_dir, runner_mode, repo_root=repo_root)
 
         if work_dir is not None:
             work_dir.mkdir(parents=True, exist_ok=True)
@@ -284,13 +286,25 @@ def _build_command(config: JsonPath, runner_mode: str) -> list[str]:
     return ["pixi", "run", "-e", "worker", "python", "-u", "main.py", config]
 
 
-def _build_env(work_dir: Path | None, runner_mode: str) -> dict[str, str]:
+def _build_env(
+    work_dir: Path | None, runner_mode: str, repo_root: Path | None = None
+) -> dict[str, str]:
     env = os.environ.copy()
+    env["URGENT_WORKER_SUBPROCESS"] = "1"
     if work_dir is not None:
         env["PWD"] = str(work_dir)
         if runner_mode == "docker":
             env["SIM_MODEL_TEMPLATE_DIR"] = os.environ.get("SIM_MODEL_DIR", "")
             env["SIM_MODEL_DIR"] = str(work_dir)
+    if runner_mode != "docker" and repo_root is not None:
+        src_path = str(repo_root / "src")
+        plugins_path = str(repo_root / "plugins")
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{src_path}{os.pathsep}{plugins_path}{os.pathsep}{existing}".rstrip(
+                os.pathsep
+            )
+        )
     return env
 
 

@@ -25,18 +25,20 @@ from services.problem_dispatcher_service.core.utils import (
 from services.shared import Boundaries
 from services.solution_updater_service import ControlVector
 
-PROBLEM_TYPE_HANDLERS: dict[ServiceType, ProblemTypeHandler] = {
-    ServiceType.WellDesignService: WellDesignHandler(),
-}
-
 
 class ProblemDispatcherService:
-    def __init__(self, problem_definition: ProblemDispatcherDefinition):
+    def __init__(
+        self,
+        problem_definition: ProblemDispatcherDefinition,
+        wms_handler: ProblemTypeHandler | None = None,
+    ):
         """
         Initialize the ProblemDispatcherService.
 
         Args:
             problem_definition (ProblemDispatcherDefinition): The problem definition to process.
+            wms_handler: Well-management handler from the resolved WMS plugin. Falls back
+                to the built-in ``WellDesignHandler`` when not provided.
         """
         self.logger = get_logger(__name__)
         self.logger.debug("Initializing ProblemDispatcherService")
@@ -46,7 +48,9 @@ class ProblemDispatcherService:
             self._population_size = (
                 self._problem_definition.optimization_parameters.population_size
             )
-            self._handlers = PROBLEM_TYPE_HANDLERS
+            self._handlers: dict[ServiceType, ProblemTypeHandler] = {
+                ServiceType.WellDesignService: wms_handler or WellDesignHandler(),
+            }
             self._initial_state = self._build_initial_state()
 
             self._linear_inequalities = (

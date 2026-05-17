@@ -11,7 +11,7 @@ import pandas as pd
 
 # import RMT modules
 # from connectors.common import SimulationResultType
-from connectors.open_darts import (
+from connectors.opendarts import (
     OpenDartsConnector,
     open_darts_input_configuration_injector,
 )

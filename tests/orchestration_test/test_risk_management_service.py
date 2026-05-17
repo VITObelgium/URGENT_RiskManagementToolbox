@@ -91,6 +91,9 @@ def test_run_risk_management_happy_path(
         mock_problem_def.optimization_parameters.max_stall_generations = 1
         mock_problem_def.optimization_parameters.max_generations = 1
         mock_problem_def.run_mode.value = "optimization"
+        mock_problem_def.plugins.connector = "opendarts"
+        mock_problem_def.plugins.optimizer = "pso"
+        mock_problem_def.plugins.well_management = "builtin"
 
         rms.run_risk_management(
             mock_problem_def, b"model", model_hash="brooks_was_here"
@@ -108,17 +111,17 @@ def test_prepare_simulation_cases_basic():
     fake_solution = MagicMock()
     fake_solution.tasks = {rms.ServiceType.WellDesignService: fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
-    with patch(
-        "orchestration.risk_management_service.core.service.risk_management_service.WellDesignService.process_request"
-    ) as mock_well:
-        mock_well.return_value.model_dump.return_value = {"well": 1}
-        fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
-        sim_cases = rms._prepare_simulation_cases(
-            solutions, fake_expected_cost_function_names
-        )
-        assert isinstance(sim_cases, list)
-        assert sim_cases[0]["wells"] == {"well": 1}
-        assert sim_cases[0]["control_vector"] == {"a": 1}
+
+    build_wells = MagicMock(
+        return_value=MagicMock(model_dump=MagicMock(return_value={"well": 1}))
+    )
+    fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
+    sim_cases = rms._prepare_simulation_cases(
+        solutions, fake_expected_cost_function_names, build_wells
+    )
+    assert isinstance(sim_cases, list)
+    assert sim_cases[0]["wells"] == {"well": 1}
+    assert sim_cases[0]["control_vector"] == {"a": 1}
 
 
 def test_prepare_simulation_cases_unhandled_service():
@@ -129,7 +132,7 @@ def test_prepare_simulation_cases_unhandled_service():
     fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
 
     sim_cases = rms._prepare_simulation_cases(
-        solutions, fake_expected_cost_function_names
+        solutions, fake_expected_cost_function_names, MagicMock()
     )
     assert isinstance(sim_cases, list)
     assert "control_vector" in sim_cases[0]
@@ -153,6 +156,7 @@ def test_run_risk_management_exception(
 
     mock_problem_def = MagicMock()
     mock_problem_def.optimization_parameters.worker_count = 1
+    mock_problem_def.plugins.connector = "opendarts"
 
     with pytest.raises(Exception):
         rms.run_risk_management(mock_problem_def, b"model")

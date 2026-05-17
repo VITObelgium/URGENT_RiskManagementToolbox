@@ -1,7 +1,7 @@
 import numpy as np
 
 from common import OptimizationStrategy
-from services.solution_updater_service.core.engines.pso import PSOEngine
+from plugins.optimizers.pso import PSOEngine
 
 
 def test_pso_repairs_infeasible_population():

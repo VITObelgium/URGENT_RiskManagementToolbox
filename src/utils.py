@@ -1,7 +1,17 @@
 import json
 from pathlib import Path
 
-from services.problem_dispatcher_service import ProblemDispatcherDefinition
+
+def find_repo_root(marker_file: str = "pyproject.toml") -> Path:
+    """Dynamically find the repository root by searching for a marker file (e.g., pyproject.toml).
+
+    This avoids hardcoding parent levels and works regardless of script location.
+    """
+    current = Path(__file__).resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / marker_file).exists():
+            return parent
+    raise RuntimeError(f"Repository root with {marker_file} not found from {__file__}")
 
 
 def strip_descriptions(schema: dict) -> dict:
@@ -15,6 +25,8 @@ def strip_descriptions(schema: dict) -> dict:
 
 
 def write_schema_rmt_schema(schema_folder_path: str | Path, version: str) -> None:
+    from services.problem_dispatcher_service import ProblemDispatcherDefinition
+
     schema = ProblemDispatcherDefinition.model_json_schema(mode="serialization")
     clean_schema = strip_descriptions(schema)
 

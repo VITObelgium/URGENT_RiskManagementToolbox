@@ -55,6 +55,11 @@ def dict_problem_definition():
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
+        "plugins": {
+            "connector": "opendarts",
+            "optimizer": "pso",
+            "well_management": "builtin",
+        },
     }
 
 
@@ -560,6 +565,11 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
     problem_definition = {
         "well_design": [well_config],
         "optimization_parameters": {"objectives": {"metrics1": "maximize"}},
+        "plugins": {
+            "connector": "opendarts",
+            "optimizer": "pso",
+            "well_management": "builtin",
+        },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     service = ProblemDispatcherService(problem_definition=problem_definition)

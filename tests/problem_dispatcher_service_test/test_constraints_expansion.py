@@ -59,6 +59,11 @@ def md_problem_definition():
                 "sense": ["<="],
             },
         },
+        "plugins": {
+            "connector": "opendarts",
+            "optimizer": "pso",
+            "well_management": "builtin",
+        },
     }
 
 
@@ -101,7 +106,7 @@ def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
 def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition):
     """Ensure PSO tries to move towards the unconstrained optimum (2800) but respects ub=2700."""
 
-    from services.solution_updater_service.core.engines.pso import PSOEngine
+    from plugins.optimizers.pso import PSOEngine
 
     md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
@@ -183,6 +188,11 @@ def test_jwell_constraints_respected():
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
+        "plugins": {
+            "connector": "opendarts",
+            "optimizer": "pso",
+            "well_management": "builtin",
+        },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     svc = ProblemDispatcherService(problem_definition=problem_definition)
@@ -222,6 +232,11 @@ def test_hwell_constraints_respected():
         "optimization_parameters": {
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
+        },
+        "plugins": {
+            "connector": "opendarts",
+            "optimizer": "pso",
+            "well_management": "builtin",
         },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
@@ -281,6 +296,11 @@ def test_linear_inequalities_mixed_wells():
                 "b": [1000.0],
                 "sense": ["<="],
             },
+        },
+        "plugins": {
+            "connector": "opendarts",
+            "optimizer": "pso",
+            "well_management": "builtin",
         },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)

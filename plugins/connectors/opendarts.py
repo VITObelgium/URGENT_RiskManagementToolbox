@@ -1,3 +1,19 @@
+"""Built-in OpenDARTS connector plugin.
+
+Loaded by the urgent_plugins loader (orchestrator context) to register the
+descriptor in the plugin registry, and staged into the worker subprocess
+directory so user simulation scripts can call
+:meth:`OpenDartsConnector.broadcast_result` and other helpers.
+
+Both contexts have ``src/`` on ``PYTHONPATH`` (orchestrator: always; worker:
+injected via ``PYTHONPATH`` env var by :func:`_build_env`), so absolute
+imports are used throughout.
+
+Bootstrapped via::
+
+    pixi run create-plugin connector OpenDartsConnector --plugin-name opendarts
+"""
+
 from __future__ import annotations
 
 import json
@@ -5,10 +21,10 @@ import os
 import re
 import sys
 import threading
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 from typing import Any, Protocol, TypedDict
-from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -16,7 +32,7 @@ from scipy.spatial import KDTree
 
 from logger import get_logger
 
-from .common import (
+from services.simulation_service.core.connectors.common import (
     ConnectorInterface,
     GridCell,
     JsonPath,
@@ -26,17 +42,20 @@ from .common import (
     WellManagementServiceResultSchema,
     WellName,
     extract_well_with_perforations_points,
-)  # the relative import, because connectors will be copied to worker, this will prevent import error
-from .conn_utils.managed_subprocess import ManagedSubprocess
-from .runner import SubprocessRunner, ThreadRunner
+)
+from services.simulation_service.core.connectors.conn_utils.managed_subprocess import (
+    ManagedSubprocess,
+)
+from services.simulation_service.core.connectors.runner import (
+    SubprocessRunner,
+    ThreadRunner,
+)
 
 logger = get_logger("threading-worker", filename=__name__)
 
 
 class _StructDiscretizerProtocol(Protocol):
-    """
-    Struct Discretizer Protocol
-    """
+    """Struct Discretizer Protocol."""
 
     len_cell_xdir: npt.NDArray[np.float64]
     len_cell_ydir: npt.NDArray[np.float64]
@@ -44,13 +63,13 @@ class _StructDiscretizerProtocol(Protocol):
 
 
 class _GlobalData(TypedDict):
-    """
-    Global Data Protocol (dictionary)
+    """Global Data Protocol (dictionary).
+
     Attributes:
-        dx: NumPy array of grid cell dimensions in the x-direction.
-        dy: NumPy array of grid cell dimensions in the y-direction.
-        dz: NumPy array of grid cell dimensions in the z-direction.
-        start_z: The starting depth reference for the z-axis.
+        dx: Cell sizes in the x-direction.
+        dy: Cell sizes in the y-direction.
+        dz: Cell sizes in the z-direction.
+        start_z: Starting depth reference for the z-axis.
     """
 
     dx: npt.NDArray[np.float64]
@@ -62,12 +81,10 @@ class _GlobalData(TypedDict):
 class _StructReservoirProtocol(Protocol):
     """Protocol for a structured reservoir model.
 
-    This protocol defines the expected attributes for a structured reservoir.
-
     Attributes:
-        nx (int): Number of grid cells in the x-direction.
-        ny (int): Number of grid cells in the y-direction.
-        nz (int): Number of grid cells in the z-direction.
+        nx (int): Cells in the x-direction.
+        ny (int): Cells in the y-direction.
+        nz (int): Cells in the z-direction.
         discretizer (_StructDiscretizerProtocol): Grid discretizer.
         global_data (_GlobalData): Global data for the grid.
     """
@@ -80,18 +97,16 @@ class _StructReservoirProtocol(Protocol):
 
 
 def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
-    """
-    The decorator should be used on top of the main function which trigger Open-Darts simulation
-    Decorator allow to inject configuration json directly from the command line
+    """Inject a JSON configuration into the user simulation's main function.
 
-    Usage: python3 main.py (or other file name with open-darts simulation) <path-to-configuration.json>
+    Usage::
 
-    example:
+        @open_darts_input_configuration_injector
+        def main(configuration_content): ...
 
-    @open_darts_input_configuration_injector
-    def main(configuration_content):
-        ...
-
+    The decorated function receives the parsed configuration as its first
+    positional argument when the worker subprocess invokes
+    ``python main.py <path-to-configuration.json>``.
     """
 
     @wraps(func)
@@ -110,13 +125,11 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
                 logger.error(f"Failed to read configuration file: {e}.")
                 sys.exit(1)
         else:
-            # For legacy reason, allowing passing json string directly
             try:
                 config = json.loads(json_config_str)
             except json.JSONDecodeError:
                 logger.error("Invalid JSON input.")
                 sys.exit(1)
-
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 sys.exit(1)
@@ -135,10 +148,9 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
 
 
 class OpenDartsConnector(ConnectorInterface):
-    """
-    Connector class design for OpenDarts simulator
-    """
+    """Connector for the OpenDARTS reservoir simulator."""
 
+    ConnectorName = "opendarts"
     MsgTemplate = "OpenDartsConnector: Type:{0}, Value:{1}"
 
     @staticmethod
@@ -147,7 +159,6 @@ class OpenDartsConnector(ConnectorInterface):
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        # Choose runner implementation via environment. Default uses subprocess runner.
         runner_mode = os.environ.get("OPEN_DARTS_RUNNER", "thread").lower()
 
         timeout = int(os.environ.get("WORKER_SIMULATION_TIMEOUT_SECONDS", "900"))
@@ -170,12 +181,10 @@ class OpenDartsConnector(ConnectorInterface):
         )
 
     @staticmethod
-    def _get_broadcast_results(
-        stdout: str,
-    ) -> SimulationResults:
+    def _get_broadcast_results(stdout: str) -> SimulationResults:
         template = OpenDartsConnector.MsgTemplate
-        re_key = r"(\w+)"  # str
-        re_value = r"([+-]?\d+(?:\.\d+)?)"  # float
+        re_key = r"(\w+)"
+        re_value = r"([+-]?\d+(?:\.\d+)?)"
         pattern = template.format(re_key, re_value)
         matches = re.findall(pattern, stdout)
         results: dict[str, float] = {}
@@ -185,11 +194,7 @@ class OpenDartsConnector(ConnectorInterface):
 
     @staticmethod
     def broadcast_result(key: str, value: float) -> None:
-        """
-        Use for broadcast given simulation results to stdout
-            key: SimulationResultsType
-            value: float
-        """
+        """Emit a simulation result line for the parent worker to capture."""
         if not isinstance(value, (int, float)):
             raise ValueError(f"Value must be a number, got {type(value).__name__}")
         broadcast_template = OpenDartsConnector.MsgTemplate.format(key, float(value))
@@ -200,29 +205,11 @@ class OpenDartsConnector(ConnectorInterface):
         well_management_service_result: WellManagementServiceResultSchema,
         struct_reservoir: _StructReservoirProtocol,
     ) -> dict[WellName, tuple[GridCell, ...]]:
+        """Map well perforation points to reservoir grid cells.
+
+        Helper used by OpenDARTS-specific user models. Not part of the generic
+        :class:`ConnectorInterface` contract.
         """
-        Retrieve the connection cells for a given well, identifying which reservoir grid cells
-        correspond to the well's perforations.
-
-        This method maps well perforations onto the reservoir's discretized cells, potentially
-        using spatial querying (e.g., through a KD-tree). It ensures that connections between
-        wells and reservoir cells are accurately identified considering reservoir geometry,
-        discretization, and perforation coordinates.
-
-        Returns:
-            list[int]: List of cell indices within the reservoir grid corresponding to the provided perforations.
-
-        Raises:
-            ValueError: If provided perforation coordinates are invalid or outside the reservoir bounds.
-            RuntimeError: If internal spatial querying fails due to invalid KD-tree or spatial data setup.
-
-
-        Notes:
-            - Ensure that the internal KD-tree or spatial data used for find operations is initialized and updated accurately.
-            - Coordinate systems (units and orientation) must be consistent with reservoir modeling conventions.
-
-        """
-
         result: dict[WellName, tuple[GridCell, ...]] = {}
         wells_with_perforations_points: dict[WellName, tuple[Point, ...]] = (
             extract_well_with_perforations_points(well_management_service_result)
@@ -291,7 +278,6 @@ class OpenDartsConnector(ConnectorInterface):
         )
 
         filtered_perforations_points = well_perforations_points_ar[in_bounds]
-
         return tuple(filtered_perforations_points)
 
     @staticmethod
@@ -317,16 +303,12 @@ class OpenDartsConnector(ConnectorInterface):
 
 
 class _CellConnector:
-    """
-    Notes:
-    - This class explicitly depends on 'scipy' for KD-tree spatial queries. Ensure 'scipy' is installed
-      through the 'open-darts' dependency specification
+    """KD-tree wrapper for mapping points to reservoir cells.
+
+    Depends on ``scipy.spatial`` from the OpenDARTS wheel.
     """
 
-    def __init__(
-        self,
-        struct_reservoir: _StructReservoirProtocol,
-    ) -> None:
+    def __init__(self, struct_reservoir: _StructReservoirProtocol) -> None:
         centroids = _calculate_centroids(struct_reservoir)
         self._kd_tree = KDTree(centroids)
 
@@ -336,22 +318,7 @@ class _CellConnector:
 
 
 def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDArray:
-    """
-    Calculates the centroids of grid cells within a 3D structured reservoir. Centroids are computed
-    based on the structured reservoir's dimensions and its discretization parameters in the x, y,
-    and z directions. The centroids represent the geometric centers of each grid cell in terms of
-    their x, y, and z coordinates.
-
-    Args:
-        struct_reservoir: A data structure implementing the _StructReservoirProtocol. It contains
-            reservoir configuration including dimensions (nx, ny, nz), the starting depth along the
-            z-direction ("start_z"), and length of each cell in the x, y, and z directions (accessible
-            via its discretizer attribute).
-
-    Returns:
-        npt.NDArray: A 2D NumPy array of shape (nx * ny * nz, 3), where each row represents the [x, y, z]
-        coordinates of a cell's centroid in column-major order.
-    """
+    """Compute centroid coordinates for every cell of a structured reservoir."""
     nx = struct_reservoir.nx
     ny = struct_reservoir.ny
     nz = struct_reservoir.nz
@@ -362,27 +329,22 @@ def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDAr
     len_cell_ydir = struct_reservoir.discretizer.len_cell_ydir
     len_cell_xdir = struct_reservoir.discretizer.len_cell_xdir
 
-    centroids_all_cells = np.zeros((nx, ny, nz, 3))  # 3 - for x,y,z coordinates
-    # fill z-coordinates using DZ
-    centroids_all_cells[:, :, 0, 2] = (
-        start_z + len_cell_zdir[:, :, 0] * 0.5
-    )  # nx*ny array of current layer's depths
+    centroids_all_cells = np.zeros((nx, ny, nz, 3))
+    centroids_all_cells[:, :, 0, 2] = start_z + len_cell_zdir[:, :, 0] * 0.5
     if nz > 1:
         d_cumsum = len_cell_zdir.cumsum(axis=2)
         centroids_all_cells[:, :, 1:, 2] = (
             start_z + (d_cumsum[:, :, :-1] + d_cumsum[:, :, 1:]) * 0.5
         )
 
-    # fill y-coordinates using DY
-    centroids_all_cells[:, 0, :, 1] = len_cell_ydir[:, 0, :] * 0.5  # nx*nz array
+    centroids_all_cells[:, 0, :, 1] = len_cell_ydir[:, 0, :] * 0.5
     if ny > 1:
         d_cumsum = len_cell_ydir.cumsum(axis=1)
         centroids_all_cells[:, 1:, :, 1] = (
             d_cumsum[:, :-1, :] + d_cumsum[:, 1:, :]
         ) * 0.5
 
-    # fill x-coordinates using DX
-    centroids_all_cells[0, :, :, 0] = len_cell_xdir[0, :, :] * 0.5  # ny*nz array
+    centroids_all_cells[0, :, :, 0] = len_cell_xdir[0, :, :] * 0.5
     if nx > 1:
         d_cumsum = len_cell_xdir.cumsum(axis=0)
         centroids_all_cells[1:, :, :, 0] = (
@@ -390,3 +352,19 @@ def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDAr
         ) * 0.5
 
     return np.reshape(centroids_all_cells, (nx * ny * nz, 3), order="F")
+
+
+# Plugin descriptor — only built when ``urgent_plugins`` is importable.
+# In a worker subprocess the file is staged as ``connectors/opendarts.py``
+# and ``urgent_plugins`` is not on sys.path; the descriptor is skipped silently
+# and the user simulation script still gets the OpenDartsConnector class plus
+# the configuration injector decorator.
+try:
+    from urgent_plugins import ConnectorPlugin
+
+    plugin = ConnectorPlugin(
+        name=OpenDartsConnector.ConnectorName,
+        implementation=OpenDartsConnector,
+    )
+except ImportError:
+    pass

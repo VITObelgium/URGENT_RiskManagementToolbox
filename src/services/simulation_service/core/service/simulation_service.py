@@ -39,7 +39,7 @@ class SimulationService:
         simulation_cases_request = request.simulation_cases
 
         simulation_cases_response = SimulationService._perform_simulations_on_cluster(
-            simulation_cases_request
+            simulation_cases_request, connector=request.connector
         )
 
         logger.info("Simulation processing completed.")
@@ -116,17 +116,27 @@ class SimulationService:
     @staticmethod
     def _perform_simulations_on_cluster(
         cases: Sequence[SimulationCase],
+        connector: str,
     ) -> Sequence[SimulationCase]:
         """
         Perform simulations on the cluster and return the responses.
 
         Args:
             cases (Sequence[SimulationCase]): The simulation cases to process.
+            connector (str): Name of the connector plugin the workers should use
+                for this batch.
 
         Returns:
             Sequence[SimulationCase]: The processed simulation cases.
         """
-        logger.info("Processing %d simulation cases on the cluster...", len(cases))
+        if not connector:
+            raise ValueError("Connector not defined! Check config.json")
+
+        logger.info(
+            "Processing %d simulation cases on the cluster using connector=%r...",
+            len(cases),
+            connector,
+        )
         _config = get_simulation_config()
 
         with GrpcStubManager.get_stub(
@@ -134,7 +144,10 @@ class SimulationService:
             _config.server_port,
         ) as stub:
             simulations_inputs = [SimulationService._to_grpc(case) for case in cases]
-            simulations_request = sm.Simulations(simulations=simulations_inputs)
+            simulations_request = sm.Simulations(
+                simulations=simulations_inputs,
+                options=sm.SimulationOptions(connector=connector),
+            )
 
             try:
                 logger.info(

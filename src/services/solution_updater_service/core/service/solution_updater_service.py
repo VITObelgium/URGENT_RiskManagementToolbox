@@ -18,7 +18,6 @@ from services.solution_updater_service.core.engines import (
 )
 from services.solution_updater_service.core.models import (
     ControlVector,
-    OptimizationEngine,
     SolutionCandidate,
     SolutionUpdaterServiceRequest,
     SolutionUpdaterServiceResponse,
@@ -377,14 +376,17 @@ class _SolutionUpdaterServiceLoopController:
 class SolutionUpdaterService:
     def __init__(
         self,
-        optimization_engine: OptimizationEngine,
+        optimization_engine: str,
         max_generations: int,
         max_stall_generations: int,
         objectives: dict[str, OptimizationStrategy],
         seed: int | None = None,
     ) -> None:
-        """
-        Initializes the SolutionUpdaterService with specified optimization engine and parameters.
+        """Initializes the SolutionUpdaterService.
+
+        ``optimization_engine`` is the plugin name of the desired engine; it is
+        resolved against the urgent_plugins registry by
+        :class:`OptimizationEngineFactory`.
         """
         self._logger = get_logger(__name__)
         self._mapper: _Mapper = _Mapper()

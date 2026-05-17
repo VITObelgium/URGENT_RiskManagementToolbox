@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from common import OptimizationStrategy
-from services.solution_updater_service.core.engines.pso import PSOEngine
+from plugins.optimizers.pso import PSOEngine
 
 # Shared helpers
 _MINIMIZE = OptimizationStrategy.MINIMIZE

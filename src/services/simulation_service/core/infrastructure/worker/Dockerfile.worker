@@ -41,7 +41,16 @@ COPY src/services/simulation_service/core/infrastructure/generated/ /app/src/ser
 
 COPY src/services/simulation_service/core/infrastructure/worker/src/ /app/src/services/simulation_service/core/infrastructure/worker/src/
 
-ENV PYTHONPATH=/app/src
+COPY src/urgent_plugins/ /app/src/urgent_plugins/
+COPY src/utils.py /app/src/utils.py
+COPY src/services/shared/ /app/src/services/shared/
+COPY src/services/solution_updater_service/ /app/src/services/solution_updater_service/
+COPY src/services/problem_dispatcher_service/ /app/src/services/problem_dispatcher_service/
+COPY src/services/well_management_service/ /app/src/services/well_management_service/
+
+
+COPY plugins/ /app/plugins/
+ENV PYTHONPATH=/app/src:/app/plugins
 ENV URGENT_LOGGER_PROFILE=worker
 
 ARG _SERVER_PORT
@@ -50,4 +59,4 @@ ARG _SERVER_HOST
 ENV SERVER_PORT=${_SERVER_PORT}
 ENV SERVER_HOST=${_SERVER_HOST}
 
-CMD ["python", "-u", "/app/src/services/simulation_service/core/infrastructure/worker/src/_simulation_worker_grpc.py"]
+CMD ["python", "-u", "-m", "services.simulation_service.core.infrastructure.worker.src._simulation_worker_grpc"]

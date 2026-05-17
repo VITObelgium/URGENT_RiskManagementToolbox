@@ -16,7 +16,7 @@ from services.simulation_service.core.connectors.common import (
     WellManagementServiceResultSchema,
     WellName,
 )
-from services.simulation_service.core.connectors.open_darts import (
+from plugins.connectors.opendarts import (
     OpenDartsConnector,
     _GlobalData,
     _StructDiscretizerProtocol,
@@ -196,7 +196,8 @@ def patch_stream_reader(monkeypatch):
     Patch the stream_reader used by SubprocessRunner so it appends lines from the mock's
     stdout/stderr to manager.stdout_lines/manager.stderr_lines without using real logging.
     """
-    from services.simulation_service.core.connectors import open_darts, runner
+    from plugins.connectors import opendarts as open_darts
+    from services.simulation_service.core.connectors import runner
 
     def fake_stream_reader(stream, lines_list, logger_func=None, **kwargs):
         for line in stream:
@@ -388,7 +389,7 @@ def test_run_failure(mock_popen: Mock) -> None:
 def test_run_handles_exception(mock_popen: Mock) -> None:
     # Simulate exception in Popen
     with patch(
-        "services.simulation_service.core.connectors.open_darts.ManagedSubprocess.__enter__",
+        "plugins.connectors.opendarts.ManagedSubprocess.__enter__",
         side_effect=Exception("fail"),
     ):
         expected_cost_function_with_default_values = {"heat": float("nan")}

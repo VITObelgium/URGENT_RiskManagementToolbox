@@ -1,31 +1,28 @@
 import pytest
 
+from services.shared.type_checks import ensure_not_none
 from services.solution_updater_service.core.engines.factory import (
     OptimizationEngineFactory,
 )
-from services.solution_updater_service.core.engines.pso import PSOEngine
-from services.solution_updater_service.core.models.user import OptimizationEngine
-from services.shared.type_checks import ensure_not_none
+from plugins.optimizers.pso import PSOEngine
 
 
 class TestOptimizationEngineFactory:
     def test_get_pso_engine_returns_pso_instance(self):
-        engine = OptimizationEngineFactory.get_engine(OptimizationEngine.PSO)
+        engine = OptimizationEngineFactory.get_engine(PSOEngine.EngineName)
         assert isinstance(engine, PSOEngine)
 
     def test_get_pso_engine_with_seed(self):
-        engine = OptimizationEngineFactory.get_engine(OptimizationEngine.PSO, seed=42)
+        engine = OptimizationEngineFactory.get_engine(PSOEngine.EngineName, seed=42)
         assert isinstance(engine, PSOEngine)
 
+    def test_factory_raises_when_engine_name_empty(self):
+        with pytest.raises(ValueError):
+            OptimizationEngineFactory.get_engine("")
+
     def test_unsupported_engine_raises_not_implemented(self):
-        """An engine type not handled by the factory should raise NotImplementedError."""
-        import enum
-
-        class _FakeEngine(enum.Enum):
-            UNKNOWN = "unknown"
-
         with pytest.raises(NotImplementedError):
-            OptimizationEngineFactory.get_engine(_FakeEngine.UNKNOWN)  # type: ignore[arg-type]
+            OptimizationEngineFactory.get_engine("not_a_registered_engine")
 
 
 class TestEnsureNotNone:

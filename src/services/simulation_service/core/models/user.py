@@ -13,6 +13,7 @@ class SimulationCase(BaseModel, extra="forbid"):
 
 class SimulationServiceRequest(BaseModel, extra="forbid"):
     simulation_cases: list[SimulationCase]
+    connector: str
 
 
 class SimulationServiceResponse(BaseModel, extra="forbid"):

@@ -5,17 +5,7 @@ import os
 import threading
 from pathlib import Path
 
-
-def _find_repo_root(marker_file: str = "pyproject.toml") -> Path:
-    """Dynamically find the repository root by searching for a marker file (e.g., pyproject.toml).
-
-    This avoids hardcoding parent levels and works regardless of script location.
-    """
-    current = Path(__file__).resolve()
-    for parent in [current] + list(current.parents):
-        if (parent / marker_file).exists():
-            return parent
-    raise RuntimeError(f"Repository root with {marker_file} not found from {__file__}")
+from utils import find_repo_root
 
 
 def get_run_id() -> str:
@@ -25,7 +15,7 @@ def get_run_id() -> str:
 
 def compute_worker_temp_dir(worker_id: str | int) -> Path:
     """Compute the absolute temp directory path for a given worker."""
-    repo_root = _find_repo_root()
+    repo_root = find_repo_root()
     run_id = get_run_id()
     return (
         repo_root / f"orchestration_files_{run_id}" / f".worker_{str(worker_id)}_temp"

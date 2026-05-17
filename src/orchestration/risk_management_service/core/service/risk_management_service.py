@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
 )
-from services.problem_dispatcher_service.core.utils.utils import (
+from services.problem_dispatcher_service.core.utils import (
     parse_flat_dict_to_nested,
 )
 from services.shared import ensure_not_none
@@ -30,11 +31,14 @@ from services.simulation_service import (
     simulation_cluster_context_manager,
     simulation_process_context_manager,
 )
-from services.solution_updater_service import (
-    OptimizationEngine,
-    SolutionUpdaterService,
+from services.solution_updater_service import SolutionUpdaterService
+from urgent_plugins import (
+    PluginKind,
+    get_registry,
+    resolve_connector_plugin,
+    resolve_optimizer_plugin,
+    resolve_wms_plugin,
 )
-from services.well_management_service import WellDesignService
 
 logger = get_logger(__name__)
 
@@ -68,6 +72,16 @@ def run_risk_management(
 
     runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
     os.environ["RUN_MODE"] = problem_definition.run_mode.value
+    connector_name = resolve_connector_plugin(problem_definition.plugins.connector)
+    optimizer_name = resolve_optimizer_plugin(problem_definition.plugins.optimizer)
+    wms_name = resolve_wms_plugin(problem_definition.plugins.well_management)
+    wms_plugin = get_registry().require(PluginKind.WMS, wms_name)
+    logger.info(
+        "Running with %s Connector, %s Optimizer, and %s WMS",
+        connector_name,
+        optimizer_name,
+        wms_name,
+    )
     os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.worker_simulation_timeout_seconds
     )
@@ -88,7 +102,10 @@ def run_risk_management(
                 simulation_model_archive=simulation_model_archive
             )
 
-            dispatcher = ProblemDispatcherService(problem_definition=problem_definition)
+            dispatcher = ProblemDispatcherService(
+                problem_definition=problem_definition,
+                wms_handler=wms_plugin.handler,
+            )
             run_mode = problem_definition.run_mode
 
             if run_mode == RunMode.Evaluation:
@@ -100,13 +117,13 @@ def run_risk_management(
                     dispatcher.expected_optimization_function_names
                 )
                 sim_cases = _prepare_simulation_cases(
-                    solutions, expected_cost_function_names
+                    solutions, expected_cost_function_names, wms_plugin.build_wells
                 )
                 logger.info(
                     "Submitting evaluation simulation case to SimulationService."
                 )
                 completed_cases = SimulationService.process_request(
-                    {"simulation_cases": sim_cases}
+                    {"simulation_cases": sim_cases, "connector": connector_name}
                 )
                 logger.info(
                     f"Evaluation simulation completed successfully with results: "
@@ -115,7 +132,7 @@ def run_risk_management(
                 return None
 
             solution_updater = SolutionUpdaterService(
-                optimization_engine=OptimizationEngine.PSO,
+                optimization_engine=optimizer_name,
                 max_generations=dispatcher.max_generation,
                 max_stall_generations=dispatcher.max_stall_generations,
                 objectives=dispatcher.optimization_objectives,
@@ -156,13 +173,15 @@ def run_risk_management(
                 logger.debug(f"Generated solutions: {solutions}")
 
                 sim_cases = _prepare_simulation_cases(
-                    solutions, dispatcher.expected_optimization_function_names
+                    solutions,
+                    dispatcher.expected_optimization_function_names,
+                    wms_plugin.build_wells,
                 )
                 logger.debug(f"Prepared simulation cases: {sim_cases}")
 
                 logger.info("Submitting simulation cases to SimulationService.")
                 completed_cases = SimulationService.process_request(
-                    {"simulation_cases": sim_cases}
+                    {"simulation_cases": sim_cases, "connector": connector_name}
                 )
                 logger.debug(f"Completed simulation cases: {completed_cases}")
 
@@ -269,6 +288,7 @@ def run_risk_management(
 def _prepare_simulation_cases(
     solutions: ProblemDispatcherServiceResponse,
     expected_cost_function_names: list[str],
+    build_wells: Callable[..., Any],
 ) -> list[dict[str, Any]]:
     """
     Prepare simulation cases from generated candidates.
@@ -277,6 +297,8 @@ def _prepare_simulation_cases(
         solutions: The generated solution candidates from the dispatcher.
         expected_cost_function_names: Names of the cost functions to initialise
             result placeholders with NaN.
+        build_wells: Callable from the WMS plugin that converts a well
+            request into a ``WellDesignServiceResponse``-like object.
 
     Returns:
         Simulation cases ready for processing by the simulation service.
@@ -295,7 +317,7 @@ def _prepare_simulation_cases(
                     logger.debug(
                         f"Processing task for service: {service}. Task details: {task}"
                     )
-                    wells = WellDesignService.process_request({"models": task.request})
+                    wells = build_wells(task.request)
                     sim_case["wells"] = wells.model_dump()
                     control_vector.update(task.control_vector.items)
                     logger.debug("Processed wells: %s", wells)

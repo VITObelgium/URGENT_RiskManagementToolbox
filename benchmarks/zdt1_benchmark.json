@@ -59,5 +59,10 @@
     "population_size": 200,
     "max_generations": 300,
     "max_stall_generations": 301
+  },
+  "plugins": {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "well_management": "builtin"
   }
 }

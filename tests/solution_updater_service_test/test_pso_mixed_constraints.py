@@ -1,7 +1,7 @@
 import pytest
 
 from common import OptimizationStrategy
-from services.solution_updater_service.core.models import OptimizationEngine
+from plugins.optimizers.pso import PSOEngine
 from services.solution_updater_service.core.service import SolutionUpdaterService
 
 
@@ -64,7 +64,7 @@ def test_pso_handles_mixed_md_and_wellhead_constraints(mixed_constraints_request
     and independent violations of 'md' and 'wellhead.x' bounds.
     """
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=2,
         max_stall_generations=3,
         objectives={"metric": OptimizationStrategy.MAXIMIZE},

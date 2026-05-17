@@ -36,6 +36,11 @@ message SimulationJob{
   string worker_id = 3;
   Simulator simulator = 4;
   int32 job_id = 5;
+  string connector = 6;
+}
+
+message SimulationOptions{
+  string connector = 1;
 }
 
 message RequestJob{
@@ -55,6 +60,7 @@ message Simulation {
 
 message Simulations{
   repeated Simulation simulations = 1;
+  SimulationOptions options = 2;
 }
 
 message RequestModel{

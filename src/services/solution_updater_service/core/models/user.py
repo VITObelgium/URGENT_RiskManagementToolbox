@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import field
-from enum import StrEnum
 from typing import Self
 
 import numpy as np
@@ -12,10 +11,6 @@ from services.shared import Boundaries, LinearInequalities
 
 type OptimizationVariableName = str
 type CostFunctionName = str
-
-
-class OptimizationEngine(StrEnum):
-    PSO = "PSO"
 
 
 class OptimizationConstrains(BaseModel, extra="forbid"):

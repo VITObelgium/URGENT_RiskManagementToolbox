@@ -68,5 +68,10 @@
   "simulation_config": {
     "worker_simulation_timeout_seconds": 900,
     "worker_count": 4
+  },
+  "plugins": {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "well_management": "builtin"
   }
 }

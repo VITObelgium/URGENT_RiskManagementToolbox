@@ -1,7 +1,5 @@
 from common import OptimizationStrategy
-from services.solution_updater_service.core.models import (
-    OptimizationEngine,
-)
+from plugins.optimizers.pso import PSOEngine
 from services.solution_updater_service.core.service import SolutionUpdaterService
 
 
@@ -15,7 +13,7 @@ def _build_candidate(param_values: dict[str, float], metric: float):
 def test_pso_respects_linear_inequality_sum_constraint():
     """Particles should stay (or be repaired) within INJ.md + PRO.md <= 3000 after several iterations."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=5,
         max_stall_generations=5,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
@@ -64,7 +62,7 @@ def test_pso_respects_linear_inequality_sum_constraint():
 def test_penalty_applied_when_violating_constraint():
     """First iteration should set global best from feasible candidate despite worse raw metric if infeasible penalized."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=1,
         max_stall_generations=1,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
@@ -100,7 +98,7 @@ def test_penalty_applied_when_violating_constraint():
 def test_direction_greater_equal_transforms_and_enforced():
     """Test that a >= constraint is transformed and enforced (e.g., INJ.md + PRO.md >= 1000)."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=3,
         max_stall_generations=3,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
@@ -145,7 +143,7 @@ def test_direction_greater_equal_transforms_and_enforced():
 def test_strict_less_treated_as_less_equal():
     """Ensure '<' behaves like '<=' (INJ.md + PRO.md < 1200)."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=2,
         max_stall_generations=2,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
@@ -182,7 +180,7 @@ def test_strict_less_treated_as_less_equal():
 def test_mixed_constraints_greater_and_less_than():
     """Test that both >= and <= constraints are enforced correctly."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=5,
         max_stall_generations=5,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},
@@ -233,7 +231,7 @@ def test_mixed_constraints_greater_and_less_than():
 def test_multiple_inequalities_enforced():
     """Test that multiple inequality constraints are enforced simultaneously."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=5,
         max_stall_generations=5,
         objectives={"metric1": OptimizationStrategy.MINIMIZE},

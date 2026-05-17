@@ -3,7 +3,7 @@
 ###############
 
 # import RMT connector for DARTS
-from connectors.open_darts import OpenDartsConnector
+from connectors.opendarts import OpenDartsConnector
 
 # import DARTS libraries
 from darts.engines import redirect_darts_output

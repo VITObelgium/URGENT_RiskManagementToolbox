@@ -76,5 +76,10 @@
     "worker_simulation_timeout_seconds": 900,
     "worker_count": 8,
     "checkpoint_interval": 1
+  },
+  "plugins": {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "well_management": "builtin"
   }
 }

@@ -103,7 +103,9 @@ def test__perform_simulations_on_cluster_success(
     mock_get_stub.return_value.__enter__.return_value = stub
     mock_from.side_effect = ["case1", "case2"]
     cases = [MagicMock(), MagicMock()]
-    result = SimulationService._perform_simulations_on_cluster(cases)
+    result = SimulationService._perform_simulations_on_cluster(
+        cases, connector="opendarts"
+    )
     assert result == ["case1", "case2"]
     stub.PerformSimulations.assert_called_once_with("sim_req")
 
@@ -123,7 +125,7 @@ def test__perform_simulations_on_cluster_grpc_error(
     mock_get_stub.return_value.__enter__.return_value = stub
     cases = [MagicMock()]
     with pytest.raises(grpc.RpcError):
-        SimulationService._perform_simulations_on_cluster(cases)
+        SimulationService._perform_simulations_on_cluster(cases, connector="opendarts")
 
 
 @patch("services.simulation_service.core.service.simulation_service.sm.Simulation")

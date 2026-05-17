@@ -54,7 +54,15 @@ def _run_simulator(
     *,
     working_dir: Path | None = None,
 ) -> tuple[SimulationStatus, SimulationResults]:
-    connector = ConnectorFactory.get_connector(simulation_job.simulator)
+    connector_name = simulation_job.connector
+    try:
+        connector = ConnectorFactory.get_connector(connector_name)
+    except ValueError as e:
+        logger.error("Encountered error in ConnectorFactory: %s", e)
+        raise
+    except Exception as e:
+        logger.error("Encountered Unexpected error in ConnectorFactory: %s", e)
+        raise
 
     user_cost_function = json.loads(simulation_job.simulation.result.result)
 

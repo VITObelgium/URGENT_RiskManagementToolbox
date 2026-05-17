@@ -22,6 +22,12 @@
 - [Getting started](#getting-started)
   - [Supported Reservoir Simulators](#supported-reservoir-simulators)
   - [Execution modes](#execution-modes)
+  - [Plugin system](#plugin-system)
+    - [Built-in plugins](#built-in-plugins)
+    - [Creating a custom plugin](#creating-a-custom-plugin)
+      - [Connector plugin](#connector-plugin)
+      - [Optimizer plugin](#optimizer-plugin)
+      - [Well Management plugin](#well-management-plugin)
   - [Reservoir simulation interoperability](#reservoir-simulation-interoperability)
     - [OpenDarts Connector](#opendarts-connector)
   - [Run configuration file](#run-configuration-file)
@@ -102,7 +108,7 @@ pixi install
 
 ### 1. Supported Reservoir Simulators
 #### OPEN-DARTS
-- OpenDarts (1.1.3) [open_darts-1.1.3-cp312-cp312-linux_x86_64.whl] (default)
+- OpenDarts (1.1.3) [open_darts-1.1.3-cp312-cp312-linux_x86_64.whl]
 
 ### 2. Execution modes
 
@@ -128,18 +134,214 @@ pixi run python src/main.py --resume <checkpoint_filepath.npz> --model-file <mod
 
 > **Note:** `--config-file` and `--resume` are mutually exclusive. Exactly one must be supplied.
 
-### 3. Reservoir simulation interoperability
+---
 
-Interoperability between the reservoir simulator and the Toolbox is achieved through a dedicated `Connector`
-(`src/services/simulation_service/core/connectors`).
+### 3. Plugin system
 
-The Connector enables bidirectional data exchange between the Toolbox and the simulator, including:
+The toolbox uses an explicit plugin system to select the reservoir simulator connector, optimization algorithm, and well management service. **Every configuration file must include a `plugins` block** — there are no implicit defaults.
+
+```json
+"plugins": {
+  "connector": "opendarts",
+  "optimizer": "pso",
+  "well_management": "builtin"
+}
+```
+
+Each value is a plugin name that maps to a file in `plugins/<type>/<name>.py`. The toolbox loads only the selected plugin at startup and validates the exported `plugin` descriptor.
+
+#### Built-in plugins
+
+| Kind | Name | Description |
+|------|------|-------------|
+| `connector` | `opendarts` | OpenDARTS reservoir simulator connector |
+| `optimizer` | `pso` | Particle Swarm Optimization engine |
+| `well_management` | `builtin` | Built-in geometric well design service (IWell / JWell / SWell / HWell) |
+
+---
+
+#### Creating a custom plugin
+
+The scaffolder generates a one-file plugin template derived from the live interface. Run the appropriate command and implement the generated stubs.
+
+##### Connector plugin
+
+A connector plugin handles launching the simulator subprocess and capturing its results.
+
+```shell
+pixi run create-plugin simulation MySimulator
+```
+
+This creates `plugins/connectors/mysimulator.py`:
+
+```python
+# plugins/connectors/mysimulator.py
+from __future__ import annotations
+
+import threading
+
+from services.simulation_service.core.connectors.common import (
+    ConnectorInterface,
+    JsonPath,
+    SimulationResults,
+    SimulationStatus,
+)
+from urgent_plugins import ConnectorPlugin
+
+
+class MySimulatorConnector(ConnectorInterface):
+    ConnectorName = "mysimulator"
+
+    @staticmethod
+    def run(
+        config_path: JsonPath,
+        user_cost_function_with_default_values: SimulationResults,
+        stop: threading.Event | None = None,
+    ) -> tuple[SimulationStatus, SimulationResults]:
+        raise NotImplementedError
+
+
+plugin = ConnectorPlugin(
+    name=MySimulatorConnector.ConnectorName,
+    implementation=MySimulatorConnector,
+)
+```
+
+Implement `run(...)`, then select the connector in your config:
+
+```json
+"plugins": {
+  "connector": "mysimulator",
+  "optimizer": "pso",
+  "well_management": "builtin"
+}
+```
+
+The plugin file is automatically staged into each worker's runtime directory — no manual copying required.
+
+---
+
+##### Optimizer plugin
+
+An optimizer plugin drives the search strategy over the parameter space.
+
+```shell
+pixi run create-plugin algorithm GeneticAlgorithm
+```
+
+This creates `plugins/optimizers/geneticalgorithm.py`:
+
+```python
+# plugins/optimizers/geneticalgorithm.py
+from __future__ import annotations
+
+from services.solution_updater_service.core.engines.common import (
+    OptimizationEngineInterface,
+)
+from urgent_plugins import OptimizerPlugin
+
+
+class GeneticAlgorithmEngine(OptimizationEngineInterface):
+    EngineName = "geneticalgorithm"
+
+    # implement all abstract methods from OptimizationEngineInterface
+    ...
+
+
+plugin = OptimizerPlugin(
+    name=GeneticAlgorithmEngine.EngineName,
+    implementation=GeneticAlgorithmEngine,
+)
+```
+
+Select it in config:
+
+```json
+"plugins": {
+  "connector": "opendarts",
+  "optimizer": "geneticalgorithm",
+  "well_management": "builtin"
+}
+```
+
+---
+
+##### Well Management plugin
+
+A WMS plugin controls how candidate well geometries are generated and validated for each optimization candidate. It runs entirely in the orchestrator — never in simulation workers.
+
+```shell
+pixi run create-plugin wms CompanyWMS
+```
+
+This creates `plugins/wms/companywms.py`:
+
+```python
+# plugins/wms/companywms.py
+from __future__ import annotations
+
+from typing import Any
+
+from services.problem_dispatcher_service.core.service.handlers import ProblemTypeHandler
+from services.shared import Boundaries
+from services.well_management_service.core.models import WellDesignServiceResponse
+from urgent_plugins import WellManagementPlugin
+
+
+class CompanyWMSHandler(ProblemTypeHandler):
+    WmsName = "companywms"
+
+    def build_initial_state(self, items: list[Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def build_full_key_boundaries(
+        self, items: list[Any], separator: str = "."
+    ) -> dict[str, Boundaries]:
+        raise NotImplementedError
+
+    def build_service_tasks(
+        self, solution_items: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+
+def build_wells(request: list[dict]) -> WellDesignServiceResponse:
+    raise NotImplementedError
+
+
+plugin = WellManagementPlugin(
+    name=CompanyWMSHandler.WmsName,
+    handler=CompanyWMSHandler(),
+    build_wells=build_wells,
+)
+```
+
+`build_wells` must return a `WellDesignServiceResponse`, preserving the simulation payload contract. It can call an external HTTP service, read from a database, or wrap any geometry engine.
+
+Select it in config:
+
+```json
+"plugins": {
+  "connector": "opendarts",
+  "optimizer": "pso",
+  "well_management": "companywms"
+}
+```
+
+---
+
+### 4. Reservoir simulation interoperability
+
+Interoperability between the reservoir simulator and the Toolbox is achieved through the connector plugin
+(`plugins/connectors/`).
+
+The connector enables bidirectional data exchange between the Toolbox and the simulator, including:
 - simulation configuration (control vectors),
 - simulation results (objective function values).
 
 ---
 
-#### 3.1 OpenDarts Connector
+#### 4.1 OpenDarts Connector
 
 > *Note: Make sure you run OpenDarts with the set_num_threads(1) to prevent toolbox performance degradation*
 >
@@ -162,8 +364,8 @@ set_num_threads(1)
    Add the following dependencies to the simulation entry point:
 
    ```python
-   from connectors.open_darts import OpenDartsConnector
-   from connectors.open_darts import open_darts_input_configuration_injector
+   from connectors.opendarts import OpenDartsConnector
+   from connectors.opendarts import open_darts_input_configuration_injector
    ```
 
    > **Note:**
@@ -208,7 +410,7 @@ set_num_threads(1)
    Ensure the following import is present:
 
    ```python
-   from connectors.open_darts import OpenDartsConnector
+   from connectors.opendarts import OpenDartsConnector
    ```
 
    Wells must be defined in the `set_wells` method of the simulation model:
@@ -236,7 +438,7 @@ set_num_threads(1)
    `OpenDartsConnector.broadcast_result(...)`:
 
    ```python
-   from connectors.open_darts import OpenDartsConnector
+   from connectors.opendarts import OpenDartsConnector
 
    OpenDartsConnector.broadcast_result(
        "Heat",
@@ -259,7 +461,7 @@ set_num_threads(1)
    After extraction, all files must be located directly in the root directory (no nested subfolders).
 
 
-### 4. Run configuration file
+### 5. Run configuration file
 RiskManagementToolbox is designed to use JSON configuration file, where the user defines the optimization problem(s), initial state, and variable constraints.
 
 Configuration file define services to be used for simulation and optimization as well as the global optimization parameters as objectives or linear inequality constraints.
@@ -267,6 +469,7 @@ Configuration file define services to be used for simulation and optimization as
 The toolbox expects **one JSON file** that defines:
 
 1. Services name and parameters for optimization (with their bounds)
+2. Which plugins to use (connector, optimizer, well management)
 3. How the optimization algorithm is configured
 
 ### Input file schemas
@@ -280,9 +483,16 @@ Input configuration file is a JSON file with the structures presented in `schema
    "run_mode": "optimization",
    "=== SERVICE NAME ===": service item(s),
    "optimization_parameters": { ... },
-   "simulation_config": { ... }
+   "simulation_config": { ... },
+   "plugins": {
+     "connector": "<name>",
+     "optimizer": "<name>",
+     "well_management": "<name>"
+   }
 }
 ```
+
+> **Important:** The `plugins` block is **required**. The toolbox will not start without it.
 
 #### Run Mode
 
@@ -295,7 +505,7 @@ The optional `run_mode` field controls how the toolbox executes. It accepts two 
 
 > **Note:** Omitting `run_mode` is equivalent to `"run_mode": "optimization"`.
 
-### 5. Checkpointing and resuming runs
+### 6. Checkpointing and resuming runs
 
 Long optimization runs can be interrupted at any time (e.g., due to a crash or manual stop). The toolbox saves periodic **checkpoints** so that work is not lost and the run can be continued from where it left off, rather than starting from scratch.
 
@@ -784,6 +994,11 @@ The Well design service will be use to determine the optimal wells placement and
     "worker_count": 4,
     "checkpoint_interval": 5,
     "checkpoint_path": "checkpoints"
+  },
+  "plugins": {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "well_management": "builtin"
   }
 }
 

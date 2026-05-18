@@ -3,9 +3,9 @@
 #SBATCH --output=rmt_%j.out
 #SBATCH --error=rmt_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=16G
-#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --time=48:00:00
 
 # Go to your repo directory
 cd $SLURM_SUBMIT_DIR || exit 1
@@ -30,7 +30,7 @@ fi
 
 echo "Running on node: $(hostname)"
 echo "CPUs: $SLURM_CPUS_PER_TASK"
-echo "Memory requested: 16G"
+echo "Memory requested: 32G"
 echo "Using config: $CFG"
 echo "Using model: $MODEL"
 echo "TMPDIR: $TMPDIR"

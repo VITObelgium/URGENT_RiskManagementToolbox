@@ -390,8 +390,8 @@ class FEMGeomechanics:
         sigma_principal = np.column_stack(
             (
                 self.fault_SV - P0_fault_pa,
-                self.fault_SH - P0_fault_pa,
                 self.fault_Sh - P0_fault_pa,
+                self.fault_SH - P0_fault_pa,
             )
         )
         for i in range(n_faults):
@@ -428,16 +428,27 @@ class FEMGeomechanics:
         """Compatibility wrapper for callers expecting fem_geo.solve(...)."""
         return self.solve_u(P, T)
     
-    def compute_mu(self, P: np.ndarray, T: np.ndarray, u: np.ndarray | None = None, orientation_degrees: float = 120.0) -> tuple:
+    def compute_mu(
+        self,
+        P: np.ndarray,
+        T: np.ndarray,
+        u: np.ndarray | None = None,
+        orientation_degrees: float = 120.0,
+        return_orientation: bool = False,
+    ) -> tuple:
         """
         Compute mobilized friction coefficient mu on fault elements using EFFECTIVE stress.
 
         Optimized version: computes stress tensor once per element.
         
-        Returns: (mu_vec, principal_stresses, mu_tangent)
+        Returns by default: (mu_vec, principal_stresses, mu_tangent)
             - mu_vec: friction coefficient for each fault element
             - principal_stresses: (n_faults, 3) array [max, mid, min] in bar
             - mu_tangent: tangent slope from origin to Mohr circle
+        If return_orientation=True, also returns:
+            - principal_theta_from_vertical_deg: (n_faults, 3) in [0, 90]
+            - principal_azimuth_from_north_deg: (n_faults, 3) axis azimuth in [0, 180)
+            - sh_azimuth_rotation_from_initial_deg: (n_faults,) in [-90, 90], using S3 axis
         """
         # ---- solve if u not provided ----
         if u is None:
@@ -445,6 +456,15 @@ class FEMGeomechanics:
 
         n_faults = len(self.fault_e)
         if n_faults == 0:
+            if return_orientation:
+                return (
+                    np.empty(0, dtype=float),
+                    np.empty((0, 3), dtype=float),
+                    np.empty(0, dtype=float),
+                    np.empty((0, 3), dtype=float),
+                    np.empty((0, 3), dtype=float),
+                    np.empty(0, dtype=float),
+                )
             return np.empty(0, dtype=float), np.empty((0, 3), dtype=float), np.empty(0, dtype=float)
 
         dT_fault = (T[:self.numelem] - self.T0)[self.fault_e]
@@ -474,8 +494,11 @@ class FEMGeomechanics:
         Tau = np.linalg.norm(tau_vec, axis=1)
         mu_vec = Tau / np.maximum(1e-12, np.abs(Sn_eff))
 
-        eigvals = np.linalg.eigvalsh(Sigma_eff)
-        principal_stresses = eigvals[:, ::-1] / 1e5  # [max, mid, min] in bar
+        eigvals, eigvecs = np.linalg.eigh(Sigma_eff)
+        order_desc = np.argsort(eigvals, axis=1)[:, ::-1]
+        row_idx = np.arange(n_faults)[:, None]
+        principal_stresses = eigvals[row_idx, order_desc] / 1e5  # [max, mid, min] in bar
+        principal_axes = eigvecs[row_idx, :, order_desc]  # columns are principal directions [S1, S2, S3]
         
         # Compute mu_tangent from principal stresses (vectorized)
         all_positive = np.all(principal_stresses > 0, axis=1)
@@ -485,7 +508,34 @@ class FEMGeomechanics:
             sigma_min = principal_stresses[all_positive, 2]
             mu_tangent[all_positive] = (sigma_max - sigma_min) / (2.0 * np.sqrt(sigma_max * sigma_min))
 
-        return mu_vec, principal_stresses, mu_tangent
+        if not return_orientation:
+            return mu_vec, principal_stresses, mu_tangent
+
+        # Principal-axis inclination from vertical: 0=vertical, 90=horizontal.
+        vz = np.abs(principal_axes[:, 2, :])
+        principal_theta_from_vertical_deg = np.degrees(np.arccos(np.clip(vz, 0.0, 1.0)))
+
+        # Axis azimuth clockwise from North (+y); modulo 180 for axis (sign-invariant).
+        vx = principal_axes[:, 0, :]
+        vy = principal_axes[:, 1, :]
+        principal_azimuth_from_north_deg = (
+            np.degrees(np.arctan2(vx, vy)) + 360.0
+        ) % 180.0
+
+        # Track Sh-axis rotation relative to initial minimum-principal azimuth.
+        sh_azimuth = principal_azimuth_from_north_deg[:, 2]
+        sh_azimuth_rotation_from_initial_deg = (
+            (sh_azimuth - float(orientation_degrees) + 90.0) % 180.0
+        ) - 90.0
+
+        return (
+            mu_vec,
+            principal_stresses,
+            mu_tangent,
+            principal_theta_from_vertical_deg,
+            principal_azimuth_from_north_deg,
+            sh_azimuth_rotation_from_initial_deg,
+        )
 
 def reorder_hex8_cartesian(pts: np.ndarray, hex_conn: np.ndarray, tol: float = 1e-9) -> np.ndarray:
     """

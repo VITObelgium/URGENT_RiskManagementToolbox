@@ -66,7 +66,6 @@ def run_darts(well_data) -> None:
     )
     m.init(
         verbose=True,
-        output_folder=out_root,
     )
 
     # Simulation time

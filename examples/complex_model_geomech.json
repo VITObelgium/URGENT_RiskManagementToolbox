@@ -1,5 +1,5 @@
 {
-  "run_mode": "optimization",
+  "run_mode": "evaluation",
   "well_design": [
     {
       "well_name": "INJ",
@@ -74,6 +74,6 @@
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 3600,
-    "worker_count": 16
+    "worker_count": 1
   }
 }

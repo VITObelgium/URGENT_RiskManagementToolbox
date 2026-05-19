@@ -3,14 +3,16 @@
 #SBATCH --output=rmt_%j.out
 #SBATCH --error=rmt_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=48G
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=32G
 #SBATCH --time=48:00:00
+#SBATCH --mail-type END,FAIL 
+#SBATCH --mail-user=justin.pogacnik@vito.be
 
 # Go to your repo directory
 cd $SLURM_SUBMIT_DIR || exit 1
 
-export PROJECT_ROOT="/home/kurgyisk/projects/URGENT_RiskManagementToolbox"
+export PROJECT_ROOT="/home/pogacnij/DEVELOPER/URGENT_RiskManagementToolbox"
 export FEM_CACHE_DIR="$PROJECT_ROOT/log/fem_cache"
 
 mkdir -p "$FEM_CACHE_DIR"

@@ -455,16 +455,18 @@ def fix_pvd_paths(pvd_path):
 
     tree.write(pvd_path, encoding="utf-8", xml_declaration=True)
 
+
 def output_darts_vtk_with_cell_prop(
     model,
     ith_step,
     vtk_dir,
-    cell_prop,
-    field_name,
+    cell_prop=None,
+    field_name=None,
+    custom_cell_props=None,
     output_properties=("temperature",),
 ):
     """
-    Write a DARTS VTK output file and append one custom full-grid cell property.
+    Write a DARTS VTK output file and append custom full-grid cell property values.
 
     Parameters
     ----------
@@ -474,29 +476,41 @@ def output_darts_vtk_with_cell_prop(
         Output/report step index.
     vtk_dir : str
         Output directory for VTK files.
-    cell_prop : array-like
-        Full reservoir cell property array of length n_res_blocks.
-    field_name : str
-        Name of the custom field in the VTK output.
+    cell_prop : array-like | None
+        Backward-compatible single full-grid cell property array.
+    field_name : str | None
+        Name of the single custom field (used with cell_prop).
+    custom_cell_props : dict[str, array-like] | None
+        Mapping of custom field names to full-grid arrays.
     output_properties : tuple/list
         Standard DARTS properties to export in addition to the custom field.
     """
 
-    cell_prop = np.asarray(cell_prop, dtype=float)
     n_cells = model.reservoir.mesh.n_res_blocks
 
-    if cell_prop.size != n_cells:
-        raise ValueError(
-            f"{field_name} must have length n_res_blocks={n_cells}, "
-            f"got {cell_prop.size}"
-        )
+    if custom_cell_props is None:
+        if cell_prop is None or not field_name:
+            raise ValueError(
+                "Provide either custom_cell_props or both cell_prop and field_name."
+            )
+        custom_cell_props = {field_name: cell_prop}
+
+    normalized_props = {}
+    for name, values in custom_cell_props.items():
+        arr = np.asarray(values, dtype=float).reshape(-1)
+        if arr.size != n_cells:
+            raise ValueError(
+                f"{name} must have length n_res_blocks={n_cells}, got {arr.size}"
+            )
+        normalized_props[name] = arr
 
     timesteps, prop_array = model.output_properties(
         output_properties=list(output_properties), timestep=ith_step
     )
     t_days = float(timesteps[0])
 
-    prop_array[field_name] = cell_prop.reshape(1, n_cells)
+    for name, arr in normalized_props.items():
+        prop_array[name] = arr.reshape(1, n_cells)
 
     prop_names = {name: i for i, name in enumerate(prop_array.keys())}
     data = np.vstack([prop_array[name][0] for name in prop_array.keys()])

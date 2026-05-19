@@ -455,6 +455,65 @@ def fix_pvd_paths(pvd_path):
 
     tree.write(pvd_path, encoding="utf-8", xml_declaration=True)
 
+
+def _add_properties_to_vtu(vtk_dir, ith_step, properties):
+    """
+    Add custom cell properties to a VTU file by post-processing.
+    
+    Parameters
+    ----------
+    vtk_dir : str
+        Directory containing VTU files.
+    ith_step : int
+        Report step index (used to find the correct VTU file).
+    properties : dict[str, array]
+        Dictionary mapping property names to cell data arrays.
+    """
+    import glob
+    
+    # Find the VTU file for this timestep
+    vtu_pattern = os.path.join(vtk_dir, f"*_{ith_step:06d}.vtu")
+    vtu_files = glob.glob(vtu_pattern)
+    
+    if not vtu_files:
+        print(f"Warning: No VTU file found matching pattern {vtu_pattern}")
+        return
+    
+    vtu_file = vtu_files[0]
+    
+    # Parse the VTU file
+    tree = ET.parse(vtu_file)
+    root = tree.getroot()
+    
+    # Find the CellData element
+    cell_data = root.find(".//CellData")
+    if cell_data is None:
+        # Create CellData if it doesn't exist
+        piece = root.find(".//Piece")
+        if piece is None:
+            print(f"Warning: No Piece element found in {vtu_file}")
+            return
+        cell_data = ET.Element("CellData")
+        piece.insert(0, cell_data)
+    
+    # Add each property as a DataArray
+    for prop_name, prop_values in properties.items():
+        # Create DataArray element for this property
+        data_array = ET.Element("DataArray")
+        data_array.set("type", "Float64")
+        data_array.set("Name", prop_name)
+        data_array.set("format", "ascii")
+        
+        # Convert property values to string
+        values_str = " ".join(str(v) for v in prop_values)
+        data_array.text = values_str
+        
+        cell_data.append(data_array)
+    
+    # Write the modified VTU file
+    tree.write(vtu_file, encoding="utf-8", xml_declaration=True)
+
+
 def output_darts_vtk_with_cell_prop(
     model,
     ith_step,
@@ -491,22 +550,14 @@ def output_darts_vtk_with_cell_prop(
             f"got {cell_prop.size}"
         )
 
-    timesteps, prop_array = model.output_properties(
-        output_properties=list(output_properties), timestep=ith_step
-    )
-    t_days = float(timesteps[0])
-
-    prop_array[field_name] = cell_prop.reshape(1, n_cells)
-
-    prop_names = {name: i for i, name in enumerate(prop_array.keys())}
-    data = np.vstack([prop_array[name][0] for name in prop_array.keys()])
-
     os.makedirs(vtk_dir, exist_ok=True)
 
+    # First, output standard DARTS properties only
     model.reservoir.output_to_vtk(
         ith_step=ith_step,
-        t=t_days,
         output_directory=vtk_dir,
-        prop_idxs=prop_names,
-        data=data,
+        output_properties=list(output_properties),
     )
+
+    # Then add custom property to the VTU file using post-processing
+    _add_properties_to_vtu(vtk_dir, ith_step, {field_name: cell_prop})

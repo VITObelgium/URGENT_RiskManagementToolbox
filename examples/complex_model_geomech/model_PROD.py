@@ -28,6 +28,8 @@ from iapws import IAPWS95
 
 
 class ProductionModel(DartsModel):
+    DEFAULT_FRICTION_ESTIMATION_METHOD = "fem"
+
     def __init__(
         self,
         well_data,
@@ -37,6 +39,7 @@ class ProductionModel(DartsModel):
         Qinj=0.0,
         Tinj=66 + 273.15,
         Qprod=None,
+        friction_estimation_method=DEFAULT_FRICTION_ESTIMATION_METHOD,
     ):
 
         super().__init__()
@@ -56,6 +59,9 @@ class ProductionModel(DartsModel):
         self._well_data = well_data
         self.mesh_file = mesh_file
         self.restart_file = restart_file
+        self.friction_estimation_method = self._normalize_friction_estimation_method(
+            friction_estimation_method
+        )
 
         if Qprod is None:
             Qprod = Qinj  # Default set to balanced operation
@@ -91,6 +97,18 @@ class ProductionModel(DartsModel):
         self.params.tolerance_linear = 1e-4
 
         self.timer.node["initialization"].stop()
+
+    @staticmethod
+    def _normalize_friction_estimation_method(method):
+        normalized = str(method).strip().lower()
+        aliases = {"geomech": "fem", "direct": "analytical"}
+        normalized = aliases.get(normalized, normalized)
+        if normalized not in {"fem", "analytical"}:
+            print(
+                f"Unknown friction_estimation_method='{method}', defaulting to 'fem'."
+            )
+            return "fem"
+        return normalized
 
     ## Structured reservoir setup
     def set_reservoir(self):
@@ -279,57 +297,85 @@ class ProductionModel(DartsModel):
                     f"[ProductionModel] Well {w.name} set to production rate {vol_rate_prod:.2f} m3/day"
                 )
 
-    # ## Analytical stress computation method
-    # def compute_analytical_stress_vect(
-    #     self,
-    #     dff,
-    #     stress_df="",
-    #     solution_df="",
-    # ):
-    #     # orientation of MIN PRINCIPAL STRESS (CLOCKWISE FROM NORTH)
-    #     orientation_degrees = 120.0
-    #     orientation_rad = orientation_degrees * np.pi / 180.0
+    ## Analytical stress computation method
+    def compute_analytical_stress_vect(
+        self,
+        dff,
+        stress_df="",
+        solution_df="",
+    ):
+        # orientation of MIN PRINCIPAL STRESS (CLOCKWISE FROM NORTH)
+        orientation_degrees = 120.0
+        orientation_rad = orientation_degrees * np.pi / 180.0
 
-    #     dff["P"] = solution_df.loc[dff["ID"], "P"].values * 1e5
-    #     dff["T"] = solution_df.loc[dff["ID"], "T"].values
-    #     dff["dP"] = dff["P"] - dff["P0"]
-    #     dff["dT"] = dff["T"] - dff["T0"]
+        dff["P"] = solution_df.loc[dff["ID"], "P"].values * 1e5
+        dff["T"] = solution_df.loc[dff["ID"], "T"].values
+        dff["dP"] = dff["P"] - dff["P0"]
+        dff["dT"] = dff["T"] - dff["T0"]
 
-    #     # Vectorized stress computation in cells's fault option
-    #     ## inputs transformed to matrix and vector for every cell
-    #     SV, SH, Sh = func.stress_initialization(
-    #         stress_df, dff
-    #     )  # Size number of faults elements
-    #     normal = func.normals(dff)  # could be out
-    #     p_sigma = func.principal_stress_tensor(
-    #         SV, SH, Sh
-    #     )  # could be out Size number of faults elements
-    #     p_faults = dff["P"].values  # pressure in fault blocks
-    #     pressure = func.principal_stress_tensor(
-    #         p_faults, p_faults, p_faults
-    #     )  # we used the same function that before
-    #     alpha, E, v = (
-    #         1.0e-5,
-    #         40.0e9,
-    #         0.3,
-    #     )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
-    #     dS_T = func.dS_T(alpha, E, v, dff)  # Following dS_T = alpha*E/(1.-v)*dT
-    #     eigenvec = func.eigenvec(orientation_rad, len(dff["ID"]))
-    #     eigenvec_t = np.transpose(eigenvec, axes=(0, 2, 1))
+        # Vectorized stress computation in cells's fault option
+        ## inputs transformed to matrix and vector for every cell
+        if all(c in dff.columns for c in ["SV", "SH", "Sh"]):
+            SV = dff["SV"].values
+            SH = dff["SH"].values
+            Sh = dff["Sh"].values
+        else:
+            SV, SH, Sh = func.stress_initialization(
+                stress_df, dff
+            )  # Size number of faults elements
+        # Treat SV/SH/Sh as total stresses and convert to effective with initial pore pressure.
+        if "P0" in dff.columns:
+            P0_faults = dff["P0"].values
+            SV = SV - P0_faults
+            SH = SH - P0_faults
+            Sh = Sh - P0_faults
+        normal = func.normals(dff)  # could be out
+        p_sigma = func.principal_stress_tensor(
+            SV, SH, Sh
+        )  # could be out Size number of faults elements
+        # Effective stress update: S' = S0 - dP*I + dS_T
+        p_faults = dff["dP"].values
+        pressure = func.principal_stress_tensor(
+            p_faults, p_faults, p_faults
+        )  # we used the same function that before
+        alpha, E, v = (
+            1.0e-5,
+            9.0e9,
+            0.3,
+        )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
+        dS_T = func.dS_T(alpha, E, v, dff)  # Following dS_T = alpha*E/(1.-v)*dT
+        eigenvec = func.eigenvec(orientation_rad, len(dff["ID"]))
+        eigenvec_t = np.transpose(eigenvec, axes=(0, 2, 1))
 
-    #     # computing effective stress for all cells
-    #     effective_p_sigma = p_sigma - pressure + dS_T
-    #     effective_stress = np.einsum("ijk,ikl->ijl", effective_p_sigma, eigenvec)
-    #     effective_stress = np.einsum("ijk,ikl->ijl", eigenvec_t, effective_stress)
+        # computing effective stress for all cells
+        effective_p_sigma = p_sigma - pressure + dS_T
+        effective_stress = np.einsum("ijk,ikl->ijl", effective_p_sigma, eigenvec)
+        effective_stress = np.einsum("ijk,ikl->ijl", eigenvec_t, effective_stress)
 
-    #     # computing traction vector on the fault cells
-    #     Tv = np.einsum("ijk,ik->ij", effective_stress, normal)
-    #     Sn_f = np.einsum("ij,ij->i", Tv, normal)
-    #     Tv_mag = np.einsum("ij,ij->i", Tv, Tv)
-    #     Tau_f = np.sqrt(Tv_mag - (np.einsum("ij,ij->i", Tv, normal)) ** 2)
-    #     mu_vec = Tau_f / Sn_f  # value for reporting reactivation criteria
+        # computing traction vector on the fault cells
+        Tv = np.einsum("ijk,ik->ij", effective_stress, normal)
+        Sn_f = np.einsum("ij,ij->i", Tv, normal)
+        Tv_mag = np.einsum("ij,ij->i", Tv, Tv)
+        Tau_f = np.sqrt(Tv_mag - (np.einsum("ij,ij->i", Tv, normal)) ** 2)
+        mu_vec = Tau_f / Sn_f  # value for reporting reactivation criteria
 
-    #     return mu_vec
+        # Return updated principal stresses in the model basis [SV', SH', Sh'] [bar].
+        # With current dS_T construction, SV' = SV0 - dP (no thermal term on SV).
+        principal_stresses = np.diagonal(effective_p_sigma, axis1=1, axis2=2) / 1e5
+
+        eigvals = np.linalg.eigvalsh(effective_stress)
+        principal_sorted = eigvals[:, ::-1] / 1e5  # [max, mid, min] in bar for mu_tangent
+
+        all_positive = np.all(principal_sorted > 0, axis=1)
+        mu_tangent = np.ones(len(principal_stresses))
+        if np.any(all_positive):
+            sigma_max = principal_sorted[all_positive, 0]
+            sigma_min = principal_sorted[all_positive, 2]
+            mu_tangent[all_positive] = (sigma_max - sigma_min) / (
+                2.0 * np.sqrt(sigma_max * sigma_min)
+            )
+
+        return mu_vec, principal_stresses, mu_tangent
     
     # FEM geomechanics initialization method
     def init_fem_geomech(

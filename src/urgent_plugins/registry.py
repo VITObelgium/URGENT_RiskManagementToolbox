@@ -10,7 +10,7 @@ from urgent_plugins.api import (
     PluginKind,
     ConnectorPlugin,
     OptimizerPlugin,
-    WellManagementPlugin,
+    DomainServicePlugin,
 )
 
 
@@ -33,8 +33,8 @@ class _PluginRegistry:
 
     @overload
     def require(
-        self, kind: Literal[PluginKind.WMS], name: str
-    ) -> WellManagementPlugin: ...
+        self, kind: Literal[PluginKind.DOMAIN_SERVICE], name: str
+    ) -> DomainServicePlugin: ...
 
     def require(self, kind: PluginKind, name: str) -> PluginDescriptor:
         descriptor = self.get(kind, name)
@@ -68,7 +68,7 @@ _registry = _PluginRegistry()
 _BUILTIN_PLUGIN_STEMS: dict[PluginKind, tuple[str, ...]] = {
     PluginKind.CONNECTOR: ("opendarts",),
     PluginKind.OPTIMIZER: ("pso",),
-    PluginKind.WMS: ("builtin",),
+    PluginKind.DOMAIN_SERVICE: ("builtin",),
 }
 
 
@@ -107,8 +107,8 @@ def builtin_plugin_name(kind: PluginKind) -> str:
 
     Loads the built-in plugin file when needed and reads its descriptor name,
     so the canonical identifier is owned by the plugin class itself (via its
-    ``ConnectorName`` / ``EngineName`` attribute), not by any string literal
-    in this package.
+    ``ConnectorName`` / ``EngineName`` / ``ServiceName`` attribute), not by any
+    string literal in this package.
     """
     register_builtins()
     stems = _BUILTIN_PLUGIN_STEMS[kind]

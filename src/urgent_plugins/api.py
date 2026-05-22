@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,12 +10,15 @@ if TYPE_CHECKING:
     from services.solution_updater_service.core.engines.common import (
         OptimizationEngineInterface,
     )
+    from services.problem_dispatcher_service.core.service.interface import (
+        DomainServiceInterface,
+    )
 
 
 class PluginKind(Enum):
     CONNECTOR = "connector"
     OPTIMIZER = "optimizer"
-    WMS = "wms"
+    DOMAIN_SERVICE = "domain_service"
 
     @property
     def directory(self) -> str:
@@ -31,15 +32,15 @@ class PluginKind(Enum):
                 field_name = "connector_plugin_name"
             case PluginKind.OPTIMIZER:
                 field_name = "optimizer_plugin_name"
-            case PluginKind.WMS:
-                field_name = "wms_plugin_name"
+            case PluginKind.DOMAIN_SERVICE:
+                field_name = "domain_service_plugin_name"
         return str(PluginSettings.model_fields[field_name].validation_alias)
 
 
 _KIND_DIRECTORIES: dict[PluginKind, str] = {
     PluginKind.CONNECTOR: "connectors",
     PluginKind.OPTIMIZER: "optimizers",
-    PluginKind.WMS: "wms",
+    PluginKind.DOMAIN_SERVICE: "domain_services",
 }
 
 
@@ -102,24 +103,30 @@ class OptimizerPlugin:
 
 
 @dataclass(frozen=True)
-class WellManagementPlugin:
+class DomainServicePlugin:
     name: str
-    handler: Any
-    build_wells: Callable[..., Any]
+    implementation: type[DomainServiceInterface]
 
     def __post_init__(self) -> None:
+        from services.problem_dispatcher_service.core.service.interface import (
+            DomainServiceInterface as _DSI,
+        )
+
         object.__setattr__(self, "name", normalize_plugin_name(self.name))
-        if not callable(self.build_wells):
+        if not isinstance(self.implementation, type) or not issubclass(
+            self.implementation, _DSI
+        ):
             raise TypeError(
-                f"WellManagementPlugin.build_wells must be callable; got {self.build_wells!r}"
+                "DomainServicePlugin.implementation must be a subclass of "
+                f"DomainServiceInterface; got {self.implementation!r}"
             )
 
 
-type PluginDescriptor = ConnectorPlugin | OptimizerPlugin | WellManagementPlugin
+type PluginDescriptor = ConnectorPlugin | OptimizerPlugin | DomainServicePlugin
 
 
 DESCRIPTOR_TYPES: dict[PluginKind, type] = {
     PluginKind.CONNECTOR: ConnectorPlugin,
     PluginKind.OPTIMIZER: OptimizerPlugin,
-    PluginKind.WMS: WellManagementPlugin,
+    PluginKind.DOMAIN_SERVICE: DomainServicePlugin,
 }

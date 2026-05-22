@@ -4,16 +4,14 @@ from services.solution_updater_service import ControlVector
 
 
 def test_task_builder_creates_tasks_with_control_vector():
-    class MockHandler:
-        def build_service_tasks(self, items):
-            return [{"name": "W1", "md": items["md"]}]
+    initial_state = {
+        ServiceType.WellDesignService: {
+            "W1": {"name": "W1", "md": 100},
+        }
+    }
+    task_builder = TaskBuilder(initial_state)
 
-    handlers = {ServiceType.WellDesignService: MockHandler()}
-
-    initial_state = {ServiceType.WellDesignService: {"md": 100}}
-    task_builder = TaskBuilder(initial_state, handlers)
-
-    control_vectors = [{"well_design#md": 150}]
+    control_vectors = [{"well_design#W1#md": 150}]
     result = task_builder.build(control_vectors)
 
     assert len(result) == 1

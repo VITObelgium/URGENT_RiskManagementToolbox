@@ -107,12 +107,12 @@ class SimulationConfig(BaseModel, extra="forbid"):
 class PluginConfig(BaseModel, extra="forbid"):
     """Selects which plugin implementations to use for a run.
 
-    Available built-in names: connector="opendarts", optimizer="pso", well_management="builtin".
+    Available built-in names: connector="opendarts", optimizer="pso", domain_service="builtin".
     """
 
     connector: str
     optimizer: str
-    well_management: str
+    domain_service: str
 
 
 class OptimizationParameters(BaseModel, extra="forbid"):
@@ -173,7 +173,6 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     )
     simulation_config: SimulationConfig = Field(default_factory=SimulationConfig)
     plugins: PluginConfig
-    wms_config: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def apply_task_overrides(self) -> Self:

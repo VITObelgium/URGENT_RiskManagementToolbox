@@ -58,7 +58,7 @@ def dict_problem_definition():
         "plugins": {
             "connector": "opendarts",
             "optimizer": "pso",
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
 
@@ -568,7 +568,7 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
         "plugins": {
             "connector": "opendarts",
             "optimizer": "pso",
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)

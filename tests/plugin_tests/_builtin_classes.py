@@ -1,7 +1,8 @@
 """Test helpers for resolving the built-in plugin implementation classes.
 
-Now that the canonical OpenDARTS and PSO implementations live in plugin files
-(``plugins/connectors/opendarts.py`` and ``plugins/optimizers/pso.py``), tests
+Now that the canonical OpenDARTS, PSO, and domain service implementations live
+in plugin files (``plugins/connectors/opendarts.py``,
+``plugins/optimizers/pso.py``, ``plugins/domain_services/builtin.py``), tests
 must access them through the urgent_plugins registry instead of a direct
 ``src/services/...`` import. These helpers ensure built-ins are registered and
 return the underlying implementation class.
@@ -9,6 +10,9 @@ return the underlying implementation class.
 
 from __future__ import annotations
 
+from services.problem_dispatcher_service.core.service.interface import (
+    DomainServiceInterface,
+)
 from services.simulation_service.core.connectors.common import ConnectorInterface
 from services.solution_updater_service.core.engines.common import (
     OptimizationEngineInterface,
@@ -33,4 +37,11 @@ def get_builtin_optimizer_class() -> type[OptimizationEngineInterface]:
     register_builtins()
     name = builtin_plugin_name(PluginKind.OPTIMIZER)
     descriptor = get_registry().require(PluginKind.OPTIMIZER, name)
+    return descriptor.implementation  # type: ignore[return-value]
+
+
+def get_builtin_domain_service_class() -> type[DomainServiceInterface]:
+    register_builtins()
+    name = builtin_plugin_name(PluginKind.DOMAIN_SERVICE)
+    descriptor = get_registry().require(PluginKind.DOMAIN_SERVICE, name)
     return descriptor.implementation  # type: ignore[return-value]

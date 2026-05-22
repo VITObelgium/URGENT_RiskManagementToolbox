@@ -29,7 +29,7 @@ def _minimal_problem_definition_payload() -> dict:
         "plugins": {
             "connector": get_builtin_connector_class().ConnectorName,  # type: ignore[attr-defined]
             "optimizer": get_builtin_optimizer_class().EngineName,  # type: ignore[attr-defined]
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
 
@@ -64,7 +64,7 @@ def test_plugins_section_accepts_custom_connector_and_optimizer() -> None:
     payload["plugins"] = {
         "connector": "eclipse",
         "optimizer": "genetic",
-        "well_management": "custom",
+        "domain_service": "custom",
     }
     pd = ProblemDispatcherDefinition(**payload)
     assert pd.plugins.connector == "eclipse"

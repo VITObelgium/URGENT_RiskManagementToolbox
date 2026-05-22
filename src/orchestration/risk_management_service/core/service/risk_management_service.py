@@ -1,11 +1,11 @@
 import os
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import grpc
 import numpy as np
 import numpy.typing as npt
+from pydantic import TypeAdapter
 
 from common.models import RunMode
 from logger import get_logger
@@ -32,15 +32,18 @@ from services.simulation_service import (
     simulation_process_context_manager,
 )
 from services.solution_updater_service import SolutionUpdaterService
+from services.well_management_service import WellModel
 from urgent_plugins import (
     PluginKind,
     get_registry,
     resolve_connector_plugin,
+    resolve_domain_service_plugin,
     resolve_optimizer_plugin,
-    resolve_wms_plugin,
 )
 
 logger = get_logger(__name__)
+
+_well_model_adapter: TypeAdapter[WellModel] = TypeAdapter(WellModel)
 
 
 def run_risk_management(
@@ -65,7 +68,7 @@ def run_risk_management(
 
     logger.info("Starting risk management process (run_id=%s)...", run_id)
     logger.debug(
-        "Input problem definition: %s, simulation_model_archive: %s",
+        "Input: problem_definition=%s, archive_type=%s",
         problem_definition,
         type(simulation_model_archive),
     )
@@ -74,13 +77,18 @@ def run_risk_management(
     os.environ["RUN_MODE"] = problem_definition.run_mode.value
     connector_name = resolve_connector_plugin(problem_definition.plugins.connector)
     optimizer_name = resolve_optimizer_plugin(problem_definition.plugins.optimizer)
-    wms_name = resolve_wms_plugin(problem_definition.plugins.well_management)
-    wms_plugin = get_registry().require(PluginKind.WMS, wms_name)
+    domain_service_name = resolve_domain_service_plugin(
+        problem_definition.plugins.domain_service
+    )
+    domain_service_plugin = get_registry().require(
+        PluginKind.DOMAIN_SERVICE, domain_service_name
+    )
+    domain_service = domain_service_plugin.implementation()
     logger.info(
-        "Running with %s Connector, %s Optimizer, and %s WMS",
+        "Running with %s Connector, %s Optimizer, and %s DomainService",
         connector_name,
         optimizer_name,
-        wms_name,
+        domain_service_name,
     )
     os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.worker_simulation_timeout_seconds
@@ -104,7 +112,6 @@ def run_risk_management(
 
             dispatcher = ProblemDispatcherService(
                 problem_definition=problem_definition,
-                wms_handler=wms_plugin.handler,
             )
             run_mode = problem_definition.run_mode
 
@@ -117,7 +124,7 @@ def run_risk_management(
                     dispatcher.expected_optimization_function_names
                 )
                 sim_cases = _prepare_simulation_cases(
-                    solutions, expected_cost_function_names, wms_plugin.build_wells
+                    solutions, expected_cost_function_names, domain_service
                 )
                 logger.info(
                     "Submitting evaluation simulation case to SimulationService."
@@ -139,14 +146,10 @@ def run_risk_management(
                 seed=problem_definition.optimization_parameters.seed,
             )
 
-            logger.debug("Fetching full key boundaries from ProblemDispatcherService.")
             full_key_boundaries = dispatcher.full_key_boundaries
-            logger.debug(f"Boundaries retrieved: {full_key_boundaries}")
-            logger.debug("Fetching linear inequalities from ProblemDispatcherService.")
+            logger.debug("Boundaries retrieved: %s", full_key_boundaries)
             full_key_linear_inequalities = dispatcher.full_key_linear_inequalities
-            logger.debug(
-                f"Linear inequalities retrieved: {full_key_linear_inequalities}"
-            )
+            logger.debug("Linear inequalities: %s", full_key_linear_inequalities)
 
             checkpoint_interval = (
                 problem_definition.simulation_config.checkpoint_interval
@@ -170,20 +173,22 @@ def run_risk_management(
                     f"*** Starting generation {loop_controller.current_generation} ***",
                 )
                 solutions = dispatcher.process_iteration(next_solutions)
-                logger.debug(f"Generated solutions: {solutions}")
+                logger.debug(
+                    "Generated %d solution candidates.",
+                    len(solutions.solution_candidates),
+                )
 
                 sim_cases = _prepare_simulation_cases(
                     solutions,
                     dispatcher.expected_optimization_function_names,
-                    wms_plugin.build_wells,
+                    domain_service,
                 )
-                logger.debug(f"Prepared simulation cases: {sim_cases}")
 
+                logger.debug("Prepared %d simulation cases.", len(sim_cases))
                 logger.info("Submitting simulation cases to SimulationService.")
                 completed_cases = SimulationService.process_request(
                     {"simulation_cases": sim_cases, "connector": connector_name}
                 )
-                logger.debug(f"Completed simulation cases: {completed_cases}")
 
                 updated_solutions = [
                     {
@@ -194,9 +199,6 @@ def run_risk_management(
                     }
                     for simulation_case in completed_cases.simulation_cases
                 ]
-                logger.debug(
-                    f"Updated solutions for next iteration: {updated_solutions}"
-                )
 
                 response = solution_updater.process_request(
                     {
@@ -263,7 +265,6 @@ def run_risk_management(
     best_control_vector = solution_updater.global_best_control_vector
 
     if isinstance(best_control_vector, list):
-        # Multi-objective: one ControlVector per Pareto solution.
         best_control_vector_nested: list[dict[str, Any]] | dict[str, Any] = [
             parse_flat_dict_to_nested(cv.items) for cv in best_control_vector
         ]
@@ -273,7 +274,6 @@ def run_risk_management(
             f"Control vectors = {best_control_vector_nested}"
         )
     else:
-        # Single-objective: one ControlVector.
         best_control_vector_nested = parse_flat_dict_to_nested(
             best_control_vector.items
         )
@@ -288,48 +288,50 @@ def run_risk_management(
 def _prepare_simulation_cases(
     solutions: ProblemDispatcherServiceResponse,
     expected_cost_function_names: list[str],
-    build_wells: Callable[..., Any],
+    domain_service: Any,
 ) -> list[dict[str, Any]]:
-    """
-    Prepare simulation cases from generated candidates.
+    """Convert solution candidates into simulation-ready case dicts.
+
+    Parses raw well-state dicts back into typed ``WellModel`` objects, calls
+    ``domain_service.build`` to produce geometry, and initialises result
+    placeholders for every expected cost-function name.
 
     Args:
-        solutions: The generated solution candidates from the dispatcher.
-        expected_cost_function_names: Names of the cost functions to initialise
-            result placeholders with NaN.
-        build_wells: Callable from the WMS plugin that converts a well
-            request into a ``WellDesignServiceResponse``-like object.
+        solutions: Candidates produced by ``ProblemDispatcherService``.
+        expected_cost_function_names: Objective keys; results seeded with NaN.
+        domain_service: Resolved domain service plugin instance.
 
     Returns:
-        Simulation cases ready for processing by the simulation service.
+        List of simulation case dicts ready for ``SimulationService.process_request``.
     """
-    logger.debug("Preparing simulation cases.")
+    logger.debug("Preparing %d simulation cases.", len(solutions.solution_candidates))
     sim_cases: list[dict[str, Any]] = []
 
     for index, solution in enumerate(solutions.solution_candidates):
-        logger.debug(f"Processing solution candidate #{index + 1}: {solution}")
+        logger.debug("Processing solution candidate #%d.", index + 1)
         sim_case: dict[str, Any] = {}
         control_vector: dict[str, Any] = {}
 
         for service, task in solution.tasks.items():
             match service:
                 case ServiceType.WellDesignService:
-                    logger.debug(
-                        f"Processing task for service: {service}. Task details: {task}"
-                    )
-                    wells = build_wells(task.request)
-                    sim_case["wells"] = wells.model_dump()
+                    wells = [
+                        _well_model_adapter.validate_python(w) for w in task.request
+                    ]
+                    result = domain_service.build(wells)
+                    sim_case["wells"] = result.model_dump()
                     control_vector.update(task.control_vector.items)
-                    logger.debug("Processed wells: %s", wells)
+                    logger.debug(
+                        "Built %d well(s) for candidate #%d.", len(wells), index + 1
+                    )
                 case _:
-                    logger.warning(f"Service not implemented: {service}")
+                    logger.warning("Service not implemented: %s", service)
 
         sim_case["control_vector"] = control_vector
         sim_case["results"] = {k: float("nan") for k in expected_cost_function_names}
         sim_cases.append(sim_case)
-        logger.debug(f"Simulation case #{index + 1} prepared: {sim_case}")
 
-    logger.info(f"All simulation cases prepared. Total count: {len(sim_cases)}")
+    logger.debug("All %d simulation cases prepared.", len(sim_cases))
     return sim_cases
 
 

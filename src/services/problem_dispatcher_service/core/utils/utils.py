@@ -1,6 +1,6 @@
 import copy
 from collections.abc import MutableMapping, Sequence
-from typing import Any
+from typing import Any, cast
 from collections.abc import Callable
 
 import numpy as np
@@ -8,6 +8,7 @@ import numpy as np
 from services.problem_dispatcher_service.core.utils.keys import (
     DEFAULT_SEPARATOR,
     convert_key_separator,
+    join_key,
     split_key,
 )
 from services.shared import Boundaries, LinearInequalities, ServiceType
@@ -160,6 +161,57 @@ def _flatten_dict(d, parent_key="", separator: str = DEFAULT_SEPARATOR):
             flat[new_key] = value
 
     return flat
+
+
+def flatten_optimization_parameters(
+    optimization_parameters: dict[str, Any],
+    parent_key: str = "",
+    separator: str = DEFAULT_SEPARATOR,
+) -> dict[str, tuple[float, float]]:
+    """Recursively flatten a nested parameter-boundaries dict into (lb, ub) tuples."""
+    flat: dict[str, tuple[float, float]] = {}
+    for key, value in optimization_parameters.items():
+        full_key = f"{parent_key}{separator}{key}" if parent_key else key
+        if isinstance(value, Boundaries):
+            flat[full_key] = (value.lb, value.ub)
+        elif isinstance(value, dict):
+            if is_bounds_dict(value):
+                lb = cast(float, value["lb"])
+                ub = cast(float, value["ub"])
+                validate_bounds(lb, ub, full_key)
+                flat[full_key] = (lb, ub)
+            else:
+                flat.update(flatten_optimization_parameters(value, full_key, separator))
+        else:
+            raise TypeError(
+                f"Invalid type for key '{key}': expected Boundaries or dict, got {type(value)}"
+            )
+    return flat
+
+
+def build_initial_state_from_well_design(items: list[Any]) -> dict[str, Any]:
+    """Build the initial state dict from a list of WellDesignItem objects."""
+    return {item.well_name: item.initial_state.model_dump() for item in items}
+
+
+def build_full_key_boundaries_from_well_design(
+    items: list[Any], separator: str = DEFAULT_SEPARATOR
+) -> dict[str, Boundaries]:
+    """Build the full-key boundaries dict from a list of WellDesignItem objects."""
+    result: dict[str, Boundaries] = {}
+    for item in items:
+        if not item.parameter_bounds:
+            continue
+        flattened = flatten_optimization_parameters(item.parameter_bounds)
+        for key, value in flattened.items():
+            full_key = join_key(
+                str(ServiceType.WellDesignService),
+                item.well_name,
+                key,
+                separator=separator,
+            )
+            result[full_key] = Boundaries(lb=value[0], ub=value[1])
+    return result
 
 
 class CandidateGenerator:

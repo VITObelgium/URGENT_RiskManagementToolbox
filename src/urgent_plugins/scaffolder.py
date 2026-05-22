@@ -25,19 +25,6 @@ class PluginKindSpec:
         interface_class_name: Name of the interface ABC inside that module.
         descriptor_class_name: Name of the corresponding plugin descriptor.
         name_attr: Class attribute holding the plugin name on the user class.
-        descriptor_impl_kwarg: Keyword argument name for the class/instance in the
-            descriptor constructor (e.g. ``"implementation"`` or ``"handler"``).
-        descriptor_impl_is_instance: When True the descriptor receives
-            ``ClassName()`` (an instance); when False it receives ``ClassName``
-            (the class itself).
-        uses_protocol: When True, method stubs are extracted from the interface
-            by selecting public methods with ``...`` bodies (Protocol style)
-            rather than via ``__abstractmethods__`` (ABC style).
-        needs_build_wells: When True a standalone ``build_wells`` stub and the
-            corresponding ``build_wells=build_wells`` descriptor kwarg are
-            appended to the generated file.
-        extra_imports: Additional ``from <module> import <name>`` statements
-            needed by the generated file beyond the interface's own imports.
     """
 
     kind: PluginKind
@@ -46,11 +33,6 @@ class PluginKindSpec:
     interface_class_name: str
     descriptor_class_name: str
     name_attr: str
-    descriptor_impl_kwarg: str = "implementation"
-    descriptor_impl_is_instance: bool = False
-    uses_protocol: bool = False
-    needs_build_wells: bool = False
-    extra_imports: tuple[tuple[str, str], ...] = ()
 
 
 _PLUGIN_KIND_SPECS: tuple[PluginKindSpec, ...] = (
@@ -71,22 +53,12 @@ _PLUGIN_KIND_SPECS: tuple[PluginKindSpec, ...] = (
         name_attr="EngineName",
     ),
     PluginKindSpec(
-        kind=PluginKind.WMS,
-        cli_alias="wms",
-        interface_module="services.problem_dispatcher_service.core.service.handlers",
-        interface_class_name="ProblemTypeHandler",
-        descriptor_class_name="WellManagementPlugin",
-        name_attr="WmsName",
-        descriptor_impl_kwarg="handler",
-        descriptor_impl_is_instance=True,
-        uses_protocol=True,
-        needs_build_wells=True,
-        extra_imports=(
-            (
-                "services.well_management_service.core.models",
-                "WellDesignServiceResponse",
-            ),
-        ),
+        kind=PluginKind.DOMAIN_SERVICE,
+        cli_alias="domain",
+        interface_module="services.problem_dispatcher_service.core.service.interface",
+        interface_class_name="DomainServiceInterface",
+        descriptor_class_name="DomainServicePlugin",
+        name_attr="ServiceName",
     ),
 )
 
@@ -167,28 +139,8 @@ def _stub_body(method: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]
     return body
 
 
-def _is_protocol_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return True when a method body ends with an Ellipsis (Protocol-style stub)."""
-    if not node.body:
-        return False
-    last = node.body[-1]
-    return (
-        isinstance(last, ast.Expr)
-        and isinstance(last.value, ast.Constant)
-        and last.value.value is ...
-    )
-
-
-def _build_method_stubs(
-    interface_cls: type, *, uses_protocol: bool = False
-) -> list[ast.stmt]:
-    """Return stubs for every required method declared on ``interface_cls``.
-
-    For ABCs (``uses_protocol=False``) the required set comes from
-    ``__abstractmethods__``.  For Protocols (``uses_protocol=True``) it is
-    derived by AST-scanning the class for public methods whose last statement
-    is an Ellipsis literal — the conventional Protocol stub form.
-    """
+def _build_method_stubs(interface_cls: type) -> list[ast.stmt]:
+    """Return stubs for every abstract method declared on ``interface_cls``."""
     source = inspect.getsource(inspect.getmodule(interface_cls) or interface_cls)
     module_ast = ast.parse(source)
 
@@ -205,18 +157,7 @@ def _build_method_stubs(
             f"Could not locate class {interface_cls.__name__!r} in its own module AST"
         )
 
-    if uses_protocol:
-        target_names: frozenset[str] = frozenset(
-            node.name
-            for node in class_def.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and not node.name.startswith("_")
-            and _is_protocol_stub(node)
-        )
-    else:
-        target_names = frozenset(
-            getattr(interface_cls, "__abstractmethods__", frozenset())
-        )
+    target_names = frozenset(getattr(interface_cls, "__abstractmethods__", frozenset()))
 
     stubs: list[ast.stmt] = []
     for node in class_def.body:
@@ -304,16 +245,7 @@ def _build_descriptor_assignment(
     class_name: str,
     descriptor_class_name: str,
     name_attr: str,
-    *,
-    impl_kwarg: str = "implementation",
-    is_instance: bool = False,
-    has_build_wells: bool = False,
 ) -> ast.Assign:
-    impl_value: ast.expr = (
-        ast.Call(func=ast.Name(id=class_name, ctx=ast.Load()), args=[], keywords=[])
-        if is_instance
-        else ast.Name(id=class_name, ctx=ast.Load())
-    )
     keywords: list[ast.keyword] = [
         ast.keyword(
             arg="name",
@@ -323,15 +255,11 @@ def _build_descriptor_assignment(
                 ctx=ast.Load(),
             ),
         ),
-        ast.keyword(arg=impl_kwarg, value=impl_value),
+        ast.keyword(
+            arg="implementation",
+            value=ast.Name(id=class_name, ctx=ast.Load()),
+        ),
     ]
-    if has_build_wells:
-        keywords.append(
-            ast.keyword(
-                arg="build_wells",
-                value=ast.Name(id="build_wells", ctx=ast.Load()),
-            )
-        )
     assign = ast.Assign(
         targets=[ast.Name(id="plugin", ctx=ast.Store())],
         value=ast.Call(
@@ -342,46 +270,6 @@ def _build_descriptor_assignment(
     )
     ast.fix_missing_locations(assign)
     return assign
-
-
-def _build_build_wells_function() -> ast.FunctionDef:
-    """Generate the ``build_wells`` standalone stub required by WMS plugins."""
-    func = ast.FunctionDef(
-        name="build_wells",
-        args=ast.arguments(
-            posonlyargs=[],
-            args=[
-                ast.arg(
-                    arg="request",
-                    annotation=ast.Subscript(
-                        value=ast.Name(id="list", ctx=ast.Load()),
-                        slice=ast.Name(id="dict", ctx=ast.Load()),
-                        ctx=ast.Load(),
-                    ),
-                )
-            ],
-            vararg=None,
-            kwonlyargs=[],
-            kw_defaults=[],
-            kwarg=None,
-            defaults=[],
-        ),
-        body=[
-            ast.Raise(
-                exc=ast.Call(
-                    func=ast.Name(id="NotImplementedError", ctx=ast.Load()),
-                    args=[],
-                    keywords=[],
-                ),
-                cause=None,
-            )
-        ],
-        decorator_list=[],
-        returns=ast.Name(id="WellDesignServiceResponse", ctx=ast.Load()),
-        type_params=[],
-    )
-    ast.fix_missing_locations(func)
-    return func
 
 
 def generate_plugin_source(
@@ -408,11 +296,10 @@ def generate_plugin_source(
         normalize_plugin_name(plugin_name) if plugin_name else to_snake_case(class_name)
     )
 
-    method_stubs = _build_method_stubs(interface_cls, uses_protocol=spec.uses_protocol)
+    method_stubs = _build_method_stubs(interface_cls)
     if not method_stubs:
         raise RuntimeError(
-            f"Interface {spec.interface_class_name!r} has no "
-            f"{'protocol' if spec.uses_protocol else 'abstract'} methods to scaffold."
+            f"Interface {spec.interface_class_name!r} has no abstract methods to scaffold."
         )
 
     future_import = ast.ImportFrom(
@@ -438,14 +325,6 @@ def generate_plugin_source(
         names=[ast.alias(name=spec.descriptor_class_name, asname=None)],
         level=0,
     )
-    extra_import_nodes: list[ast.stmt] = [
-        ast.ImportFrom(
-            module=mod,
-            names=[ast.alias(name=name, asname=None)],
-            level=0,
-        )
-        for mod, name in spec.extra_imports
-    ]
 
     class_def = _build_class_def(
         class_name=class_name,
@@ -458,9 +337,6 @@ def generate_plugin_source(
         class_name=class_name,
         descriptor_class_name=spec.descriptor_class_name,
         name_attr=spec.name_attr,
-        impl_kwarg=spec.descriptor_impl_kwarg,
-        is_instance=spec.descriptor_impl_is_instance,
-        has_build_wells=spec.needs_build_wells,
     )
 
     docstring_node = ast.Expr(
@@ -478,12 +354,9 @@ def generate_plugin_source(
         *interface_dep_imports,
         interface_import,
         descriptor_import,
-        *extra_import_nodes,
         class_def,
+        descriptor_assign,
     ]
-    if spec.needs_build_wells:
-        body.append(_build_build_wells_function())
-    body.append(descriptor_assign)
 
     module = ast.Module(body=body, type_ignores=[])
     ast.fix_missing_locations(module)

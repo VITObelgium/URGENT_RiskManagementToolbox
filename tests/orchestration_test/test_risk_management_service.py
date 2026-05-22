@@ -93,7 +93,7 @@ def test_run_risk_management_happy_path(
         mock_problem_def.run_mode.value = "optimization"
         mock_problem_def.plugins.connector = "opendarts"
         mock_problem_def.plugins.optimizer = "pso"
-        mock_problem_def.plugins.well_management = "builtin"
+        mock_problem_def.plugins.domain_service = "builtin"
 
         rms.run_risk_management(
             mock_problem_def, b"model", model_hash="brooks_was_here"
@@ -105,19 +105,27 @@ def test_run_risk_management_happy_path(
 
 
 def test_prepare_simulation_cases_basic():
+    minimal_well = {
+        "well_type": "IWell",
+        "name": "W1",
+        "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "md": 100.0,
+        "md_step": 0.5,
+    }
     fake_task = MagicMock()
-    fake_task.request = [1]
+    fake_task.request = [minimal_well]
     fake_task.control_vector = MagicMock(items={"a": 1})
     fake_solution = MagicMock()
     fake_solution.tasks = {rms.ServiceType.WellDesignService: fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
 
-    build_wells = MagicMock(
-        return_value=MagicMock(model_dump=MagicMock(return_value={"well": 1}))
+    mock_handler = MagicMock()
+    mock_handler.build.return_value = MagicMock(
+        model_dump=MagicMock(return_value={"well": 1})
     )
     fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
     sim_cases = rms._prepare_simulation_cases(
-        solutions, fake_expected_cost_function_names, build_wells
+        solutions, fake_expected_cost_function_names, mock_handler
     )
     assert isinstance(sim_cases, list)
     assert sim_cases[0]["wells"] == {"well": 1}
@@ -131,8 +139,9 @@ def test_prepare_simulation_cases_unhandled_service():
     solutions = MagicMock(solution_candidates=[fake_solution])
     fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
 
+    mock_handler = MagicMock()
     sim_cases = rms._prepare_simulation_cases(
-        solutions, fake_expected_cost_function_names, MagicMock()
+        solutions, fake_expected_cost_function_names, mock_handler
     )
     assert isinstance(sim_cases, list)
     assert "control_vector" in sim_cases[0]

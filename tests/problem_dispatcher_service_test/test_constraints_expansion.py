@@ -62,7 +62,7 @@ def md_problem_definition():
         "plugins": {
             "connector": "opendarts",
             "optimizer": "pso",
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
 
@@ -191,7 +191,7 @@ def test_jwell_constraints_respected():
         "plugins": {
             "connector": "opendarts",
             "optimizer": "pso",
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
@@ -236,7 +236,7 @@ def test_hwell_constraints_respected():
         "plugins": {
             "connector": "opendarts",
             "optimizer": "pso",
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
@@ -300,7 +300,7 @@ def test_linear_inequalities_mixed_wells():
         "plugins": {
             "connector": "opendarts",
             "optimizer": "pso",
-            "well_management": "builtin",
+            "domain_service": "builtin",
         },
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)

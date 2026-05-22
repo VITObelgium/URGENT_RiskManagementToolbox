@@ -49,7 +49,7 @@ def _make_problem_definition(tmp_path: Path) -> ProblemDispatcherDefinition:
             "plugins": {
                 "connector": "opendarts",
                 "optimizer": "pso",
-                "well_management": "builtin",
+                "domain_service": "builtin",
             },
         }
     )

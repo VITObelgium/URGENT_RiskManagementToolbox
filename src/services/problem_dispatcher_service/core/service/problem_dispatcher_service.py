@@ -1,5 +1,4 @@
 from typing import Any
-from collections.abc import Callable
 
 import numpy as np
 
@@ -13,13 +12,11 @@ from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherServiceResponse,
     ServiceType,
 )
-from services.problem_dispatcher_service.core.service.handlers import (
-    ProblemTypeHandler,
-    WellDesignHandler,
-)
 from services.problem_dispatcher_service.core.utils import (
     DEFAULT_SEPARATOR,
     CandidateGenerator,
+    build_full_key_boundaries_from_well_design,
+    build_initial_state_from_well_design,
     convert_key_separator,
 )
 from services.shared import Boundaries
@@ -27,18 +24,16 @@ from services.solution_updater_service import ControlVector
 
 
 class ProblemDispatcherService:
-    def __init__(
-        self,
-        problem_definition: ProblemDispatcherDefinition,
-        wms_handler: ProblemTypeHandler | None = None,
-    ):
-        """
-        Initialize the ProblemDispatcherService.
+    def __init__(self, problem_definition: ProblemDispatcherDefinition):
+        """Initialize ProblemDispatcherService.
+
+        Builds the initial well state, optimizer boundary map, and linear
+        inequality constraints from the problem definition so that
+        ``process_iteration`` can generate or forward control vectors without
+        re-parsing the config on every iteration.
 
         Args:
-            problem_definition (ProblemDispatcherDefinition): The problem definition to process.
-            wms_handler: Well-management handler from the resolved WMS plugin. Falls back
-                to the built-in ``WellDesignHandler`` when not provided.
+            problem_definition: Validated configuration for the optimization run.
         """
         self.logger = get_logger(__name__)
         self.logger.debug("Initializing ProblemDispatcherService")
@@ -48,18 +43,27 @@ class ProblemDispatcherService:
             self._population_size = (
                 self._problem_definition.optimization_parameters.population_size
             )
-            self._handlers: dict[ServiceType, ProblemTypeHandler] = {
-                ServiceType.WellDesignService: wms_handler or WellDesignHandler(),
-            }
-            self._initial_state = self._build_initial_state()
-
             self._linear_inequalities = (
                 self._problem_definition.optimization_parameters.linear_inequalities
             )
-            self._task_builder = TaskBuilder(self._initial_state, self._handlers)
+
+            well_items = self._problem_definition.well_design
+            self._initial_state: dict[str, Any] = {
+                ServiceType.WellDesignService: build_initial_state_from_well_design(
+                    well_items
+                )
+            }
+            self.logger.debug("Initial state built: %s", self._initial_state)
+
+            self._task_builder = TaskBuilder(self._initial_state)
             self._full_key_boundaries = self._build_full_key_boundaries()
+            self.logger.debug("Full-key boundaries: %s", self._full_key_boundaries)
+
             self._full_key_linear_inequalities = (
                 self._build_full_key_linear_inequalities()
+            )
+            self.logger.debug(
+                "Full-key linear inequalities: %s", self._full_key_linear_inequalities
             )
 
             self.logger.debug("ProblemDispatcherService initialized successfully.")
@@ -100,7 +104,15 @@ class ProblemDispatcherService:
     def process_iteration(
         self, next_iter_solutions: list[ControlVector] | None = None
     ) -> ProblemDispatcherServiceResponse:
-        self.logger.debug("Processing iteration.")
+        """Generate or forward control vectors for one optimization iteration.
+
+        Args:
+            next_iter_solutions: Optimizer-updated vectors from the previous
+                iteration, or ``None`` to generate the initial population.
+
+        Returns:
+            Response containing one ``SolutionCandidateServicesTasks`` per candidate.
+        """
         self.logger.debug(
             "Processing iteration. next_iter_solutions: %s",
             next_iter_solutions if next_iter_solutions else "None",
@@ -130,10 +142,14 @@ class ProblemDispatcherService:
                     self._initial_state,
                     self._linear_inequalities,
                 )
-                self.logger.debug("Generated control vectors: %s", control_vectors)
+                self.logger.debug(
+                    "Generated %d initial control vectors.", len(control_vectors)
+                )
             else:
                 control_vectors = [cv.items for cv in next_iter_solutions]
-                self.logger.debug("Using provided control vectors: %s", control_vectors)
+                self.logger.debug(
+                    "Using %d provided control vectors.", len(control_vectors)
+                )
 
             solution_candidates = self._task_builder.build(control_vectors)
             self.logger.info(
@@ -147,56 +163,11 @@ class ProblemDispatcherService:
             self.logger.error("Error during process_iteration: %s", str(e))
             raise
 
-    def _process_problem_items(
-        self,
-        process_func: Callable[..., dict[str, Any] | Any],
-        log_message: str,
-        merge_results: bool = False,
-    ) -> dict[str, Any]:
-        self.logger.debug(f"Processing problem items: {log_message}")
-        try:
-            # Add type annotation for the result variable
-            result: dict[str, Any] | None = {} if merge_results else None
-            for problem_type, handler in self._handlers.items():
-                items = getattr(self._problem_definition, problem_type, None)
-                if items:
-                    processed_result = process_func(handler, items)
-
-                    if merge_results:
-                        # Ensure result is always a dictionary when merge_results is True
-                        if result is None:
-                            result = {}  # Safeguard for type consistency
-                        result.update(processed_result)
-                    else:
-                        # Initialize result as a dictionary if it is None
-                        if result is None:
-                            result = {}
-                        result[problem_type] = processed_result
-                    self.logger.debug(
-                        "%s for %s: %s", log_message, problem_type, processed_result
-                    )
-            # If result is still None (no items processed), return an empty dictionary
-            return result if result is not None else {}
-        except Exception as e:
-            self.logger.error("Error during %s: %s", log_message, str(e))
-            raise
-
-    def _build_initial_state(self) -> dict[str, Any]:
-        return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_initial_state(items),
-            log_message="Building initial state",
-            merge_results=False,
-        )
-
     def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
         if self._problem_definition.run_mode == RunMode.Evaluation:
             return {}
-        return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_full_key_boundaries(
-                items
-            ),
-            log_message="Building boundaries",
-            merge_results=True,
+        return build_full_key_boundaries_from_well_design(
+            self._problem_definition.well_design
         )
 
     def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:

@@ -51,5 +51,5 @@ def resolve_optimizer_plugin(optimizer_name: str) -> str:
     return _resolve_plugin(PluginKind.OPTIMIZER, optimizer_name)
 
 
-def resolve_wms_plugin(wms_name: str) -> str:
-    return _resolve_plugin(PluginKind.WMS, wms_name)
+def resolve_domain_service_plugin(domain_service_name: str) -> str:
+    return _resolve_plugin(PluginKind.DOMAIN_SERVICE, domain_service_name)

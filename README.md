@@ -27,7 +27,7 @@
     - [Creating a custom plugin](#creating-a-custom-plugin)
       - [Connector plugin](#connector-plugin)
       - [Optimizer plugin](#optimizer-plugin)
-      - [Well Management plugin](#well-management-plugin)
+      - [Domain Service plugin](#domain-service-plugin)
   - [Reservoir simulation interoperability](#reservoir-simulation-interoperability)
     - [OpenDarts Connector](#opendarts-connector)
   - [Run configuration file](#run-configuration-file)
@@ -138,13 +138,13 @@ pixi run python src/main.py --resume <checkpoint_filepath.npz> --model-file <mod
 
 ### 3. Plugin system
 
-The toolbox uses an explicit plugin system to select the reservoir simulator connector, optimization algorithm, and well management service. **Every configuration file must include a `plugins` block** — there are no implicit defaults.
+The toolbox uses an explicit plugin system to select the reservoir simulator connector, optimization algorithm, and domain service. **Every configuration file must include a `plugins` block** — there are no implicit defaults.
 
 ```json
 "plugins": {
   "connector": "opendarts",
   "optimizer": "pso",
-  "well_management": "builtin"
+  "domain_service": "builtin"
 }
 ```
 
@@ -156,7 +156,7 @@ Each value is a plugin name that maps to a file in `plugins/<type>/<name>.py`. T
 |------|------|-------------|
 | `connector` | `opendarts` | OpenDARTS reservoir simulator connector |
 | `optimizer` | `pso` | Particle Swarm Optimization engine |
-| `well_management` | `builtin` | Built-in geometric well design service (IWell / JWell / SWell / HWell) |
+| `domain_service` | `builtin` | Built-in geometric well design service (IWell / JWell / SWell / HWell) |
 
 ---
 
@@ -213,7 +213,7 @@ Implement `run(...)`, then select the connector in your config:
 "plugins": {
   "connector": "mysimulator",
   "optimizer": "pso",
-  "well_management": "builtin"
+  "domain_service": "builtin"
 }
 ```
 
@@ -260,63 +260,46 @@ Select it in config:
 "plugins": {
   "connector": "opendarts",
   "optimizer": "geneticalgorithm",
-  "well_management": "builtin"
+  "domain_service": "builtin"
 }
 ```
 
 ---
 
-##### Well Management plugin
+##### Domain Service plugin
 
-A WMS plugin controls how candidate well geometries are generated and validated for each optimization candidate. It runs entirely in the orchestrator — never in simulation workers.
+A domain service plugin converts candidate well models into simulation geometry. It runs entirely in the orchestrator — never in simulation workers. The framework handles initial state construction, PSO boundary extraction, and task packaging; the plugin is responsible only for the geometry conversion step.
 
 ```shell
-pixi run create-plugin wms CompanyWMS
+pixi run create-plugin domain CompanyDomainService
 ```
 
-This creates `plugins/wms/companywms.py`:
+This creates `plugins/domain_services/companydomainservice.py`:
 
 ```python
-# plugins/wms/companywms.py
+# plugins/domain_services/companydomainservice.py
 from __future__ import annotations
 
-from typing import Any
-
-from services.problem_dispatcher_service.core.service.handlers import ProblemTypeHandler
-from services.shared import Boundaries
+from services.problem_dispatcher_service.core.service.interface import DomainServiceInterface
+from services.well_management_service import WellModel
 from services.well_management_service.core.models import WellDesignServiceResponse
-from urgent_plugins import WellManagementPlugin
+from urgent_plugins import DomainServicePlugin
 
 
-class CompanyWMSHandler(ProblemTypeHandler):
-    WmsName = "companywms"
+class CompanyDomainService(DomainServiceInterface):
+    ServiceName: str = "companydomainservice"
 
-    def build_initial_state(self, items: list[Any]) -> dict[str, Any]:
-        raise NotImplementedError
-
-    def build_full_key_boundaries(
-        self, items: list[Any], separator: str = "."
-    ) -> dict[str, Boundaries]:
-        raise NotImplementedError
-
-    def build_service_tasks(
-        self, solution_items: dict[str, Any]
-    ) -> list[dict[str, Any]]:
+    def build(self, wells: list[WellModel]) -> WellDesignServiceResponse:
         raise NotImplementedError
 
 
-def build_wells(request: list[dict]) -> WellDesignServiceResponse:
-    raise NotImplementedError
-
-
-plugin = WellManagementPlugin(
-    name=CompanyWMSHandler.WmsName,
-    handler=CompanyWMSHandler(),
-    build_wells=build_wells,
+plugin = DomainServicePlugin(
+    name=CompanyDomainService.ServiceName,
+    implementation=CompanyDomainService,
 )
 ```
 
-`build_wells` must return a `WellDesignServiceResponse`, preserving the simulation payload contract. It can call an external HTTP service, read from a database, or wrap any geometry engine.
+`build` receives a list of fully-parsed, type-safe `WellModel` objects and must return a `WellDesignServiceResponse`. It can wrap an external geometry engine, an HTTP service, or any domain-specific well-building logic.
 
 Select it in config:
 
@@ -324,7 +307,7 @@ Select it in config:
 "plugins": {
   "connector": "opendarts",
   "optimizer": "pso",
-  "well_management": "companywms"
+  "domain_service": "companydomainservice"
 }
 ```
 
@@ -469,7 +452,7 @@ Configuration file define services to be used for simulation and optimization as
 The toolbox expects **one JSON file** that defines:
 
 1. Services name and parameters for optimization (with their bounds)
-2. Which plugins to use (connector, optimizer, well management)
+2. Which plugins to use (connector, optimizer, domain service)
 3. How the optimization algorithm is configured
 
 ### Input file schemas
@@ -487,7 +470,7 @@ Input configuration file is a JSON file with the structures presented in `schema
    "plugins": {
      "connector": "<name>",
      "optimizer": "<name>",
-     "well_management": "<name>"
+     "domain_service": "<name>"
    }
 }
 ```
@@ -998,7 +981,7 @@ The Well design service will be use to determine the optimal wells placement and
   "plugins": {
     "connector": "opendarts",
     "optimizer": "pso",
-    "well_management": "builtin"
+    "domain_service": "builtin"
   }
 }
 

@@ -159,7 +159,7 @@ class OpenDartsConnector(ConnectorInterface):
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        runner_mode = os.environ.get("OPEN_DARTS_RUNNER", "thread").lower()
+        runner_mode = os.environ.get("RUNNER_MODE", "thread").lower()
 
         timeout = int(os.environ.get("WORKER_SIMULATION_TIMEOUT_SECONDS", "900"))
         subprocess_runner = SubprocessRunner(

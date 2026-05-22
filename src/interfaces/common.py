@@ -116,7 +116,7 @@ def risk_management(
         os.environ["URGENT_EXTERNAL_DOCKER_LOG_CONSOLE"] = "false"
         logger.info("External log terminals disabled; using file logging only.")
 
-    os.environ["OPEN_DARTS_RUNNER"] = "docker" if use_docker else "thread"
+    os.environ["RUNNER_MODE"] = "docker" if use_docker else "thread"
     logger.info(
         "Using %s for simulations.", "Docker" if use_docker else "multi-threading"
     )

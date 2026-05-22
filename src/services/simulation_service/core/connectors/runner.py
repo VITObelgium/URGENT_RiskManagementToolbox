@@ -69,7 +69,7 @@ class SubprocessRunner:
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        runner_mode = os.environ.get("OPEN_DARTS_RUNNER", "thread").lower()
+        runner_mode = os.environ.get("RUNNER_MODE", "thread").lower()
 
         repo_root: Path | None = None
         if self._repo_root_getter is not None:
@@ -195,7 +195,7 @@ class SubprocessRunner:
         waited = 0.0
         while True:
             if stop is not None and stop.is_set():
-                logger.warning("Stop requested; terminating OpenDarts subprocess.")
+                logger.warning("Stop requested; terminating simulation subprocess.")
                 _terminate_process(process, graceful=False)
                 return SimulationStatus.FAILED
 
@@ -244,7 +244,6 @@ class ThreadRunner:
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        os.environ.setdefault("OPEN_DARTS_THREAD_MODE", "1")
         return self._subprocess_runner.run(
             config, user_cost_function_with_default_values, stop
         )
@@ -334,13 +333,13 @@ def _log_process_failure(returncode: int, manager: ManagedSubprocess) -> None:
 
     if returncode == -9:
         logger.error(
-            "OpenDarts subprocess was killed (rc=-9). This is often due to OOM kill. "
+            "Simulation subprocess was killed (rc=-9). This is often due to OOM kill. "
             f"Consider lowering worker_count or reducing model size.\n"
             f"Stdout tail:\n{stdout_tail}\nStderr tail:\n{stderr_tail}"
         )
     else:
         logger.error(
-            f"OpenDarts subprocess failed rc={returncode}.\n"
+            f"Simulation subprocess failed rc={returncode}.\n"
             f"Stdout tail:\n{stdout_tail}\nStderr tail:\n{stderr_tail}"
         )
 

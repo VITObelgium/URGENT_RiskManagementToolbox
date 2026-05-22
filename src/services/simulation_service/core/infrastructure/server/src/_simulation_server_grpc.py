@@ -383,8 +383,8 @@ async def serve() -> None:
     global _SERVER_LOOP, _SERVER, _SERVER_READY, _HANDLER
 
     logger.info("Initializing Async gRPC Server setup...")
-    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
-    logger.info("Server starting with OPEN_DARTS_RUNNER=%s", mode)
+    mode = os.getenv("RUNNER_MODE", "thread").lower()
+    logger.info("Server starting with RUNNER_MODE=%s", mode)
 
     _SERVER_READY = asyncio.Event()
 

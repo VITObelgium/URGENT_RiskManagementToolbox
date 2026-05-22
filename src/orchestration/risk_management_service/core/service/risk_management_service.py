@@ -70,7 +70,7 @@ def run_risk_management(
         type(simulation_model_archive),
     )
 
-    runner_mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
+    runner_mode = os.getenv("RUNNER_MODE", "thread").lower()
     os.environ["RUN_MODE"] = problem_definition.run_mode.value
     connector_name = resolve_connector_plugin(problem_definition.plugins.connector)
     optimizer_name = resolve_optimizer_plugin(problem_definition.plugins.optimizer)

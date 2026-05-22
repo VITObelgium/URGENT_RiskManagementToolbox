@@ -57,7 +57,7 @@ def get_logger(name: str | None = None, filename: str | None = None) -> Logger:
     """
     if not _logger_configured:
         configure_logger()
-    if os.getenv("OPEN_DARTS_RUNNER", "thread").lower() == "docker" and filename:
+    if os.getenv("RUNNER_MODE", "thread").lower() == "docker" and filename:
         if name in ("threading-server", "threading-worker"):
             name = filename
     return logging.getLogger(name) if name else logging.getLogger()

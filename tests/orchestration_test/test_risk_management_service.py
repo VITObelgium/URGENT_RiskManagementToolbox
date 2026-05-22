@@ -83,7 +83,7 @@ def test_run_risk_management_happy_path(
             "orchestration.risk_management_service.core.service.risk_management_service.parse_flat_dict_to_nested",
             return_value={"x": 5},
         ),
-        patch.dict("os.environ", {"OPEN_DARTS_RUNNER": "docker"}),
+        patch.dict("os.environ", {"RUNNER_MODE": "docker"}),
     ):
         mock_problem_def = MagicMock()
         mock_problem_def.optimization_parameters.worker_count = 1

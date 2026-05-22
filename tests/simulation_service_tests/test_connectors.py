@@ -283,7 +283,7 @@ def test_run_uses_container_python_in_docker_mode(
     with patch.dict(
         "os.environ",
         {
-            "OPEN_DARTS_RUNNER": "docker",
+            "RUNNER_MODE": "docker",
             "SIM_MODEL_DIR": str(runtime_dir),
             "SIM_WORKER_ID": "docker-worker-1",
         },
@@ -328,7 +328,7 @@ def test_run_preserves_docker_template_files_between_jobs(
     with patch.dict(
         "os.environ",
         {
-            "OPEN_DARTS_RUNNER": "docker",
+            "RUNNER_MODE": "docker",
             "SIM_MODEL_DIR": str(runtime_dir),
             "SIM_WORKER_ID": "docker-worker-1",
         },

@@ -2,7 +2,7 @@ import os
 
 _is_worker_subprocess = (
     os.environ.get("URGENT_WORKER_SUBPROCESS") == "1"
-    or os.environ.get("OPEN_DARTS_RUNNER", "").lower() == "docker"
+    or os.environ.get("RUNNER_MODE", "").lower() == "docker"
 )
 
 if not _is_worker_subprocess:

@@ -7,11 +7,8 @@ the descriptor at the bottom advertises it under the
 
 The scaffold for this file was bootstrapped via::
 
-    pixi run create-plugin algorithm PSOEngine --plugin-name pso
+    pixi run create-plugin optimizer PSOEngine --plugin-name pso
 
-The interface-derived stub was then filled in with the concrete PSO
-implementation that previously lived under
-``src/services/solution_updater_service/core/engines``.
 """
 
 from __future__ import annotations

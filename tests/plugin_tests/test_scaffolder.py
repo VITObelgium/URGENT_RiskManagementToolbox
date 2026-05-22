@@ -54,7 +54,7 @@ def test_find_kind_spec_by_alias_rejects_unknown() -> None:
 
 
 def test_generate_connector_plugin_source_is_valid_python() -> None:
-    spec = find_kind_spec_by_alias("simulation")
+    spec = find_kind_spec_by_alias("connector")
     source = generate_plugin_source(spec, "Eclipse")
     ast.parse(source)
     assert "class Eclipse(ConnectorInterface):" in source
@@ -63,7 +63,7 @@ def test_generate_connector_plugin_source_is_valid_python() -> None:
 
 
 def test_generate_optimizer_plugin_source_contains_all_abstract_methods() -> None:
-    spec = find_kind_spec_by_alias("algorithm")
+    spec = find_kind_spec_by_alias("optimizer")
     source = generate_plugin_source(spec, "Genetic")
     ast.parse(source)
 
@@ -76,7 +76,7 @@ def test_generate_optimizer_plugin_source_contains_all_abstract_methods() -> Non
 
 
 def test_generate_connector_scaffold_omits_helpers_not_on_interface() -> None:
-    spec = find_kind_spec_by_alias("simulation")
+    spec = find_kind_spec_by_alias("connector")
     source = generate_plugin_source(spec, "Eclipse")
 
     interface_methods = ConnectorInterface.__abstractmethods__
@@ -88,7 +88,7 @@ def test_generate_connector_scaffold_omits_helpers_not_on_interface() -> None:
 
 
 def test_write_plugin_creates_file_and_loads_back(tmp_path: Path) -> None:
-    spec = find_kind_spec_by_alias("simulation")
+    spec = find_kind_spec_by_alias("connector")
     target = write_plugin(spec, "Eclipse", plugins_root=tmp_path)
 
     assert target == tmp_path / "connectors" / "eclipse.py"
@@ -106,7 +106,7 @@ def test_write_plugin_creates_file_and_loads_back(tmp_path: Path) -> None:
 
 
 def test_write_optimizer_plugin_creates_loadable_stub(tmp_path: Path) -> None:
-    spec = find_kind_spec_by_alias("algorithm")
+    spec = find_kind_spec_by_alias("optimizer")
     target = write_plugin(spec, "Genetic", plugins_root=tmp_path)
 
     assert target == tmp_path / "optimizers" / "genetic.py"
@@ -118,14 +118,14 @@ def test_write_optimizer_plugin_creates_loadable_stub(tmp_path: Path) -> None:
 
 
 def test_write_plugin_refuses_to_overwrite_existing(tmp_path: Path) -> None:
-    spec = find_kind_spec_by_alias("simulation")
+    spec = find_kind_spec_by_alias("connector")
     write_plugin(spec, "Eclipse", plugins_root=tmp_path)
     with pytest.raises(FileExistsError):
         write_plugin(spec, "Eclipse", plugins_root=tmp_path)
 
 
 def test_write_plugin_overwrites_when_requested(tmp_path: Path) -> None:
-    spec = find_kind_spec_by_alias("simulation")
+    spec = find_kind_spec_by_alias("connector")
     target = write_plugin(spec, "Eclipse", plugins_root=tmp_path)
     target.write_text("# tampered\n")
     write_plugin(spec, "Eclipse", plugins_root=tmp_path, overwrite=True)
@@ -134,7 +134,7 @@ def test_write_plugin_overwrites_when_requested(tmp_path: Path) -> None:
 
 
 def test_generate_rejects_invalid_class_name() -> None:
-    spec = find_kind_spec_by_alias("simulation")
+    spec = find_kind_spec_by_alias("connector")
     with pytest.raises(ValueError):
         generate_plugin_source(spec, "1Bad")
     with pytest.raises(ValueError):

@@ -11,7 +11,6 @@ from pathlib import Path
 from urgent_plugins.api import PluginKind, normalize_plugin_name
 from urgent_plugins.paths import default_plugins_root
 
-
 _ABSTRACTMETHOD_DECORATOR_NAMES = {"abstractmethod", "abc.abstractmethod"}
 
 
@@ -21,7 +20,7 @@ class PluginKindSpec:
 
     Attributes:
         kind: The :class:`PluginKind` member identifying the plugin category.
-        cli_alias: User-facing identifier accepted on the CLI (e.g. ``simulation``).
+        cli_alias: User-facing identifier accepted on the CLI (e.g. ``connector``).
         interface_module: Dotted module path containing the interface ABC.
         interface_class_name: Name of the interface ABC inside that module.
         descriptor_class_name: Name of the corresponding plugin descriptor.
@@ -57,7 +56,7 @@ class PluginKindSpec:
 _PLUGIN_KIND_SPECS: tuple[PluginKindSpec, ...] = (
     PluginKindSpec(
         kind=PluginKind.CONNECTOR,
-        cli_alias="simulation",
+        cli_alias="connector",
         interface_module="services.simulation_service.core.connectors.common",
         interface_class_name="ConnectorInterface",
         descriptor_class_name="ConnectorPlugin",
@@ -65,7 +64,7 @@ _PLUGIN_KIND_SPECS: tuple[PluginKindSpec, ...] = (
     ),
     PluginKindSpec(
         kind=PluginKind.OPTIMIZER,
-        cli_alias="algorithm",
+        cli_alias="optimizer",
         interface_module="services.solution_updater_service.core.engines.common",
         interface_class_name="OptimizationEngineInterface",
         descriptor_class_name="OptimizerPlugin",

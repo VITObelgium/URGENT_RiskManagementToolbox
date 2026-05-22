@@ -2,8 +2,8 @@
 
 Examples
 --------
-    pixi run create-plugin simulation Eclipse
-    pixi run create-plugin algorithm Genetic
+    pixi run create-plugin connector Eclipse
+    pixi run create-plugin optimizer Genetic
     pixi run create-plugin wms CompanyWMS
 
 The generated file lives at ``plugins/<kind_dir>/<snake_case_name>.py`` and

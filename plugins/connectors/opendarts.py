@@ -20,7 +20,6 @@ import json
 import os
 import re
 import sys
-import threading
 from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
@@ -33,22 +32,16 @@ from scipy.spatial import KDTree
 from logger import get_logger
 
 from services.simulation_service.core.connectors.common import (
-    ConnectorInterface,
     GridCell,
     JsonPath,
     Point,
     SimulationResults,
-    SimulationStatus,
     WellManagementServiceResultSchema,
     WellName,
     extract_well_with_perforations_points,
 )
-from services.simulation_service.core.connectors.conn_utils.managed_subprocess import (
-    ManagedSubprocess,
-)
 from services.simulation_service.core.connectors.runner import (
-    SubprocessRunner,
-    ThreadRunner,
+    SubprocessConnectorInterface,
 )
 
 logger = get_logger("threading-worker", filename=__name__)
@@ -147,42 +140,22 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
     return wrapper
 
 
-class OpenDartsConnector(ConnectorInterface):
+class OpenDartsConnector(SubprocessConnectorInterface):
     """Connector for the OpenDARTS reservoir simulator."""
 
     ConnectorName = "opendarts"
     MsgTemplate = "OpenDartsConnector: Type:{0}, Value:{1}"
 
-    @staticmethod
-    def run(
-        config_path: JsonPath,
-        user_cost_function_with_default_values: SimulationResults,
-        stop: threading.Event | None = None,
-    ) -> tuple[SimulationStatus, SimulationResults]:
+    @classmethod
+    def build_command(cls, config_path: JsonPath) -> list[str]:
         runner_mode = os.environ.get("RUNNER_MODE", "thread").lower()
+        if runner_mode == "docker":
+            return [sys.executable, "-u", "main.py", config_path]
+        return ["pixi", "run", "-e", "worker", "python", "-u", "main.py", config_path]
 
-        timeout = int(os.environ.get("WORKER_SIMULATION_TIMEOUT_SECONDS", "900"))
-        subprocess_runner = SubprocessRunner(
-            worker_simulation_timeout_seconds=timeout,
-            managed_subprocess_factory=lambda *a, **k: ManagedSubprocess(*a, **k),
-            broadcast_results_parser=OpenDartsConnector._get_broadcast_results,
-            repo_root_getter=OpenDartsConnector._repo_root,
-            worker_id_getter=OpenDartsConnector._current_worker_id,
-        )
-
-        if runner_mode == "thread":
-            thread_runner = ThreadRunner(subprocess_runner)
-            return thread_runner.run(
-                config_path, user_cost_function_with_default_values, stop
-            )
-
-        return subprocess_runner.run(
-            config_path, user_cost_function_with_default_values, stop
-        )
-
-    @staticmethod
-    def _get_broadcast_results(stdout: str) -> SimulationResults:
-        template = OpenDartsConnector.MsgTemplate
+    @classmethod
+    def parse_results(cls, work_dir: Path | None, stdout: str) -> SimulationResults:  # noqa: ARG002
+        template = cls.MsgTemplate
         re_key = r"(\w+)"
         re_value = r"([+-]?\d+(?:\.\d+)?)"
         pattern = template.format(re_key, re_value)
@@ -192,11 +165,24 @@ class OpenDartsConnector(ConnectorInterface):
             results[key] = float(raw_value.strip())
         return results
 
+    @classmethod
+    def pre_run(cls, work_dir: Path | None) -> None:
+        """Remove stale OpenDARTS OBL point cache files before each run."""
+        scan_dir = work_dir if work_dir is not None else Path.cwd()
+        try:
+            for p in scan_dir.glob("obl_point_data_*.pkl"):
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError as e:
+                    logger.debug(f"Could not remove cache file {p}: {e}")
+        except OSError as e:
+            logger.warning(
+                f"Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway. Error: {e}"
+            )
+
     @staticmethod
     def broadcast_result(key: str, value: float) -> None:
         """Emit a simulation result line for the parent worker to capture."""
-        if not isinstance(value, (int, float)):
-            raise ValueError(f"Value must be a number, got {type(value).__name__}")
         broadcast_template = OpenDartsConnector.MsgTemplate.format(key, float(value))
         print(broadcast_template)
 
@@ -280,27 +266,6 @@ class OpenDartsConnector(ConnectorInterface):
         filtered_perforations_points = well_perforations_points_ar[in_bounds]
         return tuple(filtered_perforations_points)
 
-    @staticmethod
-    def _repo_root() -> Path:
-        here = Path(__file__).resolve()
-        for parent in here.parents:
-            if (parent / "pyproject.toml").exists():
-                return parent
-        raise RuntimeError("Failed to locate repository root directory.")
-
-    @staticmethod
-    def _current_worker_id() -> str | None:
-        try:
-            name = threading.current_thread().name
-            if name.startswith("worker-"):
-                return name.split("-", 1)[1]
-        except Exception:
-            raise RuntimeError("Failed to parse current thread name.")
-        env_worker_id = os.environ.get("SIM_WORKER_ID")
-        if env_worker_id:
-            return env_worker_id
-        return None
-
 
 class _CellConnector:
     """KD-tree wrapper for mapping points to reservoir cells.
@@ -314,7 +279,7 @@ class _CellConnector:
 
     def find_cell_index(self, coord: Point) -> int:
         _, idx = self._kd_tree.query(coord)
-        return idx
+        return int(idx)
 
 
 def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDArray:

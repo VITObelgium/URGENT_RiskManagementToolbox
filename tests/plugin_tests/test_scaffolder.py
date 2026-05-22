@@ -57,7 +57,7 @@ def test_generate_connector_plugin_source_is_valid_python() -> None:
     spec = find_kind_spec_by_alias("connector")
     source = generate_plugin_source(spec, "Eclipse")
     ast.parse(source)
-    assert "class Eclipse(ConnectorInterface):" in source
+    assert "class Eclipse(SubprocessConnectorInterface):" in source
     assert "ConnectorName: str = 'eclipse'" in source
     assert "plugin = ConnectorPlugin(name=Eclipse.ConnectorName" in source
 
@@ -100,9 +100,8 @@ def test_write_plugin_creates_file_and_loads_back(tmp_path: Path) -> None:
     assert descriptor.name == "eclipse"
     assert descriptor.implementation.__name__ == "Eclipse"
 
-    instance = descriptor.implementation()
     with pytest.raises(NotImplementedError):
-        instance.run("/tmp/x.json", {})
+        descriptor.implementation.build_command("/tmp/x.json")  # type: ignore[attr-defined]
 
 
 def test_write_optimizer_plugin_creates_loadable_stub(tmp_path: Path) -> None:

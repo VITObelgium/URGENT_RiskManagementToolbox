@@ -60,9 +60,9 @@ class SimulationStatus(Enum):
 
 
 class ConnectorInterface(ABC):
-    @staticmethod
     @abstractmethod
     def run(
+        self,
         config_path: JsonPath,
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,

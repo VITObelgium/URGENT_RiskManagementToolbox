@@ -389,7 +389,7 @@ def test_run_failure(mock_popen: Mock) -> None:
 def test_run_handles_exception(mock_popen: Mock) -> None:
     # Simulate exception in Popen
     with patch(
-        "plugins.connectors.opendarts.ManagedSubprocess.__enter__",
+        "services.simulation_service.core.connectors.runner.ManagedSubprocess.__enter__",
         side_effect=Exception("fail"),
     ):
         expected_cost_function_with_default_values = {"heat": float("nan")}

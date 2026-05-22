@@ -57,8 +57,8 @@ _PLUGIN_KIND_SPECS: tuple[PluginKindSpec, ...] = (
     PluginKindSpec(
         kind=PluginKind.CONNECTOR,
         cli_alias="connector",
-        interface_module="services.simulation_service.core.connectors.common",
-        interface_class_name="ConnectorInterface",
+        interface_module="services.simulation_service.core.connectors.runner",
+        interface_class_name="SubprocessConnectorInterface",
         descriptor_class_name="ConnectorPlugin",
         name_attr="ConnectorName",
     ),

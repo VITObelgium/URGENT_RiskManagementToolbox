@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import threading
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 from collections.abc import Callable
 
 from logger import get_logger, stream_reader
 
-from .common import (
+from services.simulation_service.core.connectors.common import (
+    ConnectorInterface,
     JsonPath,
     SimulationResults,
     SimulationStatus,
 )
-from .conn_utils import (
+from services.simulation_service.core.connectors.conn_utils import (
     ManagedSubprocess,
     docker_job_workspace,
     static_workspace,
@@ -40,28 +41,27 @@ class SimulationRunner(Protocol):
 
 
 class SubprocessRunner:
-    """Run the simulation using the existing ManagedSubprocess logic."""
+    """Run the simulation as a managed subprocess."""
 
     def __init__(
         self,
         worker_simulation_timeout_seconds: int,
+        command_builder: Callable[[JsonPath], list[str]],
+        results_parser: Callable[[Path | None, str], SimulationResults],
         repo_root_getter: Callable[[], Path] | None = None,
         worker_id_getter: Callable[[], str | None] | None = None,
         managed_subprocess_factory: Callable[..., ManagedSubprocess] | None = None,
-        broadcast_results_parser: Callable[[str], SimulationResults] | None = None,
+        pre_run_hook: Callable[[Path | None], None] | None = None,
     ):
-        if broadcast_results_parser is None:
-            raise RuntimeError(
-                "SubprocessRunner requires a broadcast_results_parser to be provided"
-            )
-
         self._managed_subprocess_factory = (
             managed_subprocess_factory or _default_subprocess_factory
         )
-        self._broadcast_results_parser = broadcast_results_parser
+        self._results_parser = results_parser
+        self._command_builder = command_builder
         self._repo_root_getter = repo_root_getter
         self._worker_id_getter = worker_id_getter
         self._timeout_duration = worker_simulation_timeout_seconds
+        self._pre_run_hook = pre_run_hook
 
     def run(
         self,
@@ -82,8 +82,6 @@ class SubprocessRunner:
             id_result = _safe_call(self._worker_id_getter)
             if isinstance(id_result, str):
                 worker_id = id_result
-
-        _cleanup_stale_caches()
 
         workspace_mgr = self._get_workspace_manager(runner_mode, repo_root, worker_id)
 
@@ -154,7 +152,10 @@ class SubprocessRunner:
         stop: threading.Event | None,
         repo_root: Path | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        command = _build_command(config, runner_mode)
+        if self._pre_run_hook is not None:
+            self._pre_run_hook(work_dir)
+
+        command = self._command_builder(config)
         env = _build_env(work_dir, runner_mode, repo_root=repo_root)
 
         if work_dir is not None:
@@ -184,7 +185,7 @@ class SubprocessRunner:
                 _log_process_failure(popen.returncode or 1, manager)
                 return SimulationStatus.FAILED, defaults
 
-            return self._parse_results(manager, defaults)
+            return self._parse_results(manager, work_dir, defaults)
 
     def _wait_for_process(
         self,
@@ -201,7 +202,7 @@ class SubprocessRunner:
 
             try:
                 process.wait(timeout=_POLL_STEP)
-                return None  # Success
+                return None  # process finished
             except subprocess.TimeoutExpired:
                 waited += _POLL_STEP
                 if waited >= self._timeout_duration:
@@ -213,16 +214,18 @@ class SubprocessRunner:
                     return SimulationStatus.TIMEOUT
 
     def _parse_results(
-        self, manager: ManagedSubprocess, defaults: SimulationResults
+        self,
+        manager: ManagedSubprocess,
+        work_dir: Path | None,
+        defaults: SimulationResults,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        parser = self._broadcast_results_parser
         full_stdout = "\n".join(manager.stdout_lines)
-        broadcast_results = parser(full_stdout)  # type: ignore
+        broadcast_results = self._results_parser(work_dir, full_stdout)
 
         if not broadcast_results:
             logger.error(
-                "Subprocess exited rc=0 but broadcast results are empty. "
-                "The simulation likely crashed silently or produced no broadcast output.\n"
+                "Subprocess exited rc=0 but results are empty. "
+                "The simulation likely crashed silently or produced no output.\n"
                 f"Stdout tail:\n{_tail(manager.stdout_lines)}\n"
                 f"Stderr tail:\n{_tail(manager.stderr_lines)}"
             )
@@ -232,21 +235,68 @@ class SubprocessRunner:
         return SimulationStatus.SUCCESS, merged
 
 
-class ThreadRunner:
-    """Lightweight wrapper that sets thread mode environment and delegates to SubprocessRunner."""
+class SubprocessConnectorInterface(ConnectorInterface, ABC):
+    """Base class for connectors that execute their simulation as a subprocess."""
 
-    def __init__(self, subprocess_runner: SubprocessRunner):
-        self._subprocess_runner = subprocess_runner
+    ConnectorName: ClassVar[str] = "unnamed_subprocess_connector"
 
+    @classmethod
+    @abstractmethod
+    def build_command(cls, config_path: JsonPath) -> list[str]:
+        """Build the subprocess command for this simulator."""
+        ...
+
+    @classmethod
+    @abstractmethod
+    def parse_results(cls, work_dir: Path | None, stdout: str) -> SimulationResults:
+        """Parse simulation results from the workspace.
+
+        Use ``stdout`` for simulators that broadcast results via stdout.
+        Use ``work_dir`` to read output files for file-based simulators (e.g. Eclipse).
+        """
+        ...
+
+    @classmethod
+    def pre_run(cls, work_dir: Path | None) -> None:
+        """Called before the subprocess starts. Override for per-run setup."""
+
+    @classmethod
     def run(
-        self,
-        config: JsonPath,
+        cls,
+        config_path: JsonPath,
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,
     ) -> tuple[SimulationStatus, SimulationResults]:
-        return self._subprocess_runner.run(
-            config, user_cost_function_with_default_values, stop
+        timeout = int(os.environ.get("WORKER_SIMULATION_TIMEOUT_SECONDS", "900"))
+
+        subprocess_runner = SubprocessRunner(
+            worker_simulation_timeout_seconds=timeout,
+            command_builder=cls.build_command,
+            results_parser=cls.parse_results,
+            managed_subprocess_factory=lambda *a, **k: ManagedSubprocess(*a, **k),
+            repo_root_getter=cls._repo_root,
+            worker_id_getter=cls._current_worker_id,
+            pre_run_hook=cls.pre_run,
         )
+
+        return subprocess_runner.run(
+            config_path, user_cost_function_with_default_values, stop
+        )
+
+    @staticmethod
+    def _repo_root() -> Path:
+        here = Path(__file__).resolve()
+        for parent in here.parents:
+            if (parent / "pyproject.toml").exists():
+                return parent
+        raise RuntimeError("Failed to locate repository root directory.")
+
+    @staticmethod
+    def _current_worker_id() -> str | None:
+        name = threading.current_thread().name
+        if name.startswith("worker-"):
+            return name.split("-", 1)[1]
+        return os.environ.get("SIM_WORKER_ID")
 
 
 def _tail(lines: list[str], n: int = _LOG_TAIL_LINES) -> str:
@@ -262,27 +312,8 @@ def _safe_call[T](fn: Callable[[], T]) -> T | None:
         return None
 
 
-def _cleanup_stale_caches() -> None:
-    try:
-        for p in Path.cwd().glob("obl_point_data_*.pkl"):
-            try:
-                p.unlink(missing_ok=True)
-            except OSError as e:
-                logger.debug(f"Could not remove cache file {p}: {e}")
-    except OSError as e:
-        logger.warning(
-            f"Failed to scan/remove old 'obl_point_data_*.pkl' caches; proceeding anyway. Error: {e}"
-        )
-
-
 def _default_subprocess_factory(*args: Any, **kwargs: Any) -> ManagedSubprocess:
     return ManagedSubprocess(*args, **kwargs)
-
-
-def _build_command(config: JsonPath, runner_mode: str) -> list[str]:
-    if runner_mode == "docker":
-        return [sys.executable, "-u", "main.py", config]
-    return ["pixi", "run", "-e", "worker", "python", "-u", "main.py", config]
 
 
 def _build_env(
@@ -308,7 +339,6 @@ def _build_env(
 
 
 def _terminate_process(process: subprocess.Popen, graceful: bool = True) -> None:
-    """Terminate or kill a running process depending on the gracefulness requirement."""
     if process.poll() is not None:
         return
     timeout = _GRACEFUL_TERMINATE_TIMEOUT if graceful else _STOP_TERMINATE_TIMEOUT
@@ -341,16 +371,6 @@ def _log_process_failure(returncode: int, manager: ManagedSubprocess) -> None:
         logger.error(
             f"Simulation subprocess failed rc={returncode}.\n"
             f"Stdout tail:\n{stdout_tail}\nStderr tail:\n{stderr_tail}"
-        )
-
-    if (
-        "BlockingIOError" in stderr_tail
-        and "h5py" in stderr_tail
-        and "Unable to synchronously create file" in stderr_tail
-    ):
-        logger.error(
-            "Detected HDF5 file locking error from h5py. Ensure each worker runs "
-            "in an isolated directory and no other process holds the same HDF5 file open."
         )
 
 

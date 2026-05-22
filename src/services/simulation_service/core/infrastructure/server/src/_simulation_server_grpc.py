@@ -87,7 +87,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             simulation=sm.Simulation(),
             status=sm.JobStatus.NO_JOB_AVAILABLE,
             worker_id=worker_id,
-            simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
         )
 
     async def TransferSimulationModel(self, request, context):
@@ -287,7 +286,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                 simulation=simulation,
                 status=sm.JobStatus.NEW,
                 worker_id=worker_id,
-                simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
                 job_id=job_id,
                 connector=self._batch_connector,
             )

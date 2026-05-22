@@ -11,7 +11,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 )
 _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1asimulation_messaging.proto\x12\x14simulation_messaging" \n\x0fSimulationInput\x12\r\n\x05wells\x18\x01 \x01(\t"*\n\x17SimulationControlVector\x12\x0f\n\x07content\x18\x01 \x01(\t""\n\x10SimulationResult\x12\x0e\n\x06result\x18\x01 \x01(\t"\xe0\x01\n\rSimulationJob\x124\n\nsimulation\x18\x01 \x01(\x0b2 .simulation_messaging.Simulation\x12/\n\x06status\x18\x02 \x01(\x0e2\x1f.simulation_messaging.JobStatus\x12\x11\n\tworker_id\x18\x03 \x01(\t\x122\n\tsimulator\x18\x04 \x01(\x0e2\x1f.simulation_messaging.Simulator\x12\x0e\n\x06job_id\x18\x05 \x01(\x05\x12\x11\n\tconnector\x18\x06 \x01(\t"&\n\x11SimulationOptions\x12\x11\n\tconnector\x18\x01 \x01(\t"\x1f\n\nRequestJob\x12\x11\n\tworker_id\x18\x01 \x01(\t"\x16\n\x03Ack\x12\x0f\n\x07message\x18\x01 \x01(\t"\xc1\x01\n\nSimulation\x124\n\x05input\x18\x01 \x01(\x0b2%.simulation_messaging.SimulationInput\x126\n\x06result\x18\x02 \x01(\x0b2&.simulation_messaging.SimulationResult\x12E\n\x0econtrol_vector\x18\x03 \x01(\x0b2-.simulation_messaging.SimulationControlVector"~\n\x0bSimulations\x125\n\x0bsimulations\x18\x01 \x03(\x0b2 .simulation_messaging.Simulation\x128\n\x07options\x18\x02 \x01(\x0b2\'.simulation_messaging.SimulationOptions"!\n\x0cRequestModel\x12\x11\n\tworker_id\x18\x01 \x01(\t"]\n\x0fSimulationModel\x12\x17\n\x0fpackage_archive\x18\x01 \x01(\x0c\x121\n\x06status\x18\x02 \x01(\x0e2!.simulation_messaging.ModelStatus*\x85\x01\n\tJobStatus\x12\x19\n\x15JOBSTATUS_UNSPECIFIED\x10\x00\x12\x07\n\x03NEW\x10\x01\x12\x0b\n\x07SUCCESS\x10\x02\x12\n\n\x06FAILED\x10\x03\x12\x14\n\x10NO_JOB_AVAILABLE\x10\x04\x12\t\n\x05ERROR\x10\x05\x12\x0b\n\x07TIMEOUT\x10\x06\x12\r\n\tEXCEPTION\x10\x07*5\n\tSimulator\x12\x19\n\x15SIMULATOR_UNSPECIFIED\x10\x00\x12\r\n\tOPENDARTS\x10\x01*Q\n\x0bModelStatus\x12\x1b\n\x17MODELSTATUS_UNSPECIFIED\x10\x00\x12\x16\n\x12NO_MODEL_AVAILABLE\x10\x01\x12\r\n\tON_SERVER\x10\x022\xe9\x03\n\x13SimulationMessaging\x12[\n\x17TransferSimulationModel\x12%.simulation_messaging.SimulationModel\x1a\x19.simulation_messaging.Ack\x12Z\n\x12PerformSimulations\x12!.simulation_messaging.Simulations\x1a!.simulation_messaging.Simulations\x12]\n\x14RequestSimulationJob\x12 .simulation_messaging.RequestJob\x1a#.simulation_messaging.SimulationJob\x12U\n\x13SubmitSimulationJob\x12#.simulation_messaging.SimulationJob\x1a\x19.simulation_messaging.Ack\x12c\n\x16RequestSimulationModel\x12".simulation_messaging.RequestModel\x1a%.simulation_messaging.SimulationModelb\x06proto3'
+    b'\n\x1asimulation_messaging.proto\x12\x14simulation_messaging" \n\x0fSimulationInput\x12\r\n\x05wells\x18\x01 \x01(\t"*\n\x17SimulationControlVector\x12\x0f\n\x07content\x18\x01 \x01(\t""\n\x10SimulationResult\x12\x0e\n\x06result\x18\x01 \x01(\t"\xac\x01\n\rSimulationJob\x124\n\nsimulation\x18\x01 \x01(\x0b2 .simulation_messaging.Simulation\x12/\n\x06status\x18\x02 \x01(\x0e2\x1f.simulation_messaging.JobStatus\x12\x11\n\tworker_id\x18\x03 \x01(\t\x12\x0e\n\x06job_id\x18\x05 \x01(\x05\x12\x11\n\tconnector\x18\x06 \x01(\t"&\n\x11SimulationOptions\x12\x11\n\tconnector\x18\x01 \x01(\t"\x1f\n\nRequestJob\x12\x11\n\tworker_id\x18\x01 \x01(\t"\x16\n\x03Ack\x12\x0f\n\x07message\x18\x01 \x01(\t"\xc1\x01\n\nSimulation\x124\n\x05input\x18\x01 \x01(\x0b2%.simulation_messaging.SimulationInput\x126\n\x06result\x18\x02 \x01(\x0b2&.simulation_messaging.SimulationResult\x12E\n\x0econtrol_vector\x18\x03 \x01(\x0b2-.simulation_messaging.SimulationControlVector"~\n\x0bSimulations\x125\n\x0bsimulations\x18\x01 \x03(\x0b2 .simulation_messaging.Simulation\x128\n\x07options\x18\x02 \x01(\x0b2\'.simulation_messaging.SimulationOptions"!\n\x0cRequestModel\x12\x11\n\tworker_id\x18\x01 \x01(\t"]\n\x0fSimulationModel\x12\x17\n\x0fpackage_archive\x18\x01 \x01(\x0c\x121\n\x06status\x18\x02 \x01(\x0e2!.simulation_messaging.ModelStatus*\x85\x01\n\tJobStatus\x12\x19\n\x15JOBSTATUS_UNSPECIFIED\x10\x00\x12\x07\n\x03NEW\x10\x01\x12\x0b\n\x07SUCCESS\x10\x02\x12\n\n\x06FAILED\x10\x03\x12\x14\n\x10NO_JOB_AVAILABLE\x10\x04\x12\t\n\x05ERROR\x10\x05\x12\x0b\n\x07TIMEOUT\x10\x06\x12\r\n\tEXCEPTION\x10\x07*Q\n\x0bModelStatus\x12\x1b\n\x17MODELSTATUS_UNSPECIFIED\x10\x00\x12\x16\n\x12NO_MODEL_AVAILABLE\x10\x01\x12\r\n\tON_SERVER\x10\x022\xe9\x03\n\x13SimulationMessaging\x12[\n\x17TransferSimulationModel\x12%.simulation_messaging.SimulationModel\x1a\x19.simulation_messaging.Ack\x12Z\n\x12PerformSimulations\x12!.simulation_messaging.Simulations\x1a!.simulation_messaging.Simulations\x12]\n\x14RequestSimulationJob\x12 .simulation_messaging.RequestJob\x1a#.simulation_messaging.SimulationJob\x12U\n\x13SubmitSimulationJob\x12#.simulation_messaging.SimulationJob\x1a\x19.simulation_messaging.Ack\x12c\n\x16RequestSimulationModel\x12".simulation_messaging.RequestModel\x1a%.simulation_messaging.SimulationModelb\x06proto3'
 )
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -20,12 +20,10 @@ _builder.BuildTopDescriptorsAndMessages(
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
-    _globals["_JOBSTATUS"]._serialized_start = 945
-    _globals["_JOBSTATUS"]._serialized_end = 1078
-    _globals["_SIMULATOR"]._serialized_start = 1080
-    _globals["_SIMULATOR"]._serialized_end = 1133
-    _globals["_MODELSTATUS"]._serialized_start = 1135
-    _globals["_MODELSTATUS"]._serialized_end = 1216
+    _globals["_JOBSTATUS"]._serialized_start = 893
+    _globals["_JOBSTATUS"]._serialized_end = 1026
+    _globals["_MODELSTATUS"]._serialized_start = 1028
+    _globals["_MODELSTATUS"]._serialized_end = 1109
     _globals["_SIMULATIONINPUT"]._serialized_start = 52
     _globals["_SIMULATIONINPUT"]._serialized_end = 84
     _globals["_SIMULATIONCONTROLVECTOR"]._serialized_start = 86
@@ -33,20 +31,20 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_SIMULATIONRESULT"]._serialized_start = 130
     _globals["_SIMULATIONRESULT"]._serialized_end = 164
     _globals["_SIMULATIONJOB"]._serialized_start = 167
-    _globals["_SIMULATIONJOB"]._serialized_end = 391
-    _globals["_SIMULATIONOPTIONS"]._serialized_start = 393
-    _globals["_SIMULATIONOPTIONS"]._serialized_end = 431
-    _globals["_REQUESTJOB"]._serialized_start = 433
-    _globals["_REQUESTJOB"]._serialized_end = 464
-    _globals["_ACK"]._serialized_start = 466
-    _globals["_ACK"]._serialized_end = 488
-    _globals["_SIMULATION"]._serialized_start = 491
-    _globals["_SIMULATION"]._serialized_end = 684
-    _globals["_SIMULATIONS"]._serialized_start = 686
-    _globals["_SIMULATIONS"]._serialized_end = 812
-    _globals["_REQUESTMODEL"]._serialized_start = 814
-    _globals["_REQUESTMODEL"]._serialized_end = 847
-    _globals["_SIMULATIONMODEL"]._serialized_start = 849
-    _globals["_SIMULATIONMODEL"]._serialized_end = 942
-    _globals["_SIMULATIONMESSAGING"]._serialized_start = 1219
-    _globals["_SIMULATIONMESSAGING"]._serialized_end = 1708
+    _globals["_SIMULATIONJOB"]._serialized_end = 339
+    _globals["_SIMULATIONOPTIONS"]._serialized_start = 341
+    _globals["_SIMULATIONOPTIONS"]._serialized_end = 379
+    _globals["_REQUESTJOB"]._serialized_start = 381
+    _globals["_REQUESTJOB"]._serialized_end = 412
+    _globals["_ACK"]._serialized_start = 414
+    _globals["_ACK"]._serialized_end = 436
+    _globals["_SIMULATION"]._serialized_start = 439
+    _globals["_SIMULATION"]._serialized_end = 632
+    _globals["_SIMULATIONS"]._serialized_start = 634
+    _globals["_SIMULATIONS"]._serialized_end = 760
+    _globals["_REQUESTMODEL"]._serialized_start = 762
+    _globals["_REQUESTMODEL"]._serialized_end = 795
+    _globals["_SIMULATIONMODEL"]._serialized_start = 797
+    _globals["_SIMULATIONMODEL"]._serialized_end = 890
+    _globals["_SIMULATIONMESSAGING"]._serialized_start = 1112
+    _globals["_SIMULATIONMESSAGING"]._serialized_end = 1601

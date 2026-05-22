@@ -64,24 +64,6 @@ EXCEPTION: JobStatus.ValueType
 "Job has thrown an exception/"
 Global___JobStatus: typing_extensions.TypeAlias = JobStatus
 
-class _Simulator:
-    ValueType = typing.NewType("ValueType", builtins.int)
-    V: typing_extensions.TypeAlias = ValueType
-
-class _SimulatorEnumTypeWrapper(
-    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Simulator.ValueType],
-    builtins.type,
-):
-    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    SIMULATOR_UNSPECIFIED: _Simulator.ValueType
-    OPENDARTS: _Simulator.ValueType
-
-class Simulator(_Simulator, metaclass=_SimulatorEnumTypeWrapper): ...
-
-SIMULATOR_UNSPECIFIED: Simulator.ValueType
-OPENDARTS: Simulator.ValueType
-Global___Simulator: typing_extensions.TypeAlias = Simulator
-
 class _ModelStatus:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
@@ -141,12 +123,10 @@ class SimulationJob(google.protobuf.message.Message):
     SIMULATION_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     WORKER_ID_FIELD_NUMBER: builtins.int
-    SIMULATOR_FIELD_NUMBER: builtins.int
     JOB_ID_FIELD_NUMBER: builtins.int
     CONNECTOR_FIELD_NUMBER: builtins.int
     status: Global___JobStatus.ValueType
     worker_id: builtins.str
-    simulator: Global___Simulator.ValueType
     job_id: builtins.int
     connector: builtins.str
 
@@ -158,7 +138,6 @@ class SimulationJob(google.protobuf.message.Message):
         simulation: Global___Simulation | None = ...,
         status: Global___JobStatus.ValueType = ...,
         worker_id: builtins.str = ...,
-        simulator: Global___Simulator.ValueType = ...,
         job_id: builtins.int = ...,
         connector: builtins.str = ...,
     ) -> None: ...
@@ -174,8 +153,6 @@ class SimulationJob(google.protobuf.message.Message):
             b"job_id",
             "simulation",
             b"simulation",
-            "simulator",
-            b"simulator",
             "status",
             b"status",
             "worker_id",

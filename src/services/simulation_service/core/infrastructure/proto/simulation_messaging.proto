@@ -25,16 +25,11 @@ enum JobStatus{
   EXCEPTION = 7;              // Job has thrown an exception/
 }
 
-enum Simulator{
-  SIMULATOR_UNSPECIFIED = 0;
-  OPENDARTS = 1;
-}
 
 message SimulationJob{
   Simulation simulation = 1;
   JobStatus status = 2;
   string worker_id = 3;
-  Simulator simulator = 4;
   int32 job_id = 5;
   string connector = 6;
 }

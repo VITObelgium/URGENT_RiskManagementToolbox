@@ -68,7 +68,7 @@ def _run_simulator(
 
     tf = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
     try:
-        json.dump(simulation_job.simulation.input.wells, tf)
+        json.dump(simulation_job.simulation.input.payload, tf)
         tf.flush()
         tf_path = tf.name
         tf.close()

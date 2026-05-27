@@ -3,7 +3,7 @@ syntax = "proto3";
 package simulation_messaging;
 
 message SimulationInput{
-  string wells = 1;
+  string payload = 1;
 }
 
 message SimulationControlVector{

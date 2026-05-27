@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import orchestration.risk_management_service.core.service.risk_management_service as rms
+from services.problem_dispatcher_service import ServiceType
 
 
 @patch(
@@ -43,14 +44,22 @@ def test_run_risk_management_happy_path(
     mock_dispatcher_inst.max_stall_generations = 1
     mock_dispatcher_inst.full_key_boundaries = {}
     mock_dispatcher_inst.full_key_linear_inequalities = None
+    minimal_well = {
+        "well_type": "IWell",
+        "name": "W1",
+        "wellhead": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "md": 100.0,
+        "md_step": 0.5,
+    }
 
     mock_dispatcher_inst.process_iteration.side_effect = [
         MagicMock(
             solution_candidates=[
                 MagicMock(
                     tasks={
-                        "WellManagementService": MagicMock(
-                            request=[1], control_vector=MagicMock(items={"a": 1})
+                        ServiceType.DomainService: MagicMock(
+                            request=[minimal_well],
+                            control_vector=MagicMock(items={"a": 1}),
                         )
                     }
                 )
@@ -116,11 +125,11 @@ def test_prepare_simulation_cases_basic():
     fake_task.request = [minimal_well]
     fake_task.control_vector = MagicMock(items={"a": 1})
     fake_solution = MagicMock()
-    fake_solution.tasks = {rms.ServiceType.WellDesignService: fake_task}
+    fake_solution.tasks = {ServiceType.DomainService: fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
 
     mock_handler = MagicMock()
-    mock_handler.build.return_value = MagicMock(
+    mock_handler.process_request.return_value = MagicMock(
         model_dump=MagicMock(return_value={"well": 1})
     )
     fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
@@ -130,12 +139,12 @@ def test_prepare_simulation_cases_basic():
     assert isinstance(sim_cases, list)
     assert sim_cases[0]["wells"] == {"well": 1}
     assert sim_cases[0]["control_vector"] == {"a": 1}
+    mock_handler.process_request.assert_called_once_with({"models": [minimal_well]})
 
 
-def test_prepare_simulation_cases_unhandled_service():
-    fake_task = MagicMock()
+def test_prepare_simulation_cases_empty_tasks():
     fake_solution = MagicMock()
-    fake_solution.tasks = {"UnknownService": fake_task}
+    fake_solution.tasks = {}
     solutions = MagicMock(solution_candidates=[fake_solution])
     fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
 
@@ -145,6 +154,7 @@ def test_prepare_simulation_cases_unhandled_service():
     )
     assert isinstance(sim_cases, list)
     assert "control_vector" in sim_cases[0]
+    mock_handler.process_request.assert_not_called()
 
 
 @patch(

@@ -142,7 +142,7 @@ def test__to_grpc(mock_json_to_str, mock_control_vec, mock_input, mock_sim):
     case.wells.model_dump_json.return_value = "{}"
     case.control_vector = {}
     SimulationService._to_grpc(case)
-    mock_input.assert_called_once_with(wells="{}")
+    mock_input.assert_called_once_with(payload="{}")
     mock_control_vec.assert_called_once_with(content="{}")
     mock_sim.assert_called_once()
 
@@ -158,7 +158,7 @@ def test__from_grpc(mock_str_to_json):
     ]
 
     sim = MagicMock()
-    sim.input.wells = "{}"
+    sim.input.payload = "{}"
     sim.result.result = "{}"
     sim.control_vector.content = "{}"
     result = SimulationService._from_grpc(sim)

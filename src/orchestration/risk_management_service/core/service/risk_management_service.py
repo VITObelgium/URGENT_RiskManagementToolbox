@@ -5,8 +5,6 @@ from typing import Any
 import grpc
 import numpy as np
 import numpy.typing as npt
-from pydantic import TypeAdapter
-
 from common.models import RunMode
 from logger import get_logger
 from orchestration.risk_management_service.core.service.checkpoint import (
@@ -14,10 +12,7 @@ from orchestration.risk_management_service.core.service.checkpoint import (
     save_checkpoint,
     LoadedCheckpointData,
 )
-from services.problem_dispatcher_service import (
-    ProblemDispatcherService,
-    ServiceType,
-)
+from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
@@ -32,7 +27,6 @@ from services.simulation_service import (
     simulation_process_context_manager,
 )
 from services.solution_updater_service import SolutionUpdaterService
-from services.well_management_service import WellModel
 from urgent_plugins import (
     PluginKind,
     get_registry,
@@ -42,8 +36,6 @@ from urgent_plugins import (
 )
 
 logger = get_logger(__name__)
-
-_well_model_adapter: TypeAdapter[WellModel] = TypeAdapter(WellModel)
 
 
 def run_risk_management(
@@ -292,8 +284,8 @@ def _prepare_simulation_cases(
 ) -> list[dict[str, Any]]:
     """Convert solution candidates into simulation-ready case dicts.
 
-    Parses raw well-state dicts back into typed ``WellModel`` objects, calls
-    ``domain_service.build`` to produce geometry, and initialises result
+    Passes raw domain-service request dicts to ``domain_service.process_request``
+    to produce simulation payloads, and initialises result
     placeholders for every expected cost-function name.
 
     Args:
@@ -312,20 +304,15 @@ def _prepare_simulation_cases(
         sim_case: dict[str, Any] = {}
         control_vector: dict[str, Any] = {}
 
-        for service, task in solution.tasks.items():
-            match service:
-                case ServiceType.WellDesignService:
-                    wells = [
-                        _well_model_adapter.validate_python(w) for w in task.request
-                    ]
-                    result = domain_service.build(wells)
-                    sim_case["wells"] = result.model_dump()
-                    control_vector.update(task.control_vector.items)
-                    logger.debug(
-                        "Built %d well(s) for candidate #%d.", len(wells), index + 1
-                    )
-                case _:
-                    logger.warning("Service not implemented: %s", service)
+        for task in solution.tasks.values():
+            result = domain_service.process_request({"models": task.request})
+            sim_case["wells"] = result.model_dump()
+            control_vector.update(task.control_vector.items)
+            logger.debug(
+                "Built %d domain item(s) for candidate #%d.",
+                len(task.request),
+                index + 1,
+            )
 
         sim_case["control_vector"] = control_vector
         sim_case["results"] = {k: float("nan") for k in expected_cost_function_names}

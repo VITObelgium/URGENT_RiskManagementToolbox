@@ -36,7 +36,7 @@ from services.simulation_service.core.connectors.common import (
     JsonPath,
     Point,
     SimulationResults,
-    WellManagementServiceResultSchema,
+    WellDesignServiceResultSchema,
     WellName,
     extract_well_with_perforations_points,
 )
@@ -188,7 +188,7 @@ class OpenDartsConnector(SubprocessConnectorInterface):
 
     @staticmethod
     def get_well_connection_cells(
-        well_management_service_result: WellManagementServiceResultSchema,
+        well_design_service_result: WellDesignServiceResultSchema,
         struct_reservoir: _StructReservoirProtocol,
     ) -> dict[WellName, tuple[GridCell, ...]]:
         """Map well perforation points to reservoir grid cells.
@@ -198,7 +198,7 @@ class OpenDartsConnector(SubprocessConnectorInterface):
         """
         result: dict[WellName, tuple[GridCell, ...]] = {}
         wells_with_perforations_points: dict[WellName, tuple[Point, ...]] = (
-            extract_well_with_perforations_points(well_management_service_result)
+            extract_well_with_perforations_points(well_design_service_result)
         )
 
         cell_connector = _CellConnector(struct_reservoir)
@@ -320,10 +320,6 @@ def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDAr
 
 
 # Plugin descriptor — only built when ``urgent_plugins`` is importable.
-# In a worker subprocess the file is staged as ``connectors/opendarts.py``
-# and ``urgent_plugins`` is not on sys.path; the descriptor is skipped silently
-# and the user simulation script still gets the OpenDartsConnector class plus
-# the configuration injector decorator.
 try:
     from urgent_plugins import ConnectorPlugin
 

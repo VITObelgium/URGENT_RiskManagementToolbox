@@ -70,7 +70,7 @@ def save_checkpoint(
         "model_hash": _encode(model_hash),
         "run_id": _encode(run_id),
         "next_positions": state["next_positions"],
-        # Engine (e.g. PSO)
+        # Optimization engine
         "engine_state_json": _encode(
             json.dumps(
                 {k: v for k, v in engine.items() if not isinstance(v, np.ndarray)}
@@ -124,25 +124,14 @@ def load_checkpoint(checkpoint_file: Path) -> LoadedCheckpointData:
     model_hash = _decode(data["model_hash"]) if "model_hash" in data else None
     run_id = _decode(data["run_id"])
 
-    # Load generic engine_state or fallback to legacy pso_state
-    if "engine_state_json" in data:
-        engine_state = json.loads(_decode(data["engine_state_json"]))
-        for key in data.files:
-            if key.startswith("engine_arr_"):
-                orig_key = key[11:]
-                engine_state[orig_key] = data[key]
-    else:
-        # Legacy checkpoint support
-        engine_state = {
-            "particles_best_positions": data["pso_particles_best_positions"],
-            "particles_best_results": data["pso_particles_best_results"],
-            "global_best_position": data["pso_global_best_position"],
-            "global_best_result": data["pso_global_best_result"],
-            "velocities": data["pso_velocities"],
-            "external_archive_positions": data["pso_external_archive_positions"],
-            "external_archive_results": data["pso_external_archive_results"],
-            "rng_state_json": _decode(data["pso_rng_state"]),
-        }
+    if "engine_state_json" not in data:
+        raise ValueError("Checkpoint is missing generic engine_state_json.")
+
+    engine_state = json.loads(_decode(data["engine_state_json"]))
+    for key in data.files:
+        if key.startswith("engine_arr_"):
+            orig_key = key[11:]
+            engine_state[orig_key] = data[key]
 
     return {
         "config": config,

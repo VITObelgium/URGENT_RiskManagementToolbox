@@ -1,29 +1,30 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from services.well_management_service.core.models import WellDesignServiceResponse
-from services.well_management_service.core.models.user import WellModel
 
 
 class DomainServiceInterface(ABC):
-    """Plugin interface for converting parsed well models into simulation inputs.
+    """Plugin interface for converting well-design requests into simulation inputs.
 
-    Receives a list of typed well models and returns a ``WellDesignServiceResponse``.
-    The three PSO-formulation concerns (initial state, boundaries, task packaging)
-    are handled by the framework — the plugin is responsible only for geometry
-    construction, which is the only part that genuinely varies per well model type.
+    The canonical entry point mirrors ``WellDesignService.process_request``:
+    plugins receive a request dictionary with a ``models`` list and return a
+    ``WellDesignServiceResponse``. The optimization framework still handles the
+    initial state, boundaries, and task packaging; the plugin owns the domain
+    translation from well-design models to simulation-ready geometry.
     """
 
     ServiceName: str
 
     @abstractmethod
-    def build(self, wells: list[WellModel]) -> WellDesignServiceResponse:
-        """Convert typed well models to a simulation-ready response.
+    def process_request(
+        self, request_dict: dict[str, Any]
+    ) -> WellDesignServiceResponse:
+        """Convert a well-design request to a simulation-ready response.
 
-        Called once per optimization candidate.  Receives fully-parsed,
-        validated ``WellModel`` objects so the implementation never needs to
-        re-validate geometry; its only responsibility is to produce the
-        ``WellDesignServiceResponse`` that the simulation service consumes.
+        Called once per optimization candidate with a request dictionary shaped
+        like ``{"models": [...]}``.
         """
         ...

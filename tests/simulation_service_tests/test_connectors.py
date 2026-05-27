@@ -13,7 +13,7 @@ import pytest
 from services.simulation_service.core.connectors.common import (
     GridCell,
     SimulationStatus,
-    WellManagementServiceResultSchema,
+    WellDesignServiceResultSchema,
     WellName,
 )
 from plugins.connectors.opendarts import (
@@ -121,7 +121,7 @@ def mock_struct_reservoir(
 )
 def test_get_well_connection_cells(
     mock_struct_reservoir: Mock,
-    wells_result: WellManagementServiceResultSchema,
+    wells_result: WellDesignServiceResultSchema,
     expected_output: dict[WellName, tuple[GridCell, ...]],
 ) -> None:
     actual_result = OpenDartsConnector.get_well_connection_cells(

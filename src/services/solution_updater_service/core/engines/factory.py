@@ -8,8 +8,9 @@ from urgent_plugins import (
     OptimizerPlugin,
     PluginKind,
     get_registry,
-    register_builtins,
 )
+from urgent_plugins.loader import load_local_plugin
+from urgent_plugins.paths import default_plugins_root
 
 
 class OptimizationEngineFactory:
@@ -20,12 +21,10 @@ class OptimizationEngineFactory:
     ) -> OptimizationEngineInterface:
         """Resolve an optimization engine by plugin name.
 
-        Consults the :mod:`urgent_plugins` registry (which seeds built-ins
-        through the same loader as third-party plugins). When the configured
-        engine class does not accept a ``seed`` keyword argument, the engine is
-        instantiated without it so third-party engines need not pretend to
-        understand a parameter they do not use.
-        ``engine_name`` must be supplied explicitly.
+        Consults the :mod:`urgent_plugins` registry and, when the explicitly
+        named plugin has not been loaded in this process yet, loads it from the
+        configured plugin root. When the configured engine class does not accept
+        a ``seed`` keyword argument, the engine is instantiated without it.
         """
 
         name = engine_name.strip().lower()
@@ -34,8 +33,11 @@ class OptimizationEngineFactory:
                 "engine_name must be specified explicitly in the plugins config."
             )
 
-        register_builtins()
         descriptor = get_registry().get(PluginKind.OPTIMIZER, name)
+        if descriptor is None:
+            descriptor = load_local_plugin(
+                PluginKind.OPTIMIZER, name, default_plugins_root()
+            )
         if isinstance(descriptor, OptimizerPlugin):
             return OptimizationEngineFactory._instantiate(
                 descriptor.implementation, seed

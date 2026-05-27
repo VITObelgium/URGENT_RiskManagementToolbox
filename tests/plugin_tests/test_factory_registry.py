@@ -13,7 +13,6 @@ from services.simulation_service.core.connectors.factory import ConnectorFactory
 from urgent_plugins import (
     PluginKind,
     get_registry,
-    register_builtins,
 )
 from urgent_plugins.loader import load_local_plugin, resolve_plugin_path
 
@@ -63,7 +62,6 @@ def _write_stub_plugin(plugins_root: Path) -> Path:
 
 
 def test_factory_returns_built_in_opendarts_for_explicit_name() -> None:
-    register_builtins()
     builtin_cls = get_builtin_connector_class()
     for name in (builtin_cls.ConnectorName, builtin_cls.ConnectorName.upper()):  # type: ignore[attr-defined]
         connector = ConnectorFactory.get_connector(name)
@@ -71,7 +69,6 @@ def test_factory_returns_built_in_opendarts_for_explicit_name() -> None:
 
 
 def test_factory_raises_for_empty_name() -> None:
-    register_builtins()
     with pytest.raises(ValueError):
         ConnectorFactory.get_connector("")
 
@@ -89,6 +86,5 @@ def test_factory_returns_registered_plugin_instance(tmp_path: Path) -> None:
 
 
 def test_factory_raises_for_unknown_plugin_name() -> None:
-    register_builtins()
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(FileNotFoundError):
         ConnectorFactory.get_connector("never_registered")

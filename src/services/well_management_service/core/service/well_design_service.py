@@ -23,11 +23,11 @@ class WellDesignService:
     def process_request(request_dict: dict[str, Any]) -> WellDesignServiceResponse:
         # Parse the incoming request
         request = WellDesignServiceRequest(**request_dict)
-        logger.debug("Parsed request into WellManagementServiceRequest: %s", request)
+        logger.debug("Parsed request into WellDesignServiceRequest: %s", request)
 
         # Build wells
         response = WellDesignService._build_wells(request)
-        logger.debug("Built WellManagementServiceResponse: %s", response)
+        logger.debug("Built WellDesignServiceResponse: %s", response)
 
         return response
 

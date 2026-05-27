@@ -2,7 +2,7 @@ import pytest
 
 from services.simulation_service.core.connectors.common import (
     Point,
-    WellManagementServiceResultSchema,
+    WellDesignServiceResultSchema,
     WellName,
     extract_well_with_perforations_points,
 )
@@ -176,7 +176,7 @@ from services.simulation_service.core.connectors.common import (
     ],
 )
 def test_extract_well_perforations_points(
-    wells_result: WellManagementServiceResultSchema,
+    wells_result: WellDesignServiceResultSchema,
     expected_output: dict[WellName, tuple[Point, ...]],
 ) -> None:
     actual_result = extract_well_with_perforations_points(wells_result)

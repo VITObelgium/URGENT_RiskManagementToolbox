@@ -25,10 +25,7 @@ from logger import (
 from services.simulation_service.core.config import get_simulation_config
 from urgent_plugins import (
     get_plugin_settings,
-    PluginKind,
-    get_registry,
     normalize_plugin_name,
-    register_builtins,
 )
 from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
     driver,
@@ -294,16 +291,13 @@ class ProcessClusterManager(ClusterManager):
 
         self._stage_connector_plugin(repo_root, target_dir)
 
-    def _stage_connector_plugin(self, repo_root: Path, target_dir: Path) -> None:
+    def _stage_connector_plugin(self, _repo_root: Path, target_dir: Path) -> None:
         """Stage the connector plugin file(s) into the per-worker temp dir.
 
-        All built-in connector files found under ``<repo>/plugins/connectors/``
-        are copied to ``target_dir/connectors/`` so subprocess imports such as
-        ``from connectors.<stem> import ...`` resolve correctly.
-
-        If ``URGENT_CONNECTOR_PLUGIN_NAME`` names a connector not registered as
-        a built-in, it is additionally staged from ``URGENT_PLUGIN_PATH`` into
-        ``target_dir/plugins/connectors/``.
+        The connector name must be set by the orchestrator from config. The
+        corresponding plugin file is copied from ``URGENT_PLUGIN_PATH`` so
+        subprocess imports such as ``from connectors.<stem> import ...`` resolve
+        correctly without connector-specific assumptions.
         """
 
         plugin_cfg = get_plugin_settings()
@@ -315,35 +309,9 @@ class ProcessClusterManager(ClusterManager):
 
         normalized = normalize_plugin_name(plugin_name)
 
-        builtin_connectors_dir = repo_root / "plugins" / "connectors"
-        for f in sorted(builtin_connectors_dir.glob("*.py")):
-            if f.name != "__init__.py":
-                dest = target_dir / "connectors" / f.name
-                shutil.copyfile(f, dest)
-                logger.debug("Staged built-in connector file: %s", dest)
-
-        # Determine whether the configured connector is a known built-in.
-        try:
-            register_builtins()
-            is_builtin = (
-                get_registry().get(PluginKind.CONNECTOR, normalized) is not None
-            )
-        except Exception:
-            logger.debug(
-                "register_builtins() failed; assuming %r is a third-party connector.",
-                plugin_name,
-            )
-            is_builtin = False
-
-        if is_builtin:
-            logger.info("Connector %r is built-in; staging complete.", plugin_name)
-            return
-
-        # Third-party connector: stage from URGENT_PLUGIN_PATH.
         if plugin_cfg.plugin_path is None:
             raise RuntimeError(
-                "URGENT_CONNECTOR_PLUGIN_NAME is set to a non-built-in connector "
-                "but URGENT_PLUGIN_PATH is not set; cannot locate connector plugin file to stage."
+                "URGENT_PLUGIN_PATH must be set; cannot locate connector plugin file to stage."
             )
 
         source = plugin_cfg.plugin_path / "connectors" / f"{normalized}.py"
@@ -352,12 +320,11 @@ class ProcessClusterManager(ClusterManager):
                 f"Connector plugin file not found for staging: {source}"
             )
 
-        staged_dir = target_dir / "plugins" / "connectors"
-        staged_dir.mkdir(parents=True, exist_ok=True)
+        staged_dir = target_dir / "connectors"
         destination = staged_dir / source.name
         shutil.copyfile(source, destination)
         logger.info(
-            "Staged third-party connector plugin %r into worker temp dir: %s",
+            "Staged connector plugin %r into worker temp dir: %s",
             plugin_name,
             destination,
         )

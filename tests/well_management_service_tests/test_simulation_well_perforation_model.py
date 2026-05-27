@@ -27,7 +27,7 @@ def test_simulation_well_perforation_model_valid_range():
     assert model.range == (100, 200)
 
 
-def test_well_management_service_result_unique_names():
+def test_well_design_service_result_unique_names():
     wells = [
         SimulationWellModel(
             name="Well1", trajectory=((0.0, 0.0, 0.0),), completion=None
@@ -40,7 +40,7 @@ def test_well_management_service_result_unique_names():
     assert result.wells == wells
 
 
-def test_well_management_service_result_duplicate_names():
+def test_well_design_service_result_duplicate_names():
     wells = [
         SimulationWellModel(
             name="Well1", trajectory=((0.0, 0.0, 0.0),), completion=None

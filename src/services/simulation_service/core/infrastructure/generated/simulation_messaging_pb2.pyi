@@ -87,11 +87,11 @@ Global___ModelStatus: typing_extensions.TypeAlias = ModelStatus
 @typing.final
 class SimulationInput(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    WELLS_FIELD_NUMBER: builtins.int
-    wells: builtins.str
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    payload: builtins.str
 
-    def __init__(self, *, wells: builtins.str = ...) -> None: ...
-    def ClearField(self, field_name: typing.Literal["wells", b"wells"]) -> None: ...
+    def __init__(self, *, payload: builtins.str = ...) -> None: ...
+    def ClearField(self, field_name: typing.Literal["payload", b"payload"]) -> None: ...
 
 Global___SimulationInput: typing_extensions.TypeAlias = SimulationInput
 

@@ -1,11 +1,8 @@
-"""Test helpers for resolving the built-in plugin implementation classes.
+"""Test helpers for resolving bundled plugin implementation classes.
 
-Now that the canonical OpenDARTS, PSO, and domain service implementations live
-in plugin files (``plugins/connectors/opendarts.py``,
-``plugins/optimizers/pso.py``, ``plugins/domain_services/builtin.py``), tests
-must access them through the urgent_plugins registry instead of a direct
-``src/services/...`` import. These helpers ensure built-ins are registered and
-return the underlying implementation class.
+The OpenDARTS, PSO, and domain service implementations live in ordinary plugin
+files under ``plugins/``. These helpers load those files explicitly and return
+the underlying implementation class.
 """
 
 from __future__ import annotations
@@ -19,29 +16,25 @@ from services.solution_updater_service.core.engines.common import (
 )
 from urgent_plugins import (
     PluginKind,
-    get_registry,
-    register_builtins,
 )
-
-from urgent_plugins.registry import builtin_plugin_name
+from urgent_plugins.loader import load_local_plugin
+from urgent_plugins.paths import default_plugins_root
 
 
 def get_builtin_connector_class() -> type[ConnectorInterface]:
-    register_builtins()
-    name = builtin_plugin_name(PluginKind.CONNECTOR)
-    descriptor = get_registry().require(PluginKind.CONNECTOR, name)
+    descriptor = load_local_plugin(
+        PluginKind.CONNECTOR, "opendarts", default_plugins_root()
+    )
     return descriptor.implementation  # type: ignore[return-value]
 
 
 def get_builtin_optimizer_class() -> type[OptimizationEngineInterface]:
-    register_builtins()
-    name = builtin_plugin_name(PluginKind.OPTIMIZER)
-    descriptor = get_registry().require(PluginKind.OPTIMIZER, name)
+    descriptor = load_local_plugin(PluginKind.OPTIMIZER, "pso", default_plugins_root())
     return descriptor.implementation  # type: ignore[return-value]
 
 
 def get_builtin_domain_service_class() -> type[DomainServiceInterface]:
-    register_builtins()
-    name = builtin_plugin_name(PluginKind.DOMAIN_SERVICE)
-    descriptor = get_registry().require(PluginKind.DOMAIN_SERVICE, name)
+    descriptor = load_local_plugin(
+        PluginKind.DOMAIN_SERVICE, "builtin", default_plugins_root()
+    )
     return descriptor.implementation  # type: ignore[return-value]

@@ -18,5 +18,5 @@ def test_get_connector_empty_name_raises(connector_name) -> None:
 
 
 def test_get_connector_unknown_name_raises() -> None:
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(FileNotFoundError):
         ConnectorFactory.get_connector("not_registered_plugin")

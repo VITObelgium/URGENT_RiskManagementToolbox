@@ -21,7 +21,7 @@ class TestOptimizationEngineFactory:
             OptimizationEngineFactory.get_engine("")
 
     def test_unsupported_engine_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(FileNotFoundError):
             OptimizationEngineFactory.get_engine("not_a_registered_engine")
 
 

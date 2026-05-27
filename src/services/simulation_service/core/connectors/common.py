@@ -27,15 +27,15 @@ class WellSchema(TypedDict):
     completion: CompletionSchema | None
 
 
-class WellManagementServiceResultSchema(TypedDict):
+class WellDesignServiceResultSchema(TypedDict):
     wells: list[WellSchema]
 
 
 def extract_well_with_perforations_points(
-    well_management_service_result: WellManagementServiceResultSchema,
+    well_design_service_result: WellDesignServiceResultSchema,
 ) -> dict[WellName, tuple[Point, ...]]:
     results: dict[WellName, tuple[Point, ...]] = {}
-    for well in well_management_service_result["wells"]:
+    for well in well_design_service_result["wells"]:
         perforation_points: list[Point] = []
         try:
             well_name = well["name"]

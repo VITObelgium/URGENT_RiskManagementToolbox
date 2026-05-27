@@ -11,7 +11,6 @@ from urgent_plugins import (
     PluginKind,
     get_registry,
     normalize_plugin_name,
-    register_builtins,
 )
 
 from urgent_plugins.loader import load_local_plugin, resolve_plugin_path
@@ -150,15 +149,15 @@ def test_load_local_plugin_wrong_descriptor_type(tmp_path: Path) -> None:
         load_local_plugin(PluginKind.CONNECTOR, "wrong_type", tmp_path)
 
 
-def test_register_builtins_idempotent_for_each_kind(registry) -> None:
-    register_builtins()
+def test_bundled_plugins_load_explicitly_for_each_kind(registry) -> None:
     connector_cls = get_builtin_connector_class()
     optimizer_cls = get_builtin_optimizer_class()
 
     connector = registry.require(PluginKind.CONNECTOR, connector_cls.ConnectorName)  # type: ignore[attr-defined]
     optimizer = registry.require(PluginKind.OPTIMIZER, optimizer_cls.EngineName)  # type: ignore[attr-defined]
 
-    register_builtins()
+    get_builtin_connector_class()
+    get_builtin_optimizer_class()
 
     assert (
         registry.require(

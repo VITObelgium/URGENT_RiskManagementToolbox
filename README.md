@@ -23,7 +23,7 @@
   - [Supported Reservoir Simulators](#supported-reservoir-simulators)
   - [Execution modes](#execution-modes)
   - [Plugin system](#plugin-system)
-    - [Built-in plugins](#built-in-plugins)
+    - [Bundled plugin files](#bundled-plugin-files)
     - [Creating a custom plugin](#creating-a-custom-plugin)
       - [Connector plugin](#connector-plugin)
       - [Optimizer plugin](#optimizer-plugin)
@@ -150,13 +150,17 @@ The toolbox uses an explicit plugin system to select the reservoir simulator con
 
 Each value is a plugin name that maps to a file in `plugins/<type>/<name>.py`. The toolbox loads only the selected plugin at startup and validates the exported `plugin` descriptor.
 
-#### Built-in plugins
+#### Bundled plugin files
+
+The repository includes these plugin files as examples and ready-to-select
+implementations. They are not defaults: each run must still name the desired
+connector, optimizer, and domain service in its config.
 
 | Kind | Name | Description |
 |------|------|-------------|
 | `connector` | `opendarts` | OpenDARTS reservoir simulator connector |
 | `optimizer` | `pso` | Particle Swarm Optimization engine |
-| `domain_service` | `builtin` | Built-in geometric well design service (IWell / JWell / SWell / HWell) |
+| `domain_service` | `builtin` | Geometric well design service (IWell / JWell / SWell / HWell) |
 
 ---
 
@@ -280,8 +284,9 @@ This creates `plugins/domain_services/companydomainservice.py`:
 # plugins/domain_services/companydomainservice.py
 from __future__ import annotations
 
+from typing import Any
+
 from services.problem_dispatcher_service.core.service.interface import DomainServiceInterface
-from services.well_management_service import WellModel
 from services.well_management_service.core.models import WellDesignServiceResponse
 from urgent_plugins import DomainServicePlugin
 
@@ -289,7 +294,7 @@ from urgent_plugins import DomainServicePlugin
 class CompanyDomainService(DomainServiceInterface):
     ServiceName: str = "companydomainservice"
 
-    def build(self, wells: list[WellModel]) -> WellDesignServiceResponse:
+    def process_request(self, request_dict: dict[str, Any]) -> WellDesignServiceResponse:
         raise NotImplementedError
 
 
@@ -299,7 +304,7 @@ plugin = DomainServicePlugin(
 )
 ```
 
-`build` receives a list of fully-parsed, type-safe `WellModel` objects and must return a `WellDesignServiceResponse`. It can wrap an external geometry engine, an HTTP service, or any domain-specific well-building logic.
+`process_request` receives a request dictionary shaped like `{"models": [...]}` and must return a `WellDesignServiceResponse`. It can wrap an external geometry engine, an HTTP service, or any domain-specific well-building logic.
 
 Select it in config:
 

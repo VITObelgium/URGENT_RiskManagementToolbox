@@ -122,7 +122,7 @@ def _write_plugin(plugins_root: Path, kind: PluginKind, name: str, body: str) ->
     return path
 
 
-def test_resolve_connector_for_builtin_returns_class_name(monkeypatch) -> None:
+def test_resolve_connector_for_bundled_plugin_returns_class_name(monkeypatch) -> None:
     builtin_cls = get_builtin_connector_class()
     # Use the actual repo plugins dir so the loader finds the built-in file.
     resolved = resolve_connector_plugin(builtin_cls.ConnectorName)  # type: ignore[attr-defined]
@@ -132,7 +132,7 @@ def test_resolve_connector_for_builtin_returns_class_name(monkeypatch) -> None:
     assert isinstance(ConnectorFactory.get_connector(resolved), builtin_cls)
 
 
-def test_resolve_optimizer_for_builtin_returns_class_name(monkeypatch) -> None:
+def test_resolve_optimizer_for_bundled_plugin_returns_class_name(monkeypatch) -> None:
     builtin_cls = get_builtin_optimizer_class()
     resolved = resolve_optimizer_plugin(builtin_cls.EngineName)  # type: ignore[attr-defined]
 

@@ -7,7 +7,7 @@ from logger import get_logger
 from urgent_plugins.api import PluginKind
 from urgent_plugins.loader import load_local_plugin
 from urgent_plugins.paths import default_plugins_root
-from urgent_plugins.registry import get_registry, register_builtins
+from urgent_plugins.registry import get_registry
 
 logger = get_logger(__name__)
 
@@ -15,19 +15,19 @@ logger = get_logger(__name__)
 def _resolve_plugin(kind: PluginKind, name: str) -> str:
     """Ensure the requested plugin is loaded and return its normalised name.
 
-    Built-in plugins are registered eagerly through :func:`register_builtins`;
-    non-built-in plugins are loaded from
-    ``<plugins_root>/<kind.directory>/<name>.py`` and validated before any
-    downstream work, so configuration errors surface immediately.
-    The resolved plugin name and the plugins root are exported via environment variables.
+    Plugins are loaded only from the explicit plugin name provided by config:
+    ``<plugins_root>/<kind.directory>/<name>.py``. The resolved plugin name and
+    plugins root are exported via environment variables for workers.
     """
-    register_builtins()
+    if not name or not name.strip():
+        raise ValueError(f"{kind.value} plugin name must be specified in config.")
+
     plugins_root = default_plugins_root()
     env_var = kind.get_env_var()
     os.environ["URGENT_PLUGIN_PATH"] = str(plugins_root)
 
     normalized = name.strip().lower()
-    existing = get_registry().get(kind, normalized) if normalized else None
+    existing = get_registry().get(kind, normalized)
     if existing is not None:
         os.environ[env_var] = existing.name
         return existing.name

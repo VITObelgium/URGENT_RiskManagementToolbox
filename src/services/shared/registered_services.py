@@ -5,7 +5,7 @@ from typing import Any
 
 
 class ServiceType(StrEnum):
-    WellDesignService = "well_design"
+    DomainService = "well_design"
 
 
 type ServiceRequest = list[dict[str, Any]]

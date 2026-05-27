@@ -607,7 +607,7 @@ def test_perforation_range(
         ),
     ],
 )
-def test_well_management_service(
+def test_well_design_service(
     input_data: dict[str, Any],
     expected_output: dict[str, Any],
     expected_exception: type[BaseException] | None,

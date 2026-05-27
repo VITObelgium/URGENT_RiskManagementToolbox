@@ -5,7 +5,7 @@ from services.solution_updater_service import ControlVector
 
 def test_task_builder_creates_tasks_with_control_vector():
     initial_state = {
-        ServiceType.WellDesignService: {
+        ServiceType.DomainService: {
             "W1": {"name": "W1", "md": 100},
         }
     }
@@ -15,6 +15,6 @@ def test_task_builder_creates_tasks_with_control_vector():
     result = task_builder.build(control_vectors)
 
     assert len(result) == 1
-    payload = result[0].tasks[ServiceType.WellDesignService]
+    payload = result[0].tasks[ServiceType.DomainService]
     assert isinstance(payload.control_vector, ControlVector)
     assert payload.request[0]["md"] == 150

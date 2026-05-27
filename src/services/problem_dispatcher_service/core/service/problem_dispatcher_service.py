@@ -49,7 +49,7 @@ class ProblemDispatcherService:
 
             well_items = self._problem_definition.well_design
             self._initial_state: dict[str, Any] = {
-                ServiceType.WellDesignService: build_initial_state_from_well_design(
+                ServiceType.DomainService: build_initial_state_from_well_design(
                     well_items
                 )
             }

@@ -205,7 +205,7 @@ def build_full_key_boundaries_from_well_design(
         flattened = flatten_optimization_parameters(item.parameter_bounds)
         for key, value in flattened.items():
             full_key = join_key(
-                str(ServiceType.WellDesignService),
+                str(ServiceType.DomainService),
                 item.well_name,
                 key,
                 separator=separator,

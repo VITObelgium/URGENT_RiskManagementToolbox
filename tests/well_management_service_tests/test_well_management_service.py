@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from services.well_management_service import WellDesignService
+from plugins.domain_services.builtin import BuiltinDomainService
 from services.well_management_service.core.models import (
     HWellModel,
     IWellModel,
@@ -612,11 +612,12 @@ def test_well_design_service(
     expected_output: dict[str, Any],
     expected_exception: type[BaseException] | None,
 ) -> None:
+    service = BuiltinDomainService()
     if expected_exception:
         with pytest.raises(expected_exception):
-            WellDesignService.process_request(input_data)
+            service.process_request(input_data)
     else:
-        models = WellDesignService.process_request(input_data)
+        models = service.process_request(input_data)
         assert all(isinstance(m, SimulationWellModel) for m in models.wells)
         for m, r in zip(models.wells, expected_output["results"]):
             assert m is not None

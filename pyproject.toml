@@ -204,4 +204,5 @@ lint = { depends-on = ["ruff-fix", "ruff-format-check", "mypy"] }
 
 pytest = { cmd = "pytest ." }
 create-plugin = { cmd = "python -m urgent_plugins.cli", description = "Scaffold a one-file plugin from the live interface. Usage: pixi run create-plugin {connector|optimizer|domain} ClassName" }
+list-plugins = {cmd = ["python", "-c", "from urgent_plugins.utils import list_plugins; list_plugins()"], description = "List all available plugins in the codebase placed in plugins/ (or other directory specified via URGENT_PLUGIN_PATH envvar)."}
 build-proto = { cmd = "python _build_proto.py", cwd = "src/services/simulation_service/core/infrastructure", description = "Generate gRPC protocols and scripts."}

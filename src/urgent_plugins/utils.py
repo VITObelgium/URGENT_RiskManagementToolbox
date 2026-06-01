@@ -12,6 +12,24 @@ from urgent_plugins.registry import get_registry
 logger = get_logger(__name__)
 
 
+def list_plugins() -> None:
+    plugins_root = default_plugins_root()
+    print(f"Plugin root: {plugins_root}\n")
+    for kind in PluginKind:
+        kind_dir = plugins_root / kind.directory
+        files = (
+            sorted(p.stem for p in kind_dir.glob("*.py") if p.stem != "__init__")
+            if kind_dir.is_dir()
+            else []
+        )
+        print(f"{kind.value}:")
+        if files:
+            for name in files:
+                print(f"  {name}")
+        else:
+            print("  (none)")
+
+
 def _resolve_plugin(kind: PluginKind, name: str) -> str:
     """Ensure the requested plugin is loaded and return its normalised name.
 

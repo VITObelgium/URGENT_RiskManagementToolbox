@@ -191,7 +191,7 @@ def flatten_optimization_parameters(
 
 def build_initial_state_from_well_design(items: list[Any]) -> dict[str, Any]:
     """Build the initial state dict from a list of WellDesignItem objects."""
-    return {item.well_name: item.initial_state.model_dump() for item in items}
+    return {item.well_name: item.initial_state for item in items}
 
 
 def build_full_key_boundaries_from_well_design(

@@ -46,8 +46,6 @@ COPY src/utils.py /app/src/utils.py
 COPY src/services/shared/ /app/src/services/shared/
 COPY src/services/solution_updater_service/ /app/src/services/solution_updater_service/
 COPY src/services/problem_dispatcher_service/ /app/src/services/problem_dispatcher_service/
-COPY src/services/well_management_service/ /app/src/services/well_management_service/
-
 
 COPY plugins/ /app/plugins/
 ENV PYTHONPATH=/app/src:/app/plugins

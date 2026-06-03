@@ -3,73 +3,73 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from services.well_management_service.core.models import (
-    SimulationWellModel,
-    WellDesignServiceRequest,
-    WellDesignServiceResponse,
-)
-
-__all__ = [
-    "DomainServiceInterface",
-    "SimulationWellModel",
-    "WellDesignServiceRequest",
-    "WellDesignServiceResponse",
-]
+from pydantic import TypeAdapter
 
 
 class DomainServiceInterface(ABC):
-    """Plugin interface for translating well-design request dicts into simulation inputs.
+    """Plugin interface for translating well-design request dicts into simulation payloads.
 
     The framework owns parameter space construction, PSO, and constraint
-    satisfaction.  The plugin owns domain translation — what wells get built
-    and how their geometry is described.
+    satisfaction. The plugin owns domain translation — what wells get built,
+    how their geometry is described, and what a valid initial well state is.
 
     **What you must implement**
 
-    ``process_request(request_dict) -> WellDesignServiceResponse``
+    1. ``get_well_state_adapter(cls) -> TypeAdapter[Any]``
 
-    **What** ``request_dict`` **contains**
+       Return a ``TypeAdapter`` wrapping your domain's well model type.
+       The framework calls ``.validate_python(data)`` and ``.dump_python(value)``
+       on it to validate and normalise each well's ``initial_state`` dict.
+       Called once at orchestrator startup, before ``ProblemDispatcherService``
+       is constructed. Example::
 
-    A dict shaped as ``{"models": list[dict]}``, where each inner dict is a
-    serialised ``WellModel`` (discriminator key ``"well_type"``: ``"IWell"``,
-    ``"JWell"``, ``"SWell"``, or ``"HWell"``).  Parse with::
+           from pydantic import TypeAdapter
 
-        request = WellDesignServiceRequest(**request_dict)
+           @classmethod
+           def get_well_state_adapter(cls) -> TypeAdapter[Any]:
+               return TypeAdapter(YourWellModel)
 
-    or inspect ``request_dict["models"]`` directly for bypass/stub cases.
+    2. ``process_request(request_dict) -> dict[str, Any]``
 
-    **Bypass / stub implementations**
+       ``request_dict`` is shaped as ``{"models": list[dict]}``.
+       Return a JSON-serialisable dict representing the simulation payload.
+       The framework treats this dict as an opaque JSON blob — it is
+       serialised to gRPC, transmitted to the worker, and written to disk
+       as-is. The shape must be whatever your simulator connector expects.
 
-    Return a minimal but schema-valid ``WellDesignServiceResponse``::
+    **Bypass / stub implementation**
 
-        WellDesignServiceResponse(wells=[
-            SimulationWellModel(name=m["name"], trajectory=((0., 0., 0.),), completion=None)
-            for m in request_dict["models"]
-        ])
+    Return a minimal payload dict::
 
-    The control vector is attached to the simulation case separately by the
-    orchestrator, so geometry can be trivial for benchmark/test plugins.
+        return {
+            "wells": [
+                {"name": m["name"], "trajectory": [[0.0, 0.0, 0.0]], "completion": None}
+                for m in request_dict["models"]
+            ]
+        }
 
-    **What is NOT your API**
-
-    - ``services.well_management_service.core._well_templates`` — private geometry
-      kernel; user plugins must not import from it.
-    - ``WellBuilder``, section classes, ``Trajectory`` — internal geometry math.
-
-    All public types needed by a domain plugin are re-exported from this module:
-    ``WellDesignServiceRequest``, ``WellDesignServiceResponse``,
-    ``SimulationWellModel``.
+    The control vector is attached separately by the orchestrator.
     """
 
     ServiceName: str
 
+    @classmethod
     @abstractmethod
-    def process_request(
-        self, request_dict: dict[str, Any]
-    ) -> WellDesignServiceResponse:
-        """Convert a well-design request to a simulation-ready response.
+    def get_well_state_adapter(cls) -> TypeAdapter[Any]:
+        """Return a TypeAdapter for validating and normalising a well's initial_state dict.
 
-        Called once per optimisation candidate with a request dict shaped as
-        ``{"models": [...]}``.
+        Called once at orchestrator startup after the plugin is loaded and
+        before ``ProblemDispatcherService`` is constructed. The returned adapter
+        must accept dicts with at least a ``"name"`` key.
+        """
+        ...
+
+    @abstractmethod
+    def process_request(self, request_dict: dict[str, Any]) -> dict[str, Any]:
+        """Convert a well-design request dict to an opaque simulation payload dict.
+
+        Called once per optimisation candidate. The returned dict is serialised
+        to JSON and sent to the simulator worker verbatim — its structure is
+        entirely plugin-defined.
         """
         ...

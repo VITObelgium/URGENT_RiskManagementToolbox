@@ -173,49 +173,45 @@ The scaffolder generates a one-file plugin template derived from the live interf
 A connector plugin handles launching the simulator subprocess and capturing its results.
 
 ```shell
-pixi run create-plugin simulation MySimulator
+pixi run create-plugin connector MySimulator
 ```
 
-This creates `plugins/connectors/mysimulator.py`:
+This creates `plugins/connectors/my_simulator.py`:
 
 ```python
-# plugins/connectors/mysimulator.py
+# plugins/connectors/my_simulator.py
+"""Auto-generated connector plugin stub for MySimulator. Implement the abstract methods below."""
 from __future__ import annotations
-
-import threading
-
-from services.simulation_service.core.connectors.common import (
-    ConnectorInterface,
-    JsonPath,
-    SimulationResults,
-    SimulationStatus,
-)
+from pathlib import Path
+from services.simulation_service.core.connectors.common import JsonPath, SimulationResults
+from services.simulation_service.core.connectors.runner import SubprocessConnectorInterface
 from urgent_plugins import ConnectorPlugin
 
+class MySimulator(SubprocessConnectorInterface):
+    ConnectorName: str = 'my_simulator'
 
-class MySimulatorConnector(ConnectorInterface):
-    ConnectorName = "mysimulator"
+    @classmethod
+    def build_command(cls, config_path: JsonPath) -> list[str]:
+        """Build the subprocess command for this simulator."""
+        raise NotImplementedError()
 
-    @staticmethod
-    def run(
-        config_path: JsonPath,
-        user_cost_function_with_default_values: SimulationResults,
-        stop: threading.Event | None = None,
-    ) -> tuple[SimulationStatus, SimulationResults]:
-        raise NotImplementedError
+    @classmethod
+    def parse_results(cls, work_dir: Path | None, stdout: str) -> SimulationResults:
+        """Parse simulation results from the workspace.
 
+        Use ``stdout`` for simulators that broadcast results via stdout.
+        Use ``work_dir`` to read output files for file-based simulators (e.g. Eclipse).
+        """
+        raise NotImplementedError()
 
-plugin = ConnectorPlugin(
-    name=MySimulatorConnector.ConnectorName,
-    implementation=MySimulatorConnector,
-)
+plugin = ConnectorPlugin(name=MySimulator.ConnectorName, implementation=MySimulator)
 ```
 
-Implement `run(...)`, then select the connector in your config:
+Implement `build_command(...)` and `parse_results(...)`, then select the connector in your config:
 
 ```json
 "plugins": {
-  "connector": "mysimulator",
+  "connector": "my_simulator",
   "optimizer": "pso",
   "domain_service": "builtin"
 }
@@ -230,32 +226,53 @@ The plugin file is automatically staged into each worker's runtime directory —
 An optimizer plugin drives the search strategy over the parameter space.
 
 ```shell
-pixi run create-plugin algorithm GeneticAlgorithm
+pixi run create-plugin optimizer GeneticAlgorithm
 ```
 
-This creates `plugins/optimizers/geneticalgorithm.py`:
+This creates `plugins/optimizers/genetic_algorithm.py`:
 
 ```python
-# plugins/optimizers/geneticalgorithm.py
+# plugins/optimizers/genetic_algorithm.py
+"""Auto-generated optimizer plugin stub for GeneticAlgorithm. Implement the abstract methods below."""
 from __future__ import annotations
-
-from services.solution_updater_service.core.engines.common import (
-    OptimizationEngineInterface,
-)
+from typing import Any
+import numpy as np
+import numpy.typing as npt
+from common import OptimizationStrategy
+from services.solution_updater_service.core.engines.common import OptimizationEngineInterface
 from urgent_plugins import OptimizerPlugin
 
+class GeneticAlgorithm(OptimizationEngineInterface):
+    EngineName: str = 'genetic_algorithm'
 
-class GeneticAlgorithmEngine(OptimizationEngineInterface):
-    EngineName = "geneticalgorithm"
+    def update_solution_to_next_iter(
+        self,
+        parameters: npt.NDArray[np.float64],
+        results: npt.NDArray[np.float64],
+        lb: npt.NDArray[np.float64],
+        ub: npt.NDArray[np.float64],
+        indexed_objectives_strategy: dict[int, OptimizationStrategy],
+        A: npt.NDArray[np.float64] | None = None,
+        b: npt.NDArray[np.float64] | None = None,
+        iteration_ratio: float | None = None,
+    ) -> npt.NDArray[np.float64]:
+        raise NotImplementedError()
 
-    # implement all abstract methods from OptimizationEngineInterface
-    ...
+    @property
+    def global_best_result(self) -> float | npt.NDArray[np.float64]:
+        raise NotImplementedError()
 
+    @property
+    def global_best_control_vector(self) -> npt.NDArray[np.float64]:
+        raise NotImplementedError()
 
-plugin = OptimizerPlugin(
-    name=GeneticAlgorithmEngine.EngineName,
-    implementation=GeneticAlgorithmEngine,
-)
+    def get_checkpoint_state(self) -> dict[str, Any]:
+        raise NotImplementedError()
+
+    def restore_checkpoint_state(self, state: dict[str, Any]) -> None:
+        raise NotImplementedError()
+
+plugin = OptimizerPlugin(name=GeneticAlgorithm.EngineName, implementation=GeneticAlgorithm)
 ```
 
 Select it in config:
@@ -263,7 +280,7 @@ Select it in config:
 ```json
 "plugins": {
   "connector": "opendarts",
-  "optimizer": "geneticalgorithm",
+  "optimizer": "genetic_algorithm",
   "domain_service": "builtin"
 }
 ```
@@ -272,47 +289,90 @@ Select it in config:
 
 ##### Domain Service plugin
 
-A domain service plugin converts candidate well models into simulation geometry. It runs entirely in the orchestrator — never in simulation workers. The framework handles initial state construction, PSO boundary extraction, and task packaging; the plugin is responsible only for the geometry conversion step.
+A domain service plugin converts the well design request into a simulation payload. It runs entirely in the orchestrator — never in simulation workers. The framework handles parameter space construction, PSO boundary extraction, and task packaging; the plugin owns geometry, well model validation, and what the simulator payload looks like.
+
+Two things must be implemented:
+
+| Method | Called when | Purpose |
+|--------|-------------|---------|
+| `get_well_state_adapter` | startup, once | Returns a `TypeAdapter` the framework uses to validate each well's `initial_state` dict before optimization begins |
+| `process_request` | every candidate | Converts the well request dict into the simulation payload dict that the connector receives |
 
 ```shell
 pixi run create-plugin domain CompanyDomainService
 ```
 
-This creates `plugins/domain_services/companydomainservice.py`:
+This creates `plugins/domain_services/company_domain_service.py`:
 
 ```python
-# plugins/domain_services/companydomainservice.py
+# plugins/domain_services/company_domain_service.py
+"""Auto-generated domain_service plugin stub for CompanyDomainService. Implement the abstract methods below."""
 from __future__ import annotations
-
 from typing import Any
-
+from pydantic import TypeAdapter
 from services.problem_dispatcher_service.core.service.interface import DomainServiceInterface
-from services.well_management_service.core.models import WellDesignServiceResponse
 from urgent_plugins import DomainServicePlugin
 
-
 class CompanyDomainService(DomainServiceInterface):
-    ServiceName: str = "companydomainservice"
+    ServiceName: str = 'company_domain_service'
 
-    def process_request(self, request_dict: dict[str, Any]) -> WellDesignServiceResponse:
-        raise NotImplementedError
+    @classmethod
+    def get_well_state_adapter(cls) -> TypeAdapter[Any]:
+        """Return a TypeAdapter for validating and normalising a well's initial_state dict.
 
+        Called once at orchestrator startup after the plugin is loaded and
+        before ``ProblemDispatcherService`` is constructed. The returned adapter
+        must accept dicts with at least a ``"name"`` key.
+        """
+        raise NotImplementedError()
 
-plugin = DomainServicePlugin(
-    name=CompanyDomainService.ServiceName,
-    implementation=CompanyDomainService,
-)
+    def process_request(self, request_dict: dict[str, Any]) -> dict[str, Any]:
+        """Convert a well-design request dict to an opaque simulation payload dict.
+
+        Called once per optimisation candidate. The returned dict is serialised
+        to JSON and sent to the simulator worker verbatim — its structure is
+        entirely plugin-defined.
+        """
+        raise NotImplementedError()
+
+plugin = DomainServicePlugin(name=CompanyDomainService.ServiceName, implementation=CompanyDomainService)
 ```
 
-`process_request` receives a request dictionary shaped like `{"models": [...]}` and must return a `WellDesignServiceResponse`. It can wrap an external geometry engine, an HTTP service, or any domain-specific well-building logic.
+`process_request` receives `{"models": [<well_dict>, ...]}` and must return a JSON-serialisable `dict`. The framework treats the returned dict as an opaque blob — it is serialised to gRPC, forwarded to the worker, and written to disk as the simulation input file. Its shape must match whatever your connector expects to read.
 
-Select it in config:
+**Minimal stub** (bypasses geometry, useful for testing connectors):
+
+```python
+def process_request(self, request_dict: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "wells": [
+            {"name": m["name"], "trajectory": [[0.0, 0.0, 0.0]], "completion": None}
+            for m in request_dict["models"]
+        ]
+    }
+```
+
+`get_well_state_adapter` must return a `TypeAdapter` wrapping your well model type. The builtin plugin uses a Pydantic discriminated union over `IWellModel | JWellModel | SWellModel | HWellModel`; a custom plugin can use any Pydantic model:
+
+```python
+from pydantic import BaseModel, TypeAdapter
+
+class MyWellModel(BaseModel):
+    name: str
+    depth: float
+
+@classmethod
+def get_well_state_adapter(cls) -> TypeAdapter[Any]:
+    return TypeAdapter(MyWellModel)
+```
+
+Select the plugin in config:
 
 ```json
 "plugins": {
   "connector": "opendarts",
   "optimizer": "pso",
-  "domain_service": "companydomainservice"
+  "domain_service": "company_domain_service"
 }
 ```
 
@@ -536,14 +596,16 @@ With `checkpoint_interval: 5`, a checkpoint is saved after generations 5, 10, 15
 
 ## Implemented services
 
-| Service name  | Description                                                            |
-|---------------|------------------------------------------------------------------------|
-| `well_design` | Service responsible for well(s) placement, trajectory and completion.  |
+| Service name  | Plugin kind      | Description                                                            |
+|---------------|------------------|------------------------------------------------------------------------|
+| `well_design` | `domain_service` | Well placement, trajectory and completion geometry (builtin plugin: IWell / JWell / SWell / HWell). Custom plugins may replace this entirely. |
 
 
 
 
 ### Well design service
+
+> **Note:** The `well_design` schema below describes the `initial_state` format expected by the **builtin domain service plugin** (`"domain_service": "builtin"`). A custom domain service plugin may define its own `initial_state` shape — whatever its `get_well_state_adapter` accepts.
 
 `well_design` expecting is an array of objects (service items):
 

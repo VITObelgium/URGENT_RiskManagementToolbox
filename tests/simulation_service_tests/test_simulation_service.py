@@ -139,7 +139,7 @@ def test__perform_simulations_on_cluster_grpc_error(
 )
 def test__to_grpc(mock_json_to_str, mock_control_vec, mock_input, mock_sim):
     case = MagicMock()
-    case.wells.model_dump_json.return_value = "{}"
+    case.wells = {}  # dict — json_to_str is mocked to return "{}"
     case.control_vector = {}
     SimulationService._to_grpc(case)
     mock_input.assert_called_once_with(payload="{}")

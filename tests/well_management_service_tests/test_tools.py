@@ -3,10 +3,7 @@ from typing import MutableMapping
 import numpy as np
 import pytest
 
-from services.well_management_service.core.models import PerforationRange
-from services.well_management_service.core.sections.perforation_md_provider import (
-    PerforationMdProvider,
-)
+from plugins.domain_services.builtin import PerforationMdProvider, PerforationRange
 
 
 @pytest.mark.parametrize(

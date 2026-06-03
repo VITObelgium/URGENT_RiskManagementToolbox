@@ -16,7 +16,6 @@ from services.simulation_service.core.models import (
 )
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
 from services.simulation_service.core.utils.converters import json_to_str, str_to_json
-from services.well_management_service.core.models import WellDesignServiceResponse
 
 logger = get_logger(__name__)
 
@@ -207,7 +206,7 @@ class SimulationService:
             sm.Simulation: The gRPC-compatible simulation object.
         """
         return sm.Simulation(
-            input=sm.SimulationInput(payload=case.wells.model_dump_json()),
+            input=sm.SimulationInput(payload=json_to_str(case.wells)),
             result=sm.SimulationResult(result=json_to_str(case.results)),
             control_vector=sm.SimulationControlVector(
                 content=json_to_str(case.control_vector)
@@ -226,7 +225,7 @@ class SimulationService:
             SimulationCase: The simulation case object.
         """
         return SimulationCase(
-            wells=WellDesignServiceResponse(**str_to_json(simulation.input.payload)),
+            wells=str_to_json(simulation.input.payload),
             results=str_to_json(simulation.result.result),
             control_vector=str_to_json(simulation.control_vector.content),
         )

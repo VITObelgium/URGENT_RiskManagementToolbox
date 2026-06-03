@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, ClassVar, Protocol
 from collections.abc import Callable
+import logging
 
 from logger import get_logger, stream_reader
 
@@ -23,6 +24,7 @@ from services.simulation_service.core.connectors.conn_utils import (
 )
 
 logger = get_logger("threading-worker", filename=__name__)
+module_logger = logging.getLogger(__name__)
 
 _LOG_TAIL_LINES = 100
 _GRACEFUL_TERMINATE_TIMEOUT = 5
@@ -348,7 +350,10 @@ def _terminate_process(process: subprocess.Popen, graceful: bool = True) -> None
     except subprocess.TimeoutExpired:
         logger.warning("Subprocess did not terminate gracefully. Killing.")
         process.kill()
-        process.wait()
+        try:
+            process.wait()
+        except subprocess.TimeoutExpired:
+            logger.warning("Subprocess did not exit after kill.")
 
 
 def _join_output_threads(manager: ManagedSubprocess) -> None:
@@ -362,16 +367,19 @@ def _log_process_failure(returncode: int, manager: ManagedSubprocess) -> None:
     stderr_tail = _tail(manager.stderr_lines)
 
     if returncode == -9:
-        logger.error(
+        message = (
             "Simulation subprocess was killed (rc=-9). This is often due to OOM kill. "
             f"Consider lowering worker_count or reducing model size.\n"
             f"Stdout tail:\n{stdout_tail}\nStderr tail:\n{stderr_tail}"
         )
     else:
-        logger.error(
+        message = (
             f"Simulation subprocess failed rc={returncode}.\n"
             f"Stdout tail:\n{stdout_tail}\nStderr tail:\n{stderr_tail}"
         )
+    logger.error(message)
+    if not logger.propagate:
+        module_logger.error(message)
 
 
 def _merge_results(

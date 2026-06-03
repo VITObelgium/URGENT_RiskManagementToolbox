@@ -3,13 +3,16 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from plugins.domain_services.builtin import BuiltinDomainService
-from services.well_management_service.core.models import (
+from plugins.domain_services.builtin import (
+    BuiltinDomainService,
+    SimulationWellModel,
+    WellDesignServiceResponse,
+)
+from plugins.domain_services.builtin import (
     HWellModel,
     IWellModel,
     JWellModel,
     PerforationRangeModel,
-    SimulationWellModel,
     SWellModel,
 )
 from tests.well_management_service_tests.tools import (
@@ -617,9 +620,11 @@ def test_well_design_service(
         with pytest.raises(expected_exception):
             service.process_request(input_data)
     else:
-        models = service.process_request(input_data)
-        assert all(isinstance(m, SimulationWellModel) for m in models.wells)
-        for m, r in zip(models.wells, expected_output["results"]):
+        payload = service.process_request(input_data)
+        # process_request returns a plain dict; re-wrap for attribute-level assertions.
+        response = WellDesignServiceResponse(**payload)
+        assert all(isinstance(m, SimulationWellModel) for m in response.wells)
+        for m, r in zip(response.wells, expected_output["results"]):
             assert m is not None
             assert m.name == r["name"]
             assert is_subsequence_tuple_of_float(

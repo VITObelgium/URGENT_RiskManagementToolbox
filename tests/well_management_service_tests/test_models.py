@@ -5,13 +5,13 @@ import numpy as np
 import pytest
 from _pytest.fixtures import FixtureRequest
 
-from services.well_management_service.core.models import (
+from plugins.domain_services.builtin import (
+    POINT_ATOL,
     PerforationRange,
     Point,
     Trajectory,
     TrajectoryPoint,
 )
-from services.well_management_service.core.utilities.constants import POINT_ATOL
 
 
 @pytest.fixture

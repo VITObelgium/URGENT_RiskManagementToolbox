@@ -3,14 +3,12 @@ from typing import MutableMapping
 import numpy as np
 import pytest
 
-from services.well_management_service.core.models import (
+from plugins.domain_services.builtin import (
+    CurvedWellSection,
+    LinearWellSection,
     PerforationRange,
     Trajectory,
     TrajectoryPoint,
-)
-from services.well_management_service.core.sections import (
-    CurvedWellSection,
-    LinearWellSection,
 )
 from tests.well_management_service_tests.tools import (
     is_subsequence_points,

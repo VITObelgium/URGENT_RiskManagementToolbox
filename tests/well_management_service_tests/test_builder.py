@@ -4,19 +4,15 @@ from typing import MutableMapping
 import numpy as np
 import pytest
 
-from services.well_management_service.core.models import (
+from plugins.domain_services.builtin import (
+    CurvedWellSection,
+    EmptySectionConfigurationException,
+    LinearWellSection,
     PerforationRange,
     Point,
-    TrajectoryPoint,
-)
-from services.well_management_service.core.sections import (
-    CurvedWellSection,
-    LinearWellSection,
     SectionInterface,
-)
-from services.well_management_service.core.service import WellBuilder
-from services.well_management_service.utils._exceptions import (
-    EmptySectionConfigurationException,
+    TrajectoryPoint,
+    WellBuilder,
 )
 from tests.well_management_service_tests.tools import (
     is_subsequence_points,

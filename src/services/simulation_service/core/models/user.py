@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Any
 
-from services.well_management_service import WellDesignServiceResponse
+from pydantic import BaseModel
 
 
 class SimulationCase(BaseModel, extra="forbid"):
-    wells: WellDesignServiceResponse
+    wells: dict[str, Any]
     control_vector: dict[str, float]
     results: dict[str, float]
 

@@ -26,7 +26,6 @@ from services.shared import (
     ServiceType,
 )
 from services.solution_updater_service import ControlVector
-from services.well_management_service import WellModel
 
 logger = get_logger(__name__)
 
@@ -40,7 +39,7 @@ type ParameterBoundaries = dict[
 
 class WellDesignItem(BaseModel, extra="forbid"):
     well_name: str
-    initial_state: WellModel
+    initial_state: dict[str, Any]
     parameter_bounds: ParameterBoundaries | None = Field(default=None)
 
     @model_validator(mode="before")

@@ -592,33 +592,25 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
 
 
 def test_hwell_validation_failure_invalid_geometry():
-    # HWell with invalid dimensions (TVD too small for curvature)
-    # _CURVATURE_RADIUS approx 430m for default params
-    well_config = {
-        "well_name": "H1_Invalid",
-        "initial_state": {
-            "well_type": "HWell",
-            "wellhead": {"x": 0, "y": 0, "z": 0},
-            "TVD": 100.0,  # Too shallow
-            "md_lateral": 1500.0,
-            "azimuth": 45.0,
-            "md_step": 10.0,
-            "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-        },
-        "parameter_bounds": {"TVD": {"lb": 50, "ub": 150}},
-    }
-    problem_definition = {
-        "well_design": [well_config],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+    # HWell geometry validation now fires in phase-2 via the plugin's TypeAdapter,
+    # not at ProblemDispatcherDefinition construction time.
+    from plugins.domain_services.builtin import BuiltinDomainService  # noqa: PLC0415
+
+    adapter = BuiltinDomainService.get_well_state_adapter()
+    invalid_state = {
+        "well_type": "HWell",
+        "name": "H1_Invalid",
+        "wellhead": {"x": 0, "y": 0, "z": 0},
+        "TVD": 100.0,  # Too shallow — _CURVATURE_RADIUS ~430m for default params
+        "md_lateral": 1500.0,
+        "azimuth": 45.0,
+        "md_step": 10.0,
+        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
     }
 
     with pytest.raises(ValidationError) as excinfo:
-        problem_definition = ProblemDispatcherDefinition.model_validate(
-            problem_definition
-        )
-        ProblemDispatcherService(problem_definition=problem_definition)
+        adapter.validate_python(invalid_state)
 
-    # The ValueError from HWellModel is wrapped in Pydantic's ValidationError
     assert (
         "Horizontal well true total depth is less than curved well section radius"
         in str(excinfo.value)

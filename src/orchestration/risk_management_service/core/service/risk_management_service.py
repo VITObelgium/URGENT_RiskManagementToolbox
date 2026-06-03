@@ -6,6 +6,7 @@ import grpc
 import numpy as np
 import numpy.typing as npt
 from common.models import RunMode
+from pydantic import ValidationError
 from logger import get_logger
 from orchestration.risk_management_service.core.service.checkpoint import (
     checkpoint_filename,
@@ -81,6 +82,12 @@ def run_risk_management(
         connector_name,
         optimizer_name,
         domain_service_name,
+    )
+
+    # validate and normalise each well's initial_state against
+    # the plugin's schema. Runs after plugin load, before ProblemDispatcherService
+    _validate_well_initial_states(
+        problem_definition, domain_service_plugin, domain_service_name
     )
     os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.worker_simulation_timeout_seconds
@@ -306,7 +313,7 @@ def _prepare_simulation_cases(
 
         for task in solution.tasks.values():
             result = domain_service.process_request({"models": task.request})
-            sim_case["wells"] = result.model_dump()
+            sim_case["wells"] = result
             control_vector.update(task.control_vector.items)
             logger.debug(
                 "Built %d domain item(s) for candidate #%d.",
@@ -320,6 +327,29 @@ def _prepare_simulation_cases(
 
     logger.debug("All %d simulation cases prepared.", len(sim_cases))
     return sim_cases
+
+
+def _validate_well_initial_states(
+    problem_definition: ProblemDispatcherDefinition,
+    domain_service_plugin: Any,
+    plugin_name: str,
+) -> None:
+    """Phase-2 validation: run each well's initial_state dict through the plugin's adapter.
+
+    Normalises the dict in-place (validated → dump_python) so downstream code sees
+    a canonical representation. Raises ValueError with well name and plugin context
+    on the first failure.
+    """
+    adapter = domain_service_plugin.implementation.get_well_state_adapter()
+    for item in problem_definition.well_design:
+        try:
+            validated = adapter.validate_python(item.initial_state)
+            item.initial_state = adapter.dump_python(validated)
+        except ValidationError as exc:
+            raise ValueError(
+                f"Well '{item.well_name}': invalid initial_state for plugin "
+                f"'{plugin_name}':\n{exc}"
+            ) from exc
 
 
 def _save_checkpoint(

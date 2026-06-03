@@ -80,7 +80,7 @@ def run_darts(well_data) -> None:
     )
 
     friction_method = m.friction_estimation_method
-    use_fem = friction_method == "fem" # 'fem' or 'analytical' 
+    use_fem = friction_method == "analytical" # 'fem' or 'analytical' 
     print(f"Friction estimation method: {friction_method}")
 
     # Simulation time
@@ -132,7 +132,7 @@ def run_darts(well_data) -> None:
         )
         print("FEM geomechanics initialization completed.")
 
-    mu_crit = 0.6  # critical friction coefficient for fault reactivation
+    mu_crit = 0.35  # critical friction coefficient for fault reactivation
     flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
     t_cum = 0.0  # cumulative time tracker for reporting
 

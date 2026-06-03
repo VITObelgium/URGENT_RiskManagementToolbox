@@ -331,8 +331,8 @@ class ProductionModel(DartsModel):
             Sh = Sh - P0_faults
         normal = func.normals(dff)  # could be out
         p_sigma = func.principal_stress_tensor(
-            SV, SH, Sh
-        )  # could be out Size number of faults elements
+            SV, Sh, SH
+        )  # keep SH/Sh ordering consistent with FEM path
         # Effective stress update: S' = S0 - dP*I + dS_T
         p_faults = dff["dP"].values
         pressure = func.principal_stress_tensor(
@@ -357,11 +357,15 @@ class ProductionModel(DartsModel):
         Sn_f = np.einsum("ij,ij->i", Tv, normal)
         Tv_mag = np.einsum("ij,ij->i", Tv, Tv)
         Tau_f = np.sqrt(Tv_mag - (np.einsum("ij,ij->i", Tv, normal)) ** 2)
-        mu_vec = Tau_f / Sn_f  # value for reporting reactivation criteria
+        Sn_mag = np.maximum(1e-12, np.abs(Sn_f))
+        mu_vec = Tau_f / Sn_mag  # value for reporting reactivation criteria
 
-        # Return updated principal stresses in the model basis [SV', SH', Sh'] [bar].
-        # With current dS_T construction, SV' = SV0 - dP (no thermal term on SV).
-        principal_stresses = np.diagonal(effective_p_sigma, axis1=1, axis2=2) / 1e5
+        # Return updated stresses in legacy output order [SV', SH', Sh'] [bar]
+        # expected by main.py, while internal tensor assembly uses [SV, Sh, SH].
+        principal_diag = np.diagonal(effective_p_sigma, axis1=1, axis2=2) / 1e5
+        principal_stresses = np.column_stack(
+            (principal_diag[:, 0], principal_diag[:, 2], principal_diag[:, 1])
+        )
 
         eigvals = np.linalg.eigvalsh(effective_stress)
         principal_sorted = eigvals[:, ::-1] / 1e5  # [max, mid, min] in bar for mu_tangent

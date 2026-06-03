@@ -469,6 +469,7 @@ checkpoints/
 # slurm output and error files
 *.out
 *.err
+*.slurm
 
 # apptainer files
 rmt.sif

@@ -466,6 +466,9 @@ pyrightconfig.json
 #checkpoint path
 checkpoints/
 
+# case zip files
+*.zip
+
 # slurm output and error files
 *.out
 *.err

@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from unittest import case
 
 import grpc
 
@@ -193,13 +194,26 @@ class SimulationService:
         Returns:
             sm.Simulation: The gRPC-compatible simulation object.
         """
+
+        wells_payload = case.wells.model_dump()
+        wells_payload["use_fem"] = case.use_fem
+        wells_payload["rebuild_fem_cache"] = case.rebuild_fem_cache
+
         return sm.Simulation(
-            input=sm.SimulationInput(wells=case.wells.model_dump_json()),
+            input=sm.SimulationInput(wells=json_to_str(wells_payload)),
             result=sm.SimulationResult(result=json_to_str(case.results)),
             control_vector=sm.SimulationControlVector(
                 content=json_to_str(case.control_vector)
             ),
         )
+
+        # return sm.Simulation(
+        #     input=sm.SimulationInput(wells=case.wells.model_dump_json()),
+        #     result=sm.SimulationResult(result=json_to_str(case.results)),
+        #     control_vector=sm.SimulationControlVector(
+        #         content=json_to_str(case.control_vector)
+        #     ),
+        #)
 
     @staticmethod
     def _from_grpc(simulation: sm.Simulation) -> SimulationCase:
@@ -212,8 +226,17 @@ class SimulationService:
         Returns:
             SimulationCase: The simulation case object.
         """
+        # return SimulationCase(
+        #     wells=WellDesignServiceResponse(**str_to_json(simulation.input.wells)),
+        #     results=str_to_json(simulation.result.result),
+        #     control_vector=str_to_json(simulation.control_vector.content),
+        # )
+        wells_payload = str_to_json(simulation.input.wells)
+
         return SimulationCase(
-            wells=WellDesignServiceResponse(**str_to_json(simulation.input.wells)),
+            wells=WellDesignServiceResponse(wells=wells_payload["wells"]),
             results=str_to_json(simulation.result.result),
             control_vector=str_to_json(simulation.control_vector.content),
+            use_fem=wells_payload.get("use_fem", False),
+            rebuild_fem_cache=wells_payload.get("rebuild_fem_cache", False),
         )

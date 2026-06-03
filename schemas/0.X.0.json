@@ -551,6 +551,16 @@
           "format": "directory-path",
           "title": "Checkpoint Path",
           "type": "string"
+        },
+        "use_fem": {
+          "default": false,
+          "title": "Use Fem",
+          "type": "boolean"
+        },
+        "rebuild_fem_cache": {
+          "default": false,
+          "title": "Rebuild Fem Cache",
+          "type": "boolean"
         }
       },
       "title": "SimulationConfig",

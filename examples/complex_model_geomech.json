@@ -74,6 +74,8 @@
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 3600,
-    "worker_count": 1
+    "worker_count": 1,
+    "use_fem": true,
+    "rebuild_fem_cache": false
   }
 }

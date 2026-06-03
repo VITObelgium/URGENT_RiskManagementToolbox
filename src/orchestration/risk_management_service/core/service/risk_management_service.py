@@ -100,7 +100,7 @@ def run_risk_management(
                     dispatcher.expected_optimization_function_names
                 )
                 sim_cases = _prepare_simulation_cases(
-                    solutions, expected_cost_function_names
+                    solutions, expected_cost_function_names, problem_definition.simulation_config,
                 )
                 logger.info(
                     "Submitting evaluation simulation case to SimulationService."
@@ -156,7 +156,7 @@ def run_risk_management(
                 logger.debug(f"Generated solutions: {solutions}")
 
                 sim_cases = _prepare_simulation_cases(
-                    solutions, dispatcher.expected_optimization_function_names
+                    solutions, dispatcher.expected_optimization_function_names, problem_definition.simulation_config,
                 )
                 logger.debug(f"Prepared simulation cases: {sim_cases}")
 
@@ -269,6 +269,7 @@ def run_risk_management(
 def _prepare_simulation_cases(
     solutions: ProblemDispatcherServiceResponse,
     expected_cost_function_names: list[str],
+    simulation_config,
 ) -> list[dict[str, Any]]:
     """
     Prepare simulation cases from generated candidates.
@@ -304,6 +305,8 @@ def _prepare_simulation_cases(
 
         sim_case["control_vector"] = control_vector
         sim_case["results"] = {k: float("nan") for k in expected_cost_function_names}
+        sim_case["use_fem"] = simulation_config.use_fem
+        sim_case["rebuild_fem_cache"] = simulation_config.rebuild_fem_cache
         sim_cases.append(sim_case)
         logger.debug(f"Simulation case #{index + 1} prepared: {sim_case}")
 

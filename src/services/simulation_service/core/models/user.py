@@ -9,6 +9,8 @@ class SimulationCase(BaseModel, extra="forbid"):
     wells: WellDesignServiceResponse
     control_vector: dict[str, float]
     results: dict[str, float]
+    use_fem: bool = False
+    rebuild_fem_cache: bool = False
 
 
 class SimulationServiceRequest(BaseModel, extra="forbid"):

@@ -42,6 +42,11 @@ def run_darts(well_data) -> None:
     cores_per_worker = int(os.environ.get("DARTS_CORES_PER_WORKER", "1"))
     set_num_threads(cores_per_worker)
 
+    # boolean parameter read in from json config to control FEM geomechanics usage and cache rebuilding
+    # simulation_config = well_data.get("simulation_config", {})
+    use_fem = bool(well_data.get("use_fem", False))
+    rebuild_fem_cache = bool(well_data.get("rebuild_fem_cache", False))
+
     # output file location
     out_root = os.path.join(os.getcwd(), "output_PROD")
     vtk_dir = os.path.join(out_root, "vtk_PROD")
@@ -79,9 +84,9 @@ def run_darts(well_data) -> None:
     m.init(
         verbose=True,
     )
-
-    friction_method = m.friction_estimation_method
-    use_fem = friction_method == "analytical" # 'fem' or 'analytical' 
+    # set friction estimation method based on use_fem flag for model_PROD.py compute_mu method choice
+    friction_method = "fem" if use_fem else "analytical"
+    m.friction_estimation_method = friction_method
     print(f"Friction estimation method: {friction_method}")
 
     # Simulation time
@@ -106,44 +111,56 @@ def run_darts(well_data) -> None:
     fault_stress_df = func.stress_fault_df(
         fault_df, depth_reservoir, initcond_df, stress_df=stress_df
     )
+    idx = fault_stress_df["ID"].to_numpy(dtype=int)
 
     # Extract initial principal stresses for VTK output (only once)
     SV_init = fault_stress_df["SV"].values / 1e5  # Convert Pa to bar
     SH_init = fault_stress_df["SH"].values / 1e5
     Sh_init = fault_stress_df["Sh"].values / 1e5
 
-    # Initialize fem geomechanics
-    #print_mem('In geomechanics init')
-    print("Initializing FEM geomechanics module...")
+    # # Initialize fem geomechanics
+    # #print_mem('In geomechanics init')
+    # print("Initializing FEM geomechanics module...")
+    # cache_dir = os.environ.get( "FEM_CACHE_DIR",
+    #                             "/home/kurgyisk/projects/URGENT_RiskManagementToolbox/log/fem_cache",)
     # m.init_fem_geomech(
     #     fault_df=fault_stress_df,
-    #     P0=initcond_df['P'].values,
-    #     T0=initcond_df['T'].values,
+    #     P0=initcond_df["P"].values,
+    #     T0=initcond_df["T"].values,
     #     E=9e9,
     #     nu=0.25,
     #     alpha_b=1.0,
     #     alpha_T=1e-5,
     #     rho=1300.0,
     #     solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
-    # )
-    cache_dir = os.environ.get(
-    "FEM_CACHE_DIR",
-    "/home/kurgyisk/projects/URGENT_RiskManagementToolbox/log/fem_cache",
-)
-    m.init_fem_geomech(
-        fault_df=fault_stress_df,
-        P0=initcond_df["P"].values,
-        T0=initcond_df["T"].values,
-        E=9e9,
-        nu=0.25,
-        alpha_b=1.0,
-        alpha_T=1e-5,
-        rho=1300.0,
-        solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
-        cache_dir = cache_dir, 
-        rebuild_cache=False,  # Set to True to rebuild cache, False to use existing cache if available
-        )
-    print("FEM geomechanics initialization completed.")
+    #     cache_dir = cache_dir, 
+    #     rebuild_cache=False,  # Set to True to rebuild cache, False to use existing cache if available
+    #     )
+    # print("FEM geomechanics initialization completed.")
+
+    if use_fem:
+        print("Initializing FEM geomechanics module...")
+
+        cache_dir = os.environ.get( "FEM_CACHE_DIR",
+                                    "/home/kurgyisk/projects/URGENT_RiskManagementToolbox/log/fem_cache",)
+
+        m.init_fem_geomech(
+            fault_df=fault_stress_df,
+            P0=initcond_df["P"].values,
+            T0=initcond_df["T"].values,
+            E=9e9,
+            nu=0.25,
+            alpha_b=1.0,
+            alpha_T=1e-5,
+            rho=1300.0,
+            solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
+            cache_dir=cache_dir,
+            rebuild_cache=rebuild_fem_cache,  )
+        print("FEM geomechanics initialization completed.")
+    else:
+        print("Using semi-analytical geomechanics; FEM initialization skipped.")
+
+
     print("Setting up initial VTK... ")
     m.initialize_vtk_data(P=initcond_df['P'].values, T=initcond_df['T'].values, F=fault_df['ID'].values)  # update cell_data for vtk output with initial conditions
     # Store initial stresses to VTK (these don't change during simulation)
@@ -189,7 +206,7 @@ def run_darts(well_data) -> None:
         P = np.array(m.physics.engine.X[0::2], copy=False)  # pressure in bar
         H = np.array(m.physics.engine.X[1::2], copy=False)  # enthalpy in kJ/kmol
         T = _Backward1_T_Ph_vec(P / 10, H / 18.015)  # temperature in K
-        # solution_df = pd.DataFrame({"P": P, "H": H, "T": T})
+        solution_df = pd.DataFrame({"P": P, "H": H, "T": T})
         # solution_df.to_csv(
         #     os.path.join(out_root, f"solution_PROD_{i + 1}.csv"), sep=","
         # )

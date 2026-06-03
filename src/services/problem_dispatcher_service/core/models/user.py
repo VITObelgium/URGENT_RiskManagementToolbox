@@ -65,6 +65,8 @@ class SimulationConfig(BaseModel, extra="forbid"):
         server_job_timeout_seconds (int): Server-side watchdog timeout in seconds for assigned jobs (default: 1 hour)
         worker_count (int): The number of parallel workers to use for simulations.
         checkpoint_interval (int): Save checkpoint every n generation.
+        use_fem (bool): Whether to use FEM geomechanics in the simulations (True), or semi-analytical method (False). (default: False)
+        rebuild_fem_cache (bool): Whether to rebuild the FEM cache. (default: False)
     """
 
     server_job_timeout_seconds: PositiveInt = Field(default=3600)
@@ -76,6 +78,9 @@ class SimulationConfig(BaseModel, extra="forbid"):
         validate_default=True,
     )
 
+    use_fem: bool = Field(default=False)
+    rebuild_fem_cache: bool = Field(default=False)
+    
     @field_validator("checkpoint_path", mode="before")
     @classmethod
     def create_log_folder_if_missing(cls, value: Any) -> Any:

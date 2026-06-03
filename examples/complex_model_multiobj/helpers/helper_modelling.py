@@ -404,7 +404,7 @@ def build_fault_df_from_reservoir(reservoir):
 
     # strike / dip
     strike = np.empty(ids.size, dtype=float)
-    dip = np.full(ids.size, 90.0)
+    dip = np.full(ids.size, 80.0)
 
     strike[mask_ns[ids]] = 0.0
     strike[mask_ew[ids]] = 90.0

@@ -39,7 +39,8 @@ from model_PROD import ProductionModel
 def run_darts(well_data) -> None:
 
     # disable multi-threaded runs
-    set_num_threads(1)
+    cores_per_worker = int(os.environ.get("DARTS_CORES_PER_WORKER", "1"))
+    set_num_threads(cores_per_worker)
 
     # output file location
     out_root = os.path.join(os.getcwd(), "output_PROD")
@@ -111,26 +112,45 @@ def run_darts(well_data) -> None:
     SH_init = fault_stress_df["SH"].values / 1e5
     Sh_init = fault_stress_df["Sh"].values / 1e5
 
-    if use_fem:
-        print("Initializing FEM geomechanics module...")
-        cache_dir = os.environ.get(
-            "FEM_CACHE_DIR",
-            "/home/pogacnij/DEVELOPER/URGENT_RiskManagementToolbox/log/fem_cache",
+    # Initialize fem geomechanics
+    #print_mem('In geomechanics init')
+    print("Initializing FEM geomechanics module...")
+    # m.init_fem_geomech(
+    #     fault_df=fault_stress_df,
+    #     P0=initcond_df['P'].values,
+    #     T0=initcond_df['T'].values,
+    #     E=9e9,
+    #     nu=0.25,
+    #     alpha_b=1.0,
+    #     alpha_T=1e-5,
+    #     rho=1300.0,
+    #     solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
+    # )
+    cache_dir = os.environ.get(
+    "FEM_CACHE_DIR",
+    "/home/kurgyisk/projects/URGENT_RiskManagementToolbox/log/fem_cache",
+)
+    m.init_fem_geomech(
+        fault_df=fault_stress_df,
+        P0=initcond_df["P"].values,
+        T0=initcond_df["T"].values,
+        E=9e9,
+        nu=0.25,
+        alpha_b=1.0,
+        alpha_T=1e-5,
+        rho=1300.0,
+        solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
+        cache_dir = cache_dir, 
+        rebuild_cache=False,  # Set to True to rebuild cache, False to use existing cache if available
         )
-        m.init_fem_geomech(
-            fault_df=fault_stress_df,
-            P0=initcond_df["P"].values,
-            T0=initcond_df["T"].values,
-            E=9e9,
-            nu=0.3,
-            alpha_b=1.0,
-            alpha_T=1e-5,
-            rho=1300.0,
-            solver_params={"rtol": 1e-7, "maxiter": 1500, "warm_start": True},
-            cache_dir=cache_dir,
-            rebuild_cache=True,
-        )
-        print("FEM geomechanics initialization completed.")
+    print("FEM geomechanics initialization completed.")
+    print("Setting up initial VTK... ")
+    m.initialize_vtk_data(P=initcond_df['P'].values, T=initcond_df['T'].values, F=fault_df['ID'].values)  # update cell_data for vtk output with initial conditions
+    # Store initial stresses to VTK (these don't change during simulation)
+    m.cell_data["S0_11"][0][idx] = SV_init
+    m.cell_data["S0_22"][0][idx] = SH_init
+    m.cell_data["S0_33"][0][idx] = Sh_init
+    m.write_vtk(0, vtk_dir)
 
     mu_crit = 0.35  # critical friction coefficient for fault reactivation
     flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
@@ -169,7 +189,7 @@ def run_darts(well_data) -> None:
         P = np.array(m.physics.engine.X[0::2], copy=False)  # pressure in bar
         H = np.array(m.physics.engine.X[1::2], copy=False)  # enthalpy in kJ/kmol
         T = _Backward1_T_Ph_vec(P / 10, H / 18.015)  # temperature in K
-        solution_df = pd.DataFrame({"P": P, "H": H, "T": T})
+        # solution_df = pd.DataFrame({"P": P, "H": H, "T": T})
         # solution_df.to_csv(
         #     os.path.join(out_root, f"solution_PROD_{i + 1}.csv"), sep=","
         # )

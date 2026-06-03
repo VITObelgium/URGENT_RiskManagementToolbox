@@ -21,8 +21,10 @@ from darts.physics.properties.iapws.iapws_property_vec import _Backward1_T_Ph_ve
 from darts.engines import set_num_threads
 
 # import helper functions
-import helpers.helper_heatproduction as func_heat
 import helpers.helper_modelling as func
+import helpers.helper_heatproduction as func_heat
+import helpers.helper_faultexceedance as func_fault
+
 
 # import DARTS model
 from model_PROD import ProductionModel
@@ -91,9 +93,12 @@ def run_darts(well_data) -> None:
         fault_df, depth_reservoir, initcond_df, stress_df=stress_df
     )
 
-    mu_crit = 0.6  # critical friction coefficient for fault reactivation
-    flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
+    mu_crit = 0.35 #0.6  # critical friction coefficient for fault reactivation
+    #flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
     t_cum = 0.0  # cumulative time tracker for reporting
+
+    # Initialize fault_exceedance vector 
+    fault_exceedance_cells = np.zeros(len(fault_stress_df), dtype=float)
 
     for i, t in enumerate(Dtimes):
         m.run(days=t, restart_dt=0, verbose=True)
@@ -123,21 +128,27 @@ def run_darts(well_data) -> None:
 
         func.output_darts_vtk_with_cell_prop(model=m, ith_step=i + 1, vtk_dir=vtk_dir, cell_prop=mu_full, field_name="mu_fault", output_properties=("temperature",),)
 
-        # Fault reactivation check and well control adjustment
+        # Fault reactivation check and exceedance calculation
         Max_mu = mu_vec.max()
         t_cum = t_cum + t
         print(f"Time {t_cum} days: Max friction coefficient on faults = {Max_mu:.3f}")
+        
+        fault_exceedance_cells, timestep_contribution = func_fault.update_fault_exceedance_cells(
+            fault_exceedance_cells, mu_vec, mu_crit, dt_days=t )
+
+        print( f"Time {t_cum} days: Fault exceedance contribution = "
+               f"{timestep_contribution:.6e}")
 
         # Check failure criteria
         if Max_mu >= mu_crit:
             print(
                 f"FAULT REACTIVATION DETECTED at time {t_cum} days with max mu={Max_mu:.3f} >= mu_crit={mu_crit:.3f}"
             )
-            Qinj = flow_rate_chop * Qinj
-            m.Qinj = Qinj
-            m.Qprod = Qinj  # for balanced operation
-            print(f"New injection rate: {Qinj:.2f} ton/day")
-            m.set_well_controls()
+            # Qinj = flow_rate_chop * Qinj
+            # m.Qinj = Qinj
+            # m.Qprod = Qinj  # for balanced operation
+            # print(f"New injection rate: {Qinj:.2f} ton/day")
+            # m.set_well_controls()
 
     # Get and writting well vectors
     td = pd.DataFrame.from_dict(m.physics.engine.time_data)
@@ -147,16 +158,20 @@ def run_darts(well_data) -> None:
     writer.close()
 
     ## Cumulative heat production (MWy)
-    Heat = func_heat.cumulative_heat(
-        td, PROD, INJ
-    )  # cumulative heat for a specific doublet: requires accurate well names for producers and injectors
+    Heat = func_heat.cumulative_heat(td, PROD, INJ)  # cumulative heat for a specific doublet: requires accurate well names for producers and injectors
+    
+    # Cumulative fault exceedance (cell-days)
+    FaultExceedance = func_fault.total_fault_exceedance(fault_exceedance_cells)
+
     address = out_root + os.sep + "indicators.txt"
     Indicators = pd.DataFrame(
-        {"Heat[MWy]": [Heat]}
+        {"Heat[MWy]": [Heat],
+         "FaultExceedance[cell_days]": [FaultExceedance]}
     )  # We can store here different indicators
-    np.savetxt(address, Indicators.values, fmt="%.1f", header="Heat[MWy]")
+    np.savetxt(address, Indicators.values, fmt="%.6e", header="Heat[MWy] FaultExceedance[cell_days]")
 
     OpenDartsConnector.broadcast_result("Heat", Heat)
+    OpenDartsConnector.broadcast_result("FaultExceedance", FaultExceedance)
 
     # move darts created pvd to vtk folder for better organization
     src = os.path.join(os.getcwd(), "solution.pvd")

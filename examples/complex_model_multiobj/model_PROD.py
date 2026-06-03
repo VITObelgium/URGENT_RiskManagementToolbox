@@ -293,22 +293,12 @@ class ProductionModel(DartsModel):
 
         # Vectorized stress computation in cells's fault option
         ## inputs transformed to matrix and vector for every cell
-        SV, SH, Sh = func.stress_initialization(
-            stress_df, dff
-        )  # Size number of faults elements
+        SV, SH, Sh = func.stress_initialization(stress_df, dff)  # Size number of faults elements
         normal = func.normals(dff)  # could be out
-        p_sigma = func.principal_stress_tensor(
-            SV, SH, Sh
-        )  # could be out Size number of faults elements
+        p_sigma = func.principal_stress_tensor(SV, SH, Sh)  # could be out - Size number of faults elements
         p_faults = dff["P"].values  # pressure in fault blocks
-        pressure = func.principal_stress_tensor(
-            p_faults, p_faults, p_faults
-        )  # we used the same function that before
-        alpha, E, v = (
-            1.0e-5,
-            40.0e9,
-            0.3,
-        )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
+        pressure = func.principal_stress_tensor(p_faults, p_faults, p_faults)  # we used the same function that before
+        alpha, E, v = (1.0e-5, 9.0e9, 0.25, )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
         dS_T = func.dS_T(alpha, E, v, dff)  # Following dS_T = alpha*E/(1.-v)*dT
         eigenvec = func.eigenvec(orientation_rad, len(dff["ID"]))
         eigenvec_t = np.transpose(eigenvec, axes=(0, 2, 1))

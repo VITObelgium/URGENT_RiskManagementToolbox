@@ -306,8 +306,8 @@ class ProductionModel(DartsModel):
         )  # we used the same function that before
         alpha, E, v = (
             1.0e-5,
-            40.0e9,
-            0.3,
+            9.0e9,
+            0.25,
         )  # thermal exp. [1/C], Young's M. [pas] and poisson's r [--].
         dS_T = func.dS_T(alpha, E, v, dff)  # Following dS_T = alpha*E/(1.-v)*dT
         eigenvec = func.eigenvec(orientation_rad, len(dff["ID"]))

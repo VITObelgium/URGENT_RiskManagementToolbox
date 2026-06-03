@@ -91,7 +91,7 @@ def run_darts(well_data) -> None:
         fault_df, depth_reservoir, initcond_df, stress_df=stress_df
     )
 
-    mu_crit = 0.6  # critical friction coefficient for fault reactivation
+    mu_crit = 0.35 #0.6  # critical friction coefficient for fault reactivation
     flow_rate_chop = 0.7  # flow rate reduction if fault reactivation occurs
     t_cum = 0.0  # cumulative time tracker for reporting
 

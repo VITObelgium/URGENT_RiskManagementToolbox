@@ -68,9 +68,9 @@
     "objectives": {
       "Heat": "maximize"
     },
-    "max_generations": 30,
-    "population_size": 40,
-    "max_stall_generations": 10
+    "max_generations": 40,
+    "population_size": 16,
+    "max_stall_generations": 40
   },
   "simulation_config": {
     "worker_simulation_timeout_seconds": 900,

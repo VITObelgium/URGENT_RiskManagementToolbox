@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from tracemalloc import start
 from typing import Any, Protocol
 from collections.abc import Callable
 
@@ -153,6 +154,35 @@ class SubprocessRunner:
         stop: threading.Event | None,
     ) -> tuple[SimulationStatus, SimulationResults]:
         command = _build_command(config, runner_mode)
+
+        # dedicated multithreaded run mode for darts with taskset
+        cores_per_worker = int(os.environ.get("DARTS_CORES_PER_WORKER", "1"))
+        if worker_id is not None and cores_per_worker > 1:
+            allowed_cpus = sorted(os.sched_getaffinity(0))
+
+            wid = int(worker_id) - 1 # worker_id is expected to be 1-indexed
+            start = wid * cores_per_worker
+            end = start + cores_per_worker
+
+            worker_cpus = allowed_cpus[start:end]
+
+            if len(worker_cpus) != cores_per_worker:
+                raise RuntimeError(
+                    f"Not enough CPUs for worker {worker_id}: "
+                    f"requested {cores_per_worker}, "
+                    f"allowed_cpus={allowed_cpus}, "
+                    f"selected={worker_cpus}"
+                )
+
+            cpu_list = ",".join(str(c) for c in worker_cpus)
+
+            command = [
+                "taskset",
+                "-c",
+                cpu_list,
+                *command,
+            ]
+
         env = _build_env(work_dir, runner_mode)
 
         if work_dir is not None:

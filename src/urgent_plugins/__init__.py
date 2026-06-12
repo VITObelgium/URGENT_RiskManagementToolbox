@@ -15,8 +15,12 @@ from urgent_plugins.registry import (
 )
 from urgent_plugins.utils import (
     resolve_connector_plugin,
-    resolve_domain_service_plugin,
+    resolve_domain_service_plugins,
     resolve_optimizer_plugin,
+)
+from urgent_plugins.verification import (
+    PluginTraceError,
+    verify_plugin_traces,
 )
 
 __all__ = [
@@ -26,10 +30,12 @@ __all__ = [
     "PluginDescriptor",
     "PluginKind",
     "PluginSettings",
+    "PluginTraceError",
     "get_plugin_settings",
     "get_registry",
     "normalize_plugin_name",
     "resolve_connector_plugin",
-    "resolve_domain_service_plugin",
+    "resolve_domain_service_plugins",
     "resolve_optimizer_plugin",
+    "verify_plugin_traces",
 ]

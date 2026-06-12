@@ -16,8 +16,8 @@ class PluginSettings(BaseSettings):
     optimizer_plugin_name: str = Field(
         default="", validation_alias="URGENT_OPTIMIZER_PLUGIN_NAME"
     )
-    domain_service_plugin_name: str = Field(
-        default="", validation_alias="URGENT_DOMAIN_SERVICE_PLUGIN_NAME"
+    domain_service_plugin_names: str = Field(
+        default="", validation_alias="URGENT_DOMAIN_SERVICE_PLUGIN_NAMES"
     )
 
     model_config = SettingsConfigDict(

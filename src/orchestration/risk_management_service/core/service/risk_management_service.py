@@ -6,17 +6,22 @@ import grpc
 import numpy as np
 import numpy.typing as npt
 from common.models import RunMode
-from pydantic import ValidationError
 from logger import get_logger
 from orchestration.risk_management_service.core.service.checkpoint import (
     checkpoint_filename,
     save_checkpoint,
     LoadedCheckpointData,
 )
+from orchestration.risk_management_service.core.service.plugin_bootstrap import (
+    bootstrap_run_plugins,
+)
 from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
+)
+from services.problem_dispatcher_service.core.service.interface import (
+    DomainServiceInterface,
 )
 from services.problem_dispatcher_service.core.utils import (
     parse_flat_dict_to_nested,
@@ -28,13 +33,6 @@ from services.simulation_service import (
     simulation_process_context_manager,
 )
 from services.solution_updater_service import SolutionUpdaterService
-from urgent_plugins import (
-    PluginKind,
-    get_registry,
-    resolve_connector_plugin,
-    resolve_domain_service_plugin,
-    resolve_optimizer_plugin,
-)
 
 logger = get_logger(__name__)
 
@@ -68,27 +66,8 @@ def run_risk_management(
 
     runner_mode = os.getenv("RUNNER_MODE", "thread").lower()
     os.environ["RUN_MODE"] = problem_definition.run_mode.value
-    connector_name = resolve_connector_plugin(problem_definition.plugins.connector)
-    optimizer_name = resolve_optimizer_plugin(problem_definition.plugins.optimizer)
-    domain_service_name = resolve_domain_service_plugin(
-        problem_definition.plugins.domain_service
-    )
-    domain_service_plugin = get_registry().require(
-        PluginKind.DOMAIN_SERVICE, domain_service_name
-    )
-    domain_service = domain_service_plugin.implementation()
-    logger.info(
-        "Running with %s Connector, %s Optimizer, and %s DomainService",
-        connector_name,
-        optimizer_name,
-        domain_service_name,
-    )
-
-    # validate and normalise each well's initial_state against
-    # the plugin's schema. Runs after plugin load, before ProblemDispatcherService
-    _validate_well_initial_states(
-        problem_definition, domain_service_plugin, domain_service_name
-    )
+    run_plugins = bootstrap_run_plugins(problem_definition)
+    connector_name = run_plugins.connector_name
     os.environ["WORKER_SIMULATION_TIMEOUT_SECONDS"] = str(
         problem_definition.simulation_config.worker_simulation_timeout_seconds
     )
@@ -123,7 +102,9 @@ def run_risk_management(
                     dispatcher.expected_optimization_function_names
                 )
                 sim_cases = _prepare_simulation_cases(
-                    solutions, expected_cost_function_names, domain_service
+                    solutions,
+                    expected_cost_function_names,
+                    run_plugins.domain_services,
                 )
                 logger.info(
                     "Submitting evaluation simulation case to SimulationService."
@@ -138,7 +119,7 @@ def run_risk_management(
                 return None
 
             solution_updater = SolutionUpdaterService(
-                optimization_engine=optimizer_name,
+                optimization_engine=run_plugins.optimizer_name,
                 max_generations=dispatcher.max_generation,
                 max_stall_generations=dispatcher.max_stall_generations,
                 objectives=dispatcher.optimization_objectives,
@@ -180,7 +161,7 @@ def run_risk_management(
                 sim_cases = _prepare_simulation_cases(
                     solutions,
                     dispatcher.expected_optimization_function_names,
-                    domain_service,
+                    run_plugins.domain_services,
                 )
 
                 logger.debug("Prepared %d simulation cases.", len(sim_cases))
@@ -287,18 +268,19 @@ def run_risk_management(
 def _prepare_simulation_cases(
     solutions: ProblemDispatcherServiceResponse,
     expected_cost_function_names: list[str],
-    domain_service: Any,
+    domain_services: dict[str, DomainServiceInterface],
 ) -> list[dict[str, Any]]:
     """Convert solution candidates into simulation-ready case dicts.
 
-    Passes raw domain-service request dicts to ``domain_service.process_request``
-    to produce simulation payloads, and initialises result
-    placeholders for every expected cost-function name.
+    Each configured domain service builds its own payload column from its
+    task's item states; the columns are flattened into one ``payload`` dict
+    keyed by service name. Result placeholders are initialised for every
+    expected cost-function name.
 
     Args:
         solutions: Candidates produced by ``ProblemDispatcherService``.
         expected_cost_function_names: Objective keys; results seeded with NaN.
-        domain_service: Resolved domain service plugin instance.
+        domain_services: Resolved domain service instances keyed by name.
 
     Returns:
         List of simulation case dicts ready for ``SimulationService.process_request``.
@@ -308,48 +290,31 @@ def _prepare_simulation_cases(
 
     for index, solution in enumerate(solutions.solution_candidates):
         logger.debug("Processing solution candidate #%d.", index + 1)
-        sim_case: dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         control_vector: dict[str, Any] = {}
 
-        for task in solution.tasks.values():
-            result = domain_service.process_request({"models": task.request})
-            sim_case["wells"] = result
+        for service_name, task in solution.tasks.items():
+            payload[service_name] = domain_services[service_name].build_payload(
+                task.request
+            )
             control_vector.update(task.control_vector.items)
             logger.debug(
-                "Built %d domain item(s) for candidate #%d.",
+                "Built %d %r item(s) for candidate #%d.",
                 len(task.request),
+                service_name,
                 index + 1,
             )
 
-        sim_case["control_vector"] = control_vector
-        sim_case["results"] = {k: float("nan") for k in expected_cost_function_names}
-        sim_cases.append(sim_case)
+        sim_cases.append(
+            {
+                "payload": payload,
+                "control_vector": control_vector,
+                "results": {k: float("nan") for k in expected_cost_function_names},
+            }
+        )
 
     logger.debug("All %d simulation cases prepared.", len(sim_cases))
     return sim_cases
-
-
-def _validate_well_initial_states(
-    problem_definition: ProblemDispatcherDefinition,
-    domain_service_plugin: Any,
-    plugin_name: str,
-) -> None:
-    """Phase-2 validation: run each well's initial_state dict through the plugin's adapter.
-
-    Normalises the dict in-place (validated → dump_python) so downstream code sees
-    a canonical representation. Raises ValueError with well name and plugin context
-    on the first failure.
-    """
-    adapter = domain_service_plugin.implementation.get_well_state_adapter()
-    for item in problem_definition.well_design:
-        try:
-            validated = adapter.validate_python(item.initial_state)
-            item.initial_state = adapter.dump_python(validated)
-        except ValidationError as exc:
-            raise ValueError(
-                f"Well '{item.well_name}': invalid initial_state for plugin "
-                f"'{plugin_name}':\n{exc}"
-            ) from exc
 
 
 def _save_checkpoint(

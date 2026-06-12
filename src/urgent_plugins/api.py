@@ -33,7 +33,7 @@ class PluginKind(Enum):
             case PluginKind.OPTIMIZER:
                 field_name = "optimizer_plugin_name"
             case PluginKind.DOMAIN_SERVICE:
-                field_name = "domain_service_plugin_name"
+                field_name = "domain_service_plugin_names"
         return str(PluginSettings.model_fields[field_name].validation_alias)
 
 

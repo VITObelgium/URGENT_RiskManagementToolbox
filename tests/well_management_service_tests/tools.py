@@ -1,7 +1,7 @@
 import math
 from typing import Iterator, Tuple, TypeVar
 
-from plugins.domain_services.builtin import POINT_ATOL, Point, TrajectoryPoint
+from plugins.domain_services.well_design import POINT_ATOL, Point, TrajectoryPoint
 
 T = TypeVar("T", TrajectoryPoint, Point)
 

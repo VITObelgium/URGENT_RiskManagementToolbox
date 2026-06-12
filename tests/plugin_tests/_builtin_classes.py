@@ -35,6 +35,6 @@ def get_builtin_optimizer_class() -> type[OptimizationEngineInterface]:
 
 def get_builtin_domain_service_class() -> type[DomainServiceInterface]:
     descriptor = load_local_plugin(
-        PluginKind.DOMAIN_SERVICE, "builtin", default_plugins_root()
+        PluginKind.DOMAIN_SERVICE, "well_design", default_plugins_root()
     )
     return descriptor.implementation  # type: ignore[return-value]

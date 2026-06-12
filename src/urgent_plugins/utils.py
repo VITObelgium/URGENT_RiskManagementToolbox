@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 
 from logger import get_logger
 
@@ -34,24 +35,21 @@ def _resolve_plugin(kind: PluginKind, name: str) -> str:
     """Ensure the requested plugin is loaded and return its normalised name.
 
     Plugins are loaded only from the explicit plugin name provided by config:
-    ``<plugins_root>/<kind.directory>/<name>.py``. The resolved plugin name and
-    plugins root are exported via environment variables for workers.
+    ``<plugins_root>/<kind.directory>/<name>.py``. The plugins root is
+    exported via an environment variable for workers.
     """
     if not name or not name.strip():
         raise ValueError(f"{kind.value} plugin name must be specified in config.")
 
     plugins_root = default_plugins_root()
-    env_var = kind.get_env_var()
     os.environ["URGENT_PLUGIN_PATH"] = str(plugins_root)
 
     normalized = name.strip().lower()
     existing = get_registry().get(kind, normalized)
     if existing is not None:
-        os.environ[env_var] = existing.name
         return existing.name
 
     descriptor = load_local_plugin(kind, normalized, plugins_root)
-    os.environ[env_var] = descriptor.name
     logger.info(
         "Loaded %s plugin %r from %s",
         kind.value,
@@ -61,13 +59,33 @@ def _resolve_plugin(kind: PluginKind, name: str) -> str:
     return descriptor.name
 
 
+def _resolve_and_export(kind: PluginKind, name: str) -> str:
+    resolved = _resolve_plugin(kind, name)
+    os.environ[kind.get_env_var()] = resolved
+    return resolved
+
+
 def resolve_connector_plugin(connector_name: str) -> str:
-    return _resolve_plugin(PluginKind.CONNECTOR, connector_name)
+    return _resolve_and_export(PluginKind.CONNECTOR, connector_name)
 
 
 def resolve_optimizer_plugin(optimizer_name: str) -> str:
-    return _resolve_plugin(PluginKind.OPTIMIZER, optimizer_name)
+    return _resolve_and_export(PluginKind.OPTIMIZER, optimizer_name)
 
 
-def resolve_domain_service_plugin(domain_service_name: str) -> str:
-    return _resolve_plugin(PluginKind.DOMAIN_SERVICE, domain_service_name)
+def resolve_domain_service_plugins(domain_service_names: Sequence[str]) -> list[str]:
+    """Resolve every configured domain service plugin and export their names.
+
+    Returns the normalised names in config order; duplicates are rejected by
+    the config model before this is reached.
+    """
+    if not domain_service_names:
+        raise ValueError(
+            "At least one domain_service plugin name must be specified in config."
+        )
+    resolved = [
+        _resolve_plugin(PluginKind.DOMAIN_SERVICE, name)
+        for name in domain_service_names
+    ]
+    os.environ[PluginKind.DOMAIN_SERVICE.get_env_var()] = ",".join(resolved)
+    return resolved

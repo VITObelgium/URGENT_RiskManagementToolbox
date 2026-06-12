@@ -84,36 +84,38 @@ def mock_struct_reservoir(
     [
         (
             {
-                "wells": [
-                    {
-                        "name": "Test IWell",
-                        "trajectory": [
-                            [0.0, 0.0, 0.0],
-                            [0.0, 0.0, 10.0],
-                            [0.0, 0.0, 50.0],
-                            [0.0, 0.0, 60.0],
-                            [0.0, 0.0, 70.0],
-                            [0.0, 0.0, 80.0],
-                            [0.0, 0.0, 100.0],
-                        ],
-                        "completion": {
-                            "perforations": [
-                                {
-                                    "range": [10.0, 60.0],
-                                    "points": [
-                                        [0.0, 0.0, 10.0],
-                                        [0.0, 0.0, 50.0],
-                                        [0.0, 0.0, 60.0],
-                                    ],
-                                },
-                                {
-                                    "range": [70.0, 80.0],
-                                    "points": [[0.0, 0.0, 70.0], [0.0, 0.0, 80.0]],
-                                },
-                            ]
-                        },
-                    }
-                ]
+                "well_design": {
+                    "wells": [
+                        {
+                            "name": "Test IWell",
+                            "trajectory": [
+                                [0.0, 0.0, 0.0],
+                                [0.0, 0.0, 10.0],
+                                [0.0, 0.0, 50.0],
+                                [0.0, 0.0, 60.0],
+                                [0.0, 0.0, 70.0],
+                                [0.0, 0.0, 80.0],
+                                [0.0, 0.0, 100.0],
+                            ],
+                            "completion": {
+                                "perforations": [
+                                    {
+                                        "range": [10.0, 60.0],
+                                        "points": [
+                                            [0.0, 0.0, 10.0],
+                                            [0.0, 0.0, 50.0],
+                                            [0.0, 0.0, 60.0],
+                                        ],
+                                    },
+                                    {
+                                        "range": [70.0, 80.0],
+                                        "points": [[0.0, 0.0, 70.0], [0.0, 0.0, 80.0]],
+                                    },
+                                ]
+                            },
+                        }
+                    ]
+                }
             },
             {"Test IWell": ((1, 1, 1), (1, 1, 2))},
         )
@@ -139,7 +141,9 @@ def test_get_well_connection_cells_empty_wells(mock_struct_reservoir):
 
 
 def test_get_well_connection_cells_missing_completion(mock_struct_reservoir):
-    wells_result = {"wells": [{"name": "NoComp", "trajectory": [[0, 0, 0]]}]}
+    wells_result = {
+        "well_design": {"wells": [{"name": "NoComp", "trajectory": [[0, 0, 0]]}]}
+    }
     import pytest
 
     with pytest.raises(KeyError, match="Well does not have a field: 'completion'"):

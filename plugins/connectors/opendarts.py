@@ -36,7 +36,6 @@ from services.simulation_service.core.connectors.common import (
     JsonPath,
     Point,
     SimulationResults,
-    WellDesignServiceResultSchema,
     WellName,
     extract_well_with_perforations_points,
 )
@@ -147,6 +146,11 @@ class OpenDartsConnector(SubprocessConnectorInterface):
     MsgTemplate = "OpenDartsConnector: Type:{0}, Value:{1}"
 
     @classmethod
+    def required_traces(cls) -> frozenset[str]:
+        """The bundled helpers assume a well_design payload column is present."""
+        return frozenset({"well_design"})
+
+    @classmethod
     def build_command(cls, config_path: JsonPath) -> list[str]:
         runner_mode = os.environ.get("RUNNER_MODE", "thread").lower()
         if runner_mode == "docker":
@@ -188,7 +192,7 @@ class OpenDartsConnector(SubprocessConnectorInterface):
 
     @staticmethod
     def get_well_connection_cells(
-        well_design_service_result: WellDesignServiceResultSchema,
+        domain_services_result: dict[str, Any],
         struct_reservoir: _StructReservoirProtocol,
     ) -> dict[WellName, tuple[GridCell, ...]]:
         """Map well perforation points to reservoir grid cells.
@@ -197,8 +201,11 @@ class OpenDartsConnector(SubprocessConnectorInterface):
         :class:`ConnectorInterface` contract.
         """
         result: dict[WellName, tuple[GridCell, ...]] = {}
+        well_design_result = domain_services_result.get("well_design")
+        if not well_design_result:
+            return {}
         wells_with_perforations_points: dict[WellName, tuple[Point, ...]] = (
-            extract_well_with_perforations_points(well_design_service_result)
+            extract_well_with_perforations_points(well_design_result)
         )
 
         cell_connector = _CellConnector(struct_reservoir)

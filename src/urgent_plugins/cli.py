@@ -4,7 +4,7 @@ Examples
 --------
     pixi run create-plugin connector Eclipse
     pixi run create-plugin optimizer Genetic
-    pixi run create-plugin wms CompanyWMS
+    pixi run create-plugin domain CompanyDomainService
 
 The generated file lives at ``plugins/<kind_dir>/<snake_case_name>.py`` and
 contains stub implementations of every required method declared on the live

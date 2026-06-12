@@ -1,56 +1,52 @@
 {
-  "well_design": [
-    {
-      "well_name": "X1",
-      "initial_state": {
-        "well_type": "IWell",
-        "md": 10,
-        "md_step": 5.0,
-        "wellhead": {
-          "x": 0.3,
-          "y": 0.6,
-          "z": 0
+  "domain_services": {
+    "benchmark_well_design": [
+      {
+        "name": "X1",
+        "initial_state": {
+          "wellhead": {
+            "x": 0.3,
+            "y": 0.6,
+            "z": 0.0
+          }
+        },
+        "parameter_bounds": {
+          "wellhead": {
+            "x": {
+              "lb": 0.0,
+              "ub": 1.0
+            },
+            "y": {
+              "lb": 0.0,
+              "ub": 1.0
+            }
+          }
         }
       },
-      "parameter_bounds": {
-        "wellhead": {
-          "x": {
-            "lb": 0.00,
-            "ub": 1.00
-          },
-          "y": {
-            "lb": 0.00,
-            "ub": 1.00
+      {
+        "name": "X2",
+        "initial_state": {
+          "wellhead": {
+            "x": 0.8,
+            "y": 0.5,
+            "z": 0.0
+          }
+        },
+        "parameter_bounds": {
+          "wellhead": {
+            "x": {
+              "lb": 0.0,
+              "ub": 1.0
+            },
+            "y": {
+              "lb": 0.0,
+              "ub": 1.0
+            }
           }
         }
       }
-    },
-    {
-      "well_name": "X2",
-      "initial_state": {
-        "well_type": "IWell",
-        "md": 10,
-        "md_step": 5.0,
-        "wellhead": {
-          "x": 0.8,
-          "y": 0.5,
-          "z": 0
-        }
-      },
-      "parameter_bounds": {
-        "wellhead": {
-          "x": {
-            "lb": 0.00,
-            "ub": 1.00
-          },
-          "y": {
-            "lb": 0.00,
-            "ub": 1.00
-          }
-        }
-      }
-    }
-  ],
+    ]
+  },
   "optimization_parameters": {
     "objectives": {
       "f1": "minimize",
@@ -63,6 +59,8 @@
   "plugins": {
     "connector": "opendarts",
     "optimizer": "pso",
-    "domain_service": "builtin"
+    "domain_services": [
+      "benchmark_well_design"
+    ]
   }
 }

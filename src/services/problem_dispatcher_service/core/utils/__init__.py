@@ -5,8 +5,8 @@ from services.problem_dispatcher_service.core.utils.keys import (
 )
 from services.problem_dispatcher_service.core.utils.utils import (
     CandidateGenerator,
-    build_full_key_boundaries_from_well_design,
-    build_initial_state_from_well_design,
+    build_full_key_boundaries,
+    build_initial_state,
     flatten_optimization_parameters,
     get_corresponding_initial_state_as_flat_dict,
     is_bounds_dict,
@@ -19,8 +19,8 @@ from services.problem_dispatcher_service.core.utils.utils import (
 
 __all__ = [
     "CandidateGenerator",
-    "build_full_key_boundaries_from_well_design",
-    "build_initial_state_from_well_design",
+    "build_full_key_boundaries",
+    "build_initial_state",
     "flatten_optimization_parameters",
     "update_initial_state",
     "parse_flat_dict_to_nested",

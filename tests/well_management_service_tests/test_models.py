@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from _pytest.fixtures import FixtureRequest
 
-from plugins.domain_services.builtin import (
+from plugins.domain_services.well_design import (
     POINT_ATOL,
     PerforationRange,
     Point,

@@ -6,9 +6,22 @@ import pytest
 
 import orchestration.risk_management_service.core.service.risk_management_service as rms
 from common.models import RunMode
-from services.problem_dispatcher_service import ServiceType
+
+_RMS = "orchestration.risk_management_service.core.service.risk_management_service"
 
 
+def _mock_run_plugins(domain_services: dict | None = None) -> MagicMock:
+    """Stand-in for the ResolvedRunPlugins returned by bootstrap_run_plugins."""
+    run_plugins = MagicMock()
+    run_plugins.connector_name = "opendarts"
+    run_plugins.optimizer_name = "pso"
+    run_plugins.domain_services = (
+        domain_services if domain_services is not None else {"well_design": MagicMock()}
+    )
+    return run_plugins
+
+
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.simulation_cluster_context_manager"
 )
@@ -26,6 +39,7 @@ def test_run_risk_management_happy_path(
     mock_su,
     mock_sim_service,
     mock_sim_cluster_ctx,
+    mock_bootstrap,
 ):
     mock_ctx = MagicMock()
     mock_sim_cluster_ctx.return_value.__enter__.return_value = mock_ctx
@@ -37,6 +51,8 @@ def test_run_risk_management_happy_path(
             )
         ]
     )
+
+    mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
@@ -60,7 +76,7 @@ def test_run_risk_management_happy_path(
             solution_candidates=[
                 MagicMock(
                     tasks={
-                        ServiceType.DomainService: MagicMock(
+                        "well_design": MagicMock(
                             request=[minimal_well],
                             control_vector=MagicMock(items={"a": 1}),
                         )
@@ -97,20 +113,16 @@ def test_run_risk_management_happy_path(
         ),
         patch.dict("os.environ", {"RUNNER_MODE": "docker"}),
     ):
-        mock_problem_def = MagicMock()
-        mock_problem_def.optimization_parameters.worker_count = 1
+        mock_problem_def = _make_problem_def()
         mock_problem_def.optimization_parameters.population_size = 1
         mock_problem_def.optimization_parameters.max_stall_generations = 1
         mock_problem_def.optimization_parameters.max_generations = 1
-        mock_problem_def.run_mode.value = "optimization"
-        mock_problem_def.plugins.connector = "opendarts"
-        mock_problem_def.plugins.optimizer = "pso"
-        mock_problem_def.plugins.domain_service = "builtin"
 
         rms.run_risk_management(
             mock_problem_def, b"model", model_hash="brooks_was_here"
         )
 
+    mock_bootstrap.assert_called_once_with(mock_problem_def)
     mock_sim_service.transfer_simulation_model.assert_called_once()
     assert mock_dispatcher_inst.process_iteration.call_count == 1
     mock_su_inst.process_request.assert_called()
@@ -128,19 +140,54 @@ def test_prepare_simulation_cases_basic():
     fake_task.request = [minimal_well]
     fake_task.control_vector = MagicMock(items={"a": 1})
     fake_solution = MagicMock()
-    fake_solution.tasks = {ServiceType.DomainService: fake_task}
+    fake_solution.tasks = {"well_design": fake_task}
     solutions = MagicMock(solution_candidates=[fake_solution])
 
     mock_handler = MagicMock()
-    mock_handler.process_request.return_value = {"well": 1}
+    mock_handler.build_payload.return_value = {"well": 1}
     fake_expected_cost_function_names = ["cost_function_1", "cost_function_2"]
     sim_cases = rms._prepare_simulation_cases(
-        solutions, fake_expected_cost_function_names, mock_handler
+        solutions, fake_expected_cost_function_names, {"well_design": mock_handler}
     )
     assert isinstance(sim_cases, list)
-    assert sim_cases[0]["wells"] == {"well": 1}
+    assert sim_cases[0]["payload"] == {"well_design": {"well": 1}}
     assert sim_cases[0]["control_vector"] == {"a": 1}
-    mock_handler.process_request.assert_called_once_with({"models": [minimal_well]})
+    mock_handler.build_payload.assert_called_once_with([minimal_well])
+
+
+def test_prepare_simulation_cases_multiple_domain_services():
+    design_task = MagicMock()
+    design_task.request = [{"name": "W1", "md": 100.0}]
+    design_task.control_vector = MagicMock(items={"well_design#W1#md": 100.0})
+    counter_task = MagicMock()
+    counter_task.request = [{"name": "field", "count": 2.4}]
+    counter_task.control_vector = MagicMock(items={"well_counter#field#count": 2.4})
+
+    fake_solution = MagicMock()
+    fake_solution.tasks = {"well_design": design_task, "well_counter": counter_task}
+    solutions = MagicMock(solution_candidates=[fake_solution])
+
+    design_handler = MagicMock()
+    design_handler.build_payload.return_value = {"wells": []}
+    counter_handler = MagicMock()
+    counter_handler.build_payload.return_value = {"counts": {"field": 2}}
+
+    sim_cases = rms._prepare_simulation_cases(
+        solutions,
+        ["Heat"],
+        {"well_design": design_handler, "well_counter": counter_handler},
+    )
+
+    assert sim_cases[0]["payload"] == {
+        "well_design": {"wells": []},
+        "well_counter": {"counts": {"field": 2}},
+    }
+    assert sim_cases[0]["control_vector"] == {
+        "well_design#W1#md": 100.0,
+        "well_counter#field#count": 2.4,
+    }
+    design_handler.build_payload.assert_called_once_with(design_task.request)
+    counter_handler.build_payload.assert_called_once_with(counter_task.request)
 
 
 def test_prepare_simulation_cases_empty_tasks():
@@ -151,13 +198,15 @@ def test_prepare_simulation_cases_empty_tasks():
 
     mock_handler = MagicMock()
     sim_cases = rms._prepare_simulation_cases(
-        solutions, fake_expected_cost_function_names, mock_handler
+        solutions, fake_expected_cost_function_names, {"well_design": mock_handler}
     )
     assert isinstance(sim_cases, list)
     assert "control_vector" in sim_cases[0]
-    mock_handler.process_request.assert_not_called()
+    assert sim_cases[0]["payload"] == {}
+    mock_handler.build_payload.assert_not_called()
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(
     "orchestration.risk_management_service.core.service.risk_management_service.simulation_cluster_context_manager"
 )
@@ -167,26 +216,24 @@ def test_prepare_simulation_cases_empty_tasks():
 def test_run_risk_management_exception(
     mock_sim_service,
     mock_sim_cluster_ctx,
+    mock_bootstrap,
 ):
     # We have so many patches unused because we patch all dependencies that the function under test touches,
     # to prevent side effects and to control the test environment.
     mock_ctx = MagicMock()
     mock_sim_cluster_ctx.return_value.__enter__.return_value = mock_ctx
     mock_sim_service.transfer_simulation_model.side_effect = Exception("fail")
+    mock_bootstrap.return_value = _mock_run_plugins()
 
-    mock_problem_def = MagicMock()
-    mock_problem_def.optimization_parameters.worker_count = 1
-    mock_problem_def.plugins.connector = "opendarts"
+    mock_problem_def = _make_problem_def()
 
     with pytest.raises(Exception):
-        rms.run_risk_management(mock_problem_def, b"model")
+        rms.run_risk_management(mock_problem_def, b"model", model_hash="abc")
 
 
 # ---------------------------------------------------------------------------
 # Helper: reusable patches for run_risk_management tests
 # ---------------------------------------------------------------------------
-
-_RMS = "orchestration.risk_management_service.core.service.risk_management_service"
 
 
 def _make_problem_def(run_mode=RunMode.Optimization):
@@ -194,7 +241,7 @@ def _make_problem_def(run_mode=RunMode.Optimization):
     pd.run_mode = run_mode  # real enum — .value is read from the enum directly
     pd.plugins.connector = "opendarts"
     pd.plugins.optimizer = "pso"
-    pd.plugins.domain_service = "builtin"
+    pd.plugins.domain_services = ["well_design"]
     pd.optimization_parameters.worker_count = 1
     pd.optimization_parameters.seed = 42
     pd.simulation_config.worker_count = 1
@@ -202,21 +249,25 @@ def _make_problem_def(run_mode=RunMode.Optimization):
     pd.simulation_config.server_job_timeout_seconds = 60
     pd.simulation_config.checkpoint_interval = 10
     pd.simulation_config.checkpoint_path = "/tmp"
-    pd.well_design = []
+    pd.domain_services = {"well_design": []}
     return pd
 
 
 # ---------------------------------------------------------------------------
-# Evaluation mode (lines 118-138)
+# Evaluation mode
 # ---------------------------------------------------------------------------
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
 @patch(f"{_RMS}.ProblemDispatcherService")
-def test_run_risk_management_evaluation_mode(mock_dispatcher, mock_sim, mock_ctx):
+def test_run_risk_management_evaluation_mode(
+    mock_dispatcher, mock_sim, mock_ctx, mock_bootstrap
+):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
@@ -238,19 +289,21 @@ def test_run_risk_management_evaluation_mode(mock_dispatcher, mock_sim, mock_ctx
 
 
 # ---------------------------------------------------------------------------
-# KeyboardInterrupt is caught and returns None (lines 239-241)
+# KeyboardInterrupt is caught and returns None
 # ---------------------------------------------------------------------------
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
 @patch(f"{_RMS}.ProblemDispatcherService")
 @patch(f"{_RMS}.SolutionUpdaterService")
 def test_run_risk_management_keyboard_interrupt(
-    mock_su, mock_dispatcher, mock_sim, mock_ctx
+    mock_su, mock_dispatcher, mock_sim, mock_ctx, mock_bootstrap
 ):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_sim.transfer_simulation_model.side_effect = KeyboardInterrupt()
 
@@ -262,7 +315,7 @@ def test_run_risk_management_keyboard_interrupt(
 
 
 # ---------------------------------------------------------------------------
-# gRPC shutdown error is re-raised (lines 243-254)
+# gRPC shutdown error is re-raised
 # ---------------------------------------------------------------------------
 
 
@@ -278,11 +331,13 @@ class _FakeRpcError(grpc.RpcError):
         return self._details
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
-def test_run_risk_management_grpc_aborted_reraises(mock_sim, mock_ctx):
+def test_run_risk_management_grpc_aborted_reraises(mock_sim, mock_ctx, mock_bootstrap):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
     mock_sim.transfer_simulation_model.side_effect = _FakeRpcError(
         grpc.StatusCode.ABORTED, "job cancelled"
     )
@@ -293,11 +348,15 @@ def test_run_risk_management_grpc_aborted_reraises(mock_sim, mock_ctx):
         rms.run_risk_management(problem_def, b"model", model_hash="abc")
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
-def test_run_risk_management_grpc_unexpected_reraises(mock_sim, mock_ctx):
+def test_run_risk_management_grpc_unexpected_reraises(
+    mock_sim, mock_ctx, mock_bootstrap
+):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
     mock_sim.transfer_simulation_model.side_effect = _FakeRpcError(
         grpc.StatusCode.INTERNAL, "internal error"
     )
@@ -309,20 +368,22 @@ def test_run_risk_management_grpc_unexpected_reraises(mock_sim, mock_ctx):
 
 
 # ---------------------------------------------------------------------------
-# Multi-solution (list) best_control_vector path (lines 266-273)
+# Multi-solution (list) best_control_vector path
 # ---------------------------------------------------------------------------
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
 @patch(f"{_RMS}.ProblemDispatcherService")
 @patch(f"{_RMS}.SolutionUpdaterService")
 @patch(f"{_RMS}.parse_flat_dict_to_nested", return_value={"x": 1})
 def test_run_risk_management_list_control_vector(
-    _mock_parse, mock_su, mock_dispatcher, mock_sim, mock_ctx
+    _mock_parse, mock_su, mock_dispatcher, mock_sim, mock_ctx, mock_bootstrap
 ):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
@@ -352,55 +413,7 @@ def test_run_risk_management_list_control_vector(
 
 
 # ---------------------------------------------------------------------------
-# _validate_well_initial_states raises ValueError on ValidationError (lines 344-352)
-# ---------------------------------------------------------------------------
-
-
-def test_validate_well_initial_states_validation_error():
-    from pydantic import BaseModel, TypeAdapter
-
-    class _Schema(BaseModel):
-        value: int
-
-    type_adapter = TypeAdapter(_Schema)
-
-    mock_item = MagicMock()
-    mock_item.well_name = "W1"
-    mock_item.initial_state = {"value": "not_a_number"}
-
-    mock_plugin = MagicMock()
-    mock_plugin.implementation.get_well_state_adapter.return_value = type_adapter
-
-    mock_pd = MagicMock()
-    mock_pd.well_design = [mock_item]
-
-    with pytest.raises(ValueError, match="W1"):
-        rms._validate_well_initial_states(mock_pd, mock_plugin, "test_plugin")
-
-
-def test_validate_well_initial_states_happy():
-    from pydantic import BaseModel, TypeAdapter
-
-    class _Schema(BaseModel):
-        value: int
-
-    type_adapter = TypeAdapter(_Schema)
-
-    mock_item = MagicMock()
-    mock_item.well_name = "W1"
-    mock_item.initial_state = {"value": 42}
-
-    mock_plugin = MagicMock()
-    mock_plugin.implementation.get_well_state_adapter.return_value = type_adapter
-
-    mock_pd = MagicMock()
-    mock_pd.well_design = [mock_item]
-
-    rms._validate_well_initial_states(mock_pd, mock_plugin, "test_plugin")
-
-
-# ---------------------------------------------------------------------------
-# _save_checkpoint happy path and exception swallowing (lines 362-373)
+# _save_checkpoint happy path and exception swallowing
 # ---------------------------------------------------------------------------
 
 
@@ -428,20 +441,22 @@ def test_save_checkpoint_swallows_exception(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint restore path (lines 163-168) and checkpoint clear (lines 235-237)
+# Checkpoint restore path and checkpoint clear
 # ---------------------------------------------------------------------------
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
 @patch(f"{_RMS}.ProblemDispatcherService")
 @patch(f"{_RMS}.SolutionUpdaterService")
 @patch(f"{_RMS}.parse_flat_dict_to_nested", return_value={"x": 1})
 def test_run_risk_management_with_checkpoint_restore(
-    _mock_parse, mock_su, mock_dispatcher, mock_sim, mock_ctx
+    _mock_parse, mock_su, mock_dispatcher, mock_sim, mock_ctx, mock_bootstrap
 ):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst
@@ -472,20 +487,22 @@ def test_run_risk_management_with_checkpoint_restore(
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint file cleared after successful run (lines 235-237)
+# Checkpoint file cleared after successful run
 # ---------------------------------------------------------------------------
 
 
+@patch(f"{_RMS}.bootstrap_run_plugins")
 @patch(f"{_RMS}.simulation_process_context_manager")
 @patch(f"{_RMS}.SimulationService")
 @patch(f"{_RMS}.ProblemDispatcherService")
 @patch(f"{_RMS}.SolutionUpdaterService")
 @patch(f"{_RMS}.parse_flat_dict_to_nested", return_value={"x": 1})
 def test_run_risk_management_checkpoint_file_cleared(
-    _mock_parse, mock_su, mock_dispatcher, mock_sim, mock_ctx, tmp_path
+    _mock_parse, mock_su, mock_dispatcher, mock_sim, mock_ctx, mock_bootstrap, tmp_path
 ):
     mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
     mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_dispatcher_inst = MagicMock()
     mock_dispatcher.return_value = mock_dispatcher_inst

@@ -20,21 +20,25 @@ from services.solution_updater_service.core.service import SolutionUpdaterServic
 def _make_problem_definition(tmp_path: Path) -> ProblemDispatcherDefinition:
     return ProblemDispatcherDefinition.model_validate(
         {
-            "well_design": [
-                {
-                    "well_name": "W1",
-                    "initial_state": {
-                        "well_type": "IWell",
-                        "wellhead": {"x": 0, "y": 50, "z": 0},
-                        "md": 200,
-                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                    },
-                    "parameter_bounds": {
-                        "wellhead": {"x": {"lb": 0, "ub": 100}},
-                        "md": {"lb": 0, "ub": 300},
-                    },
-                }
-            ],
+            "domain_services": {
+                "well_design": [
+                    {
+                        "name": "W1",
+                        "initial_state": {
+                            "well_type": "IWell",
+                            "wellhead": {"x": 0, "y": 50, "z": 0},
+                            "md": 200,
+                            "perforations": {
+                                "p1": {"start_md": 100.0, "end_md": 200.0}
+                            },
+                        },
+                        "parameter_bounds": {
+                            "wellhead": {"x": {"lb": 0, "ub": 100}},
+                            "md": {"lb": 0, "ub": 300},
+                        },
+                    }
+                ]
+            },
             "optimization_parameters": {
                 "objectives": {"metric1": "minimize"},
                 "max_generations": 20,
@@ -49,7 +53,7 @@ def _make_problem_definition(tmp_path: Path) -> ProblemDispatcherDefinition:
             "plugins": {
                 "connector": "opendarts",
                 "optimizer": "pso",
-                "domain_service": "builtin",
+                "domain_services": ["well_design"],
             },
         }
     )

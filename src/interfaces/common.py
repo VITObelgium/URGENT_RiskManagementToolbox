@@ -20,6 +20,9 @@ from orchestration.risk_management_service.core.service.checkpoint import (
     compute_file_hash,
     LoadedCheckpointData,
 )
+from orchestration.risk_management_service.core.service.plugin_bootstrap import (
+    validate_problem_definition,
+)
 from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
 
@@ -85,7 +88,7 @@ def _load_problem_definition(
         return checkpoint_data["config"], checkpoint_data
 
     with open(config_file) as f:  # type: ignore[arg-type]
-        return ProblemDispatcherDefinition.model_validate(json.load(f)), None
+        return validate_problem_definition(json.load(f)), None
 
 
 def risk_management(

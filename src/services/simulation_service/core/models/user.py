@@ -6,7 +6,13 @@ from pydantic import BaseModel
 
 
 class SimulationCase(BaseModel, extra="forbid"):
-    wells: dict[str, Any]
+    """One simulation candidate.
+
+    ``payload`` is the opaque simulation input: one key per configured domain
+    service (the service's "column"), with plugin-defined values.
+    """
+
+    payload: dict[str, Any]
     control_vector: dict[str, float]
     results: dict[str, float]
 

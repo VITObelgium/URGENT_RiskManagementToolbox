@@ -3,12 +3,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from plugins.domain_services.builtin import (
-    BuiltinDomainService,
+from plugins.domain_services.well_design import (
     SimulationWellModel,
+    WellDesignDomainService,
     WellDesignServiceResponse,
 )
-from plugins.domain_services.builtin import (
+from plugins.domain_services.well_design import (
     HWellModel,
     IWellModel,
     JWellModel,
@@ -615,13 +615,13 @@ def test_well_design_service(
     expected_output: dict[str, Any],
     expected_exception: type[BaseException] | None,
 ) -> None:
-    service = BuiltinDomainService()
+    service = WellDesignDomainService()
     if expected_exception:
         with pytest.raises(expected_exception):
-            service.process_request(input_data)
+            service.build_payload(input_data["models"])
     else:
-        payload = service.process_request(input_data)
-        # process_request returns a plain dict; re-wrap for attribute-level assertions.
+        payload = service.build_payload(input_data["models"])
+        # build_payload returns a plain dict; re-wrap for attribute-level assertions.
         response = WellDesignServiceResponse(**payload)
         assert all(isinstance(m, SimulationWellModel) for m in response.wells)
         for m, r in zip(response.wells, expected_output["results"]):

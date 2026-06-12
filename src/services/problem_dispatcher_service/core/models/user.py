@@ -21,9 +21,9 @@ from logger import get_logger
 from services.problem_dispatcher_service.core.utils import validate_bounds_recursive
 from services.shared import (
     Boundaries,
+    DomainServiceName,
     LinearInequalities,
     ServiceRequest,
-    ServiceType,
 )
 from services.solution_updater_service import ControlVector
 
@@ -37,15 +37,17 @@ type ParameterBoundaries = dict[
 ]
 
 
-class WellDesignItem(BaseModel, extra="forbid"):
-    well_name: str
+class DomainServiceItem(BaseModel, extra="forbid"):
+    """One optimizable item owned by a domain service (e.g. a well)."""
+
+    name: str
     initial_state: dict[str, Any]
     parameter_bounds: ParameterBoundaries | None = Field(default=None)
 
     @model_validator(mode="before")
     @classmethod
-    def set_initial_state_well_name(cls, values):
-        values["initial_state"]["name"] = values["well_name"]
+    def set_initial_state_name(cls, values: dict[str, Any]) -> dict[str, Any]:
+        values["initial_state"]["name"] = values["name"]
         return values
 
     @model_validator(mode="after")
@@ -106,12 +108,24 @@ class SimulationConfig(BaseModel, extra="forbid"):
 class PluginConfig(BaseModel, extra="forbid"):
     """Selects which plugin implementations to use for a run.
 
-    Available built-in names: connector="opendarts", optimizer="pso", domain_service="builtin".
+    Available built-in names: connector="opendarts", optimizer="pso",
+    domain_services=["well_design"] (demo second service: "well_counter").
     """
 
     connector: str
     optimizer: str
-    domain_service: str
+    domain_services: list[DomainServiceName] = Field(min_length=1)
+
+    @field_validator("domain_services")
+    @classmethod
+    def validate_unique_domain_services(
+        cls, value: list[DomainServiceName]
+    ) -> list[DomainServiceName]:
+        if duplicates := _duplicate_names(value):
+            raise ValueError(
+                f"plugins.domain_services must be unique. Duplicate: {duplicates}"
+            )
+        return value
 
 
 class OptimizationParameters(BaseModel, extra="forbid"):
@@ -140,26 +154,31 @@ class OptimizationParameters(BaseModel, extra="forbid"):
     seed: int | None = Field(default=None)
 
 
-def _unique_items(seq: list[WellDesignItem]) -> list[WellDesignItem]:
-    """Ensures that all well names in the sequence are unique."""
-    names = [w.well_name for w in seq]
-    if len(names) != len(set(names)):
-        dup = next(n for n in names if names.count(n) > 1)
-        raise ValueError(f"Duplicate well_name detected: {dup}")
+def _duplicate_names(names: list[str]) -> list[str]:
+    seen: set[str] = set()
+    return sorted({n for n in names if n in seen or seen.add(n)})  # type: ignore[func-returns-value]
+
+
+def _unique_items(seq: list[DomainServiceItem]) -> list[DomainServiceItem]:
+    """Ensures that all item names in the sequence are unique."""
+    if duplicates := _duplicate_names([item.name for item in seq]):
+        raise ValueError(f"Duplicate item name detected: {duplicates}")
     return seq
 
 
-UniqueWellList = Annotated[list[WellDesignItem], AfterValidator(_unique_items)]
+UniqueItemList = Annotated[list[DomainServiceItem], AfterValidator(_unique_items)]
 
 
 class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
-    """
-    Services
-    Optimization parameters
+    """Validated run configuration.
+
+    ``domain_services`` maps each configured domain service plugin name to the
+    items that service owns; its keys must match ``plugins.domain_services``
+    exactly. Each service contributes one column to the simulation payload.
     """
 
     run_mode: RunMode = Field(default=RunMode.Optimization)
-    well_design: UniqueWellList
+    domain_services: dict[DomainServiceName, UniqueItemList]
     optimization_parameters: OptimizationParameters = Field(
         default_factory=OptimizationParameters
     )
@@ -209,60 +228,85 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
         return self
 
     @model_validator(mode="after")
+    def validate_domain_services_match_plugins(self) -> Self:
+        configured = set(self.plugins.domain_services)
+        defined = set(self.domain_services)
+        if configured != defined:
+            missing = sorted(configured - defined)
+            extra = sorted(defined - configured)
+            raise ValueError(
+                "domain_services sections must match plugins.domain_services "
+                f"exactly (missing sections: {missing}, unconfigured sections: {extra})"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_parameter_bounds_for_task(self) -> Self:
         if self.run_mode == RunMode.Optimization:
-            missing = [w.well_name for w in self.well_design if not w.parameter_bounds]
+            missing = [
+                f"{service}.{item.name}"
+                for service, items in self.domain_services.items()
+                for item in items
+                if not item.parameter_bounds
+            ]
             if missing:
                 raise ValueError(
-                    "parameter_bounds are required when run-model is 'optimization' "
-                    f"(missing for wells: {', '.join(missing)})"
+                    "parameter_bounds are required when run-mode is 'optimization' "
+                    f"(missing for items: {', '.join(missing)})"
                 )
         return self
 
     @model_validator(mode="after")
     def check_linear_inequalities_constraints_compliance(self) -> Self:
+        """Validate that every inequality variable resolves to a declared bound.
+
+        Variables are named ``<domain_service>.<item>.<attribute path>``; rows
+        may mix variables from different domain services.
+        """
         if (
             self.run_mode == RunMode.Evaluation
             or not self.optimization_parameters.linear_inequalities
         ):
             return self
 
-        def _has_nested_path(d: dict, path: list[str]) -> bool:
-            node = d
+        def _has_nested_path(d: dict[str, Any], path: list[str]) -> bool:
+            node: Any = d
             for p in path:
                 if not isinstance(node, dict) or p not in node:
                     return False
                 node = node[p]
             return True
 
-        constraints_by_well = {
-            w.well_name: (w.parameter_bounds or {}) for w in self.well_design
+        bounds_by_item = {
+            service: {item.name: (item.parameter_bounds or {}) for item in items}
+            for service, items in self.domain_services.items()
         }
 
         for A_row in self.optimization_parameters.linear_inequalities.A:
             for key in A_row.keys():
-                service, var = key.split(".", 1)
-                if service not in ServiceType:
+                service, _, var = key.partition(".")
+                if service not in bounds_by_item or not var:
                     raise ValueError(
-                        f"Unknown service type: {service}. Make sure service type is used as prefix in variable name."
+                        f"Unknown domain service prefix in inequality variable {key!r}. "
+                        f"Configured domain services: {sorted(bounds_by_item)}"
                     )
-                well_name, attr_path = var.split(".", 1)
-                top_attr = attr_path.split(".", 1)[0]
-                if well_name not in constraints_by_well:
+                item_name, _, attr_path = var.partition(".")
+                if not attr_path:
                     raise ValueError(
-                        f"Linear inequalities reference unknown well: {well_name}"
+                        f"Inequality variable {key!r} must be of the form "
+                        "'<domain_service>.<item>.<attribute path>'"
                     )
-                well_constraints = constraints_by_well[well_name]
-                if top_attr not in well_constraints:
+                if item_name not in bounds_by_item[service]:
                     raise ValueError(
-                        f"Well '{well_name}' missing optimization constraint for '{top_attr}'"
+                        f"Linear inequalities reference unknown item: "
+                        f"'{item_name}' in domain service '{service}'"
                     )
-                if "." in attr_path:
-                    parts = attr_path.split(".")
-                    if not _has_nested_path(well_constraints, parts):
-                        raise ValueError(
-                            f"Constraint path missing for variable '{var}' in well '{well_name}'"
-                        )
+                item_bounds = bounds_by_item[service][item_name]
+                if not _has_nested_path(item_bounds, attr_path.split(".")):
+                    raise ValueError(
+                        f"Constraint path missing for variable '{var}' in domain "
+                        f"service '{service}'"
+                    )
 
         return self
 
@@ -273,7 +317,7 @@ class RequestPayload(BaseModel, extra="forbid"):
 
 
 class SolutionCandidateServicesTasks(BaseModel, extra="forbid"):
-    tasks: dict[ServiceType, RequestPayload]
+    tasks: dict[DomainServiceName, RequestPayload]
 
 
 class ProblemDispatcherServiceResponse(BaseModel, extra="forbid"):

@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from plugins.domain_services.builtin import (
+from plugins.domain_services.well_design import (
     SimulationWellModel,
     SimulationWellPerforationModel,
     WellDesignServiceResponse,

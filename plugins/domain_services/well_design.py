@@ -1,7 +1,8 @@
-"""Built-in domain service plugin — self-contained well geometry kernel.
+"""Built-in well_design domain service plugin — self-contained well geometry kernel.
 
-Dispatches well-design requests to the built-in geometry templates and returns
-simulation-ready WellDesignServiceResponse objects.
+Translates well item states into the built-in geometry templates and returns a
+simulation-ready payload column shaped ``{"wells": [...]}`` (a validated
+``WellDesignServiceResponse`` dump).
 
 User-written domain plugins must NOT import private geometry types from this
 file. Build your own geometry, or construct a minimal WellDesignServiceResponse
@@ -1011,17 +1012,17 @@ def _build_simulation_well_model(well: Well) -> SimulationWellModel:
     )
 
 
-class BuiltinDomainService(DomainServiceInterface):
+class WellDesignDomainService(DomainServiceInterface):
     """Reference domain service: dispatches each well model to its geometry template."""
 
-    ServiceName: str = "builtin"
+    ServiceName = "well_design"
 
     @classmethod
-    def get_well_state_adapter(cls) -> TypeAdapter[Any]:
+    def get_item_state_adapter(cls) -> TypeAdapter[Any]:
         return TypeAdapter(WellModel)
 
-    def process_request(self, request_dict: dict[str, Any]) -> dict[str, Any]:
-        request = WellDesignServiceRequest(**request_dict)
+    def build_payload(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        request = WellDesignServiceRequest(models=items)
         wells: list[SimulationWellModel] = []
         for model in request.models:
             logger.debug("Building well %r (type=%s)", model.name, type(model).__name__)
@@ -1044,6 +1045,6 @@ class BuiltinDomainService(DomainServiceInterface):
 # Plugin descriptor
 
 plugin = DomainServicePlugin(
-    name=BuiltinDomainService.ServiceName,
-    implementation=BuiltinDomainService,
+    name=WellDesignDomainService.ServiceName,
+    implementation=WellDesignDomainService,
 )

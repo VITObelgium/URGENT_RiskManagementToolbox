@@ -138,29 +138,32 @@ pixi run python src/main.py --resume <checkpoint_filepath.npz> --model-file <mod
 
 ### 3. Plugin system
 
-The toolbox uses an explicit plugin system to select the reservoir simulator connector, optimization algorithm, and domain service. **Every configuration file must include a `plugins` block** — there are no implicit defaults.
+The toolbox uses an explicit plugin system to select the reservoir simulator connector, optimization algorithm, and one or more domain services. **Every configuration file must include a `plugins` block** — there are no implicit defaults.
 
 ```json
 "plugins": {
   "connector": "opendarts",
   "optimizer": "pso",
-  "domain_service": "builtin"
+  "domain_services": ["well_design"]
 }
 ```
 
-Each value is a plugin name that maps to a file in `plugins/<type>/<name>.py`. The toolbox loads only the selected plugin at startup and validates the exported `plugin` descriptor.
+`connector` and `optimizer` take a single plugin name; `domain_services` takes a list of domain service plugin names (at least one, no duplicates). Each name maps to a file in `plugins/<type>/<name>.py`. The toolbox loads only the selected plugins at startup and validates each exported `plugin` descriptor.
+
+Configuration validation happens in two phases. The framework first reads the `plugins` block, loads the selected plugins, and runs a trace-compatibility check: connectors and optimizers may declare required trace tags, and each domain service provides its service name as a trace tag by default. If a required tag is not provided by any selected domain service, startup fails fast with a clear error. Only then is the full configuration validated — including each item's `initial_state`, which is checked by the owning plugin's own Pydantic model.
 
 #### Bundled plugin files
 
 The repository includes these plugin files as examples and ready-to-select
 implementations. They are not defaults: each run must still name the desired
-connector, optimizer, and domain service in its config.
+connector, optimizer, and domain services in its config.
 
 | Kind | Name | Description |
 |------|------|-------------|
 | `connector` | `opendarts` | OpenDARTS reservoir simulator connector |
 | `optimizer` | `pso` | Particle Swarm Optimization engine |
-| `domain_service` | `builtin` | Geometric well design service (IWell / JWell / SWell / HWell) |
+| `domain_service` | `well_design` | Geometric well design service (IWell / JWell / SWell / HWell) |
+| `domain_service` | `well_counter` | Minimal demo service: each item optimizes a single `count` value |
 
 ---
 
@@ -213,9 +216,11 @@ Implement `build_command(...)` and `parse_results(...)`, then select the connect
 "plugins": {
   "connector": "my_simulator",
   "optimizer": "pso",
-  "domain_service": "builtin"
+  "domain_services": ["well_design"]
 }
 ```
+
+A connector may additionally define an optional classmethod `required_traces()` returning a `frozenset[str]` of trace tags it depends on (default: empty). At startup the framework verifies that every required tag is provided by one of the configured domain services and aborts with a clear error otherwise.
 
 The plugin file is automatically staged into each worker's runtime directory — no manual copying required.
 
@@ -281,22 +286,24 @@ Select it in config:
 "plugins": {
   "connector": "opendarts",
   "optimizer": "genetic_algorithm",
-  "domain_service": "builtin"
+  "domain_services": ["well_design"]
 }
 ```
+
+Like connectors, an optimizer may define an optional classmethod `required_traces()` returning a `frozenset[str]` of trace tags it depends on (default: empty). Missing tags cause the run to abort at startup.
 
 ---
 
 ##### Domain Service plugin
 
-A domain service plugin converts the well design request into a simulation payload. It runs entirely in the orchestrator — never in simulation workers. The framework handles parameter space construction, PSO boundary extraction, and task packaging; the plugin owns geometry, well model validation, and what the simulator payload looks like.
+A domain service plugin converts its configured items into one section of the simulation payload. It runs entirely in the orchestrator — never in simulation workers. The framework handles parameter space construction, optimizer boundary extraction, and task packaging; the plugin owns item validation and what its section of the simulator payload looks like. Multiple domain services can be active in a single run — `plugins.domain_services` is a list.
 
 Two things must be implemented:
 
 | Method | Called when | Purpose |
 |--------|-------------|---------|
-| `get_well_state_adapter` | startup, once | Returns a `TypeAdapter` the framework uses to validate each well's `initial_state` dict before optimization begins |
-| `process_request` | every candidate | Converts the well request dict into the simulation payload dict that the connector receives |
+| `get_item_state_adapter` | startup, once | Returns a `TypeAdapter` the framework uses to validate each item's `initial_state` dict before optimization begins |
+| `build_payload` | every candidate | Converts the service's item dicts into the payload section that is sent to the simulator under the service's name |
 
 ```shell
 pixi run create-plugin domain CompanyDomainService
@@ -317,62 +324,80 @@ class CompanyDomainService(DomainServiceInterface):
     ServiceName: str = 'company_domain_service'
 
     @classmethod
-    def get_well_state_adapter(cls) -> TypeAdapter[Any]:
-        """Return a TypeAdapter for validating and normalising a well's initial_state dict.
+    def get_item_state_adapter(cls) -> TypeAdapter[Any]:
+        """Return a TypeAdapter for validating and normalising an item's initial_state dict.
 
         Called once at orchestrator startup after the plugin is loaded and
-        before ``ProblemDispatcherService`` is constructed. The returned adapter
-        must accept dicts with at least a ``"name"`` key.
+        before ``ProblemDispatcherService`` is constructed.
         """
         raise NotImplementedError()
 
-    def process_request(self, request_dict: dict[str, Any]) -> dict[str, Any]:
-        """Convert a well-design request dict to an opaque simulation payload dict.
+    def build_payload(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        """Build this service's section of the simulation payload.
 
-        Called once per optimisation candidate. The returned dict is serialised
-        to JSON and sent to the simulator worker verbatim — its structure is
-        entirely plugin-defined.
+        Called once per optimisation candidate with the current state of all
+        items configured under this service. The returned dict is placed under
+        the service's name in the combined payload sent to the simulator.
         """
         raise NotImplementedError()
 
 plugin = DomainServicePlugin(name=CompanyDomainService.ServiceName, implementation=CompanyDomainService)
 ```
 
-`process_request` receives `{"models": [<well_dict>, ...]}` and must return a JSON-serialisable `dict`. The framework treats the returned dict as an opaque blob — it is serialised to gRPC, forwarded to the worker, and written to disk as the simulation input file. Its shape must match whatever your connector expects to read.
+`build_payload` receives the list of item dicts configured under the service's key in the top-level `domain_services` mapping (with the candidate's parameter values applied) and must return a JSON-serialisable `dict`. The framework places that dict under the service's name in the combined simulation payload, alongside the sections of the other active domain services. The control vector and result placeholders travel in separate transport fields and are not part of this payload:
+
+```json
+{
+  "well_design": { "wells": [ ... ] },
+  "well_counter": { "counts": { ... } }
+}
+```
+
+Control-vector keys follow the pattern `<domain_service>#<item>#<param...>`, e.g. `well_design#INJ#wellhead#x`.
 
 **Minimal stub** (bypasses geometry, useful for testing connectors):
 
 ```python
-def process_request(self, request_dict: dict[str, Any]) -> dict[str, Any]:
+def build_payload(self, items: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "wells": [
-            {"name": m["name"], "trajectory": [[0.0, 0.0, 0.0]], "completion": None}
-            for m in request_dict["models"]
+            {"name": item["name"], "trajectory": [[0.0, 0.0, 0.0]], "completion": None}
+            for item in items
         ]
     }
 ```
 
-`get_well_state_adapter` must return a `TypeAdapter` wrapping your well model type. The builtin plugin uses a Pydantic discriminated union over `IWellModel | JWellModel | SWellModel | HWellModel`; a custom plugin can use any Pydantic model:
+`get_item_state_adapter` must return a `TypeAdapter` wrapping your item model type. The bundled `well_design` plugin uses a Pydantic discriminated union over `IWellModel | JWellModel | SWellModel | HWellModel`; a custom plugin can use any Pydantic model:
 
 ```python
 from pydantic import BaseModel, TypeAdapter
 
-class MyWellModel(BaseModel):
-    name: str
+class MyItemModel(BaseModel):
     depth: float
 
 @classmethod
-def get_well_state_adapter(cls) -> TypeAdapter[Any]:
-    return TypeAdapter(MyWellModel)
+def get_item_state_adapter(cls) -> TypeAdapter[Any]:
+    return TypeAdapter(MyItemModel)
 ```
 
-Select the plugin in config:
+A domain service also participates in the startup trace-compatibility check. The optional classmethod `trace()` returns a `frozenset[str]` of trace tags the service provides; the default implementation returns `{ServiceName}`. Connectors and optimizers declare the tags they need via `required_traces()` — if a required tag is not provided by any configured domain service, the run aborts at startup.
+
+Select the plugin in config. The section key under the top-level `domain_services` mapping must exactly match the plugin name:
 
 ```json
 "plugins": {
   "connector": "opendarts",
   "optimizer": "pso",
-  "domain_service": "company_domain_service"
+  "domain_services": ["company_domain_service"]
+},
+"domain_services": {
+  "company_domain_service": [
+    {
+      "name": "ITEM_1",
+      "initial_state": { ... },
+      "parameter_bounds": { ... }
+    }
+  ]
 }
 ```
 
@@ -431,7 +456,15 @@ set_num_threads(1)
        ...
    ```
 
-   The `injected_configuration` contains the control vector for the optimization process.
+   The `injected_configuration` is a dictionary with one key per active domain service, e.g.:
+
+   ```json
+   {
+     "well_design": { "wells": [ ... ] },
+     "well_counter": { "counts": { ... } }
+   }
+   ```
+
    It is **strongly recommended** to pass this configuration to the model during initialization:
 
    ```python
@@ -461,13 +494,13 @@ set_num_threads(1)
    from connectors.opendarts import OpenDartsConnector
    ```
 
-   Wells must be defined in the `set_wells` method of the simulation model:
+   Wells must be defined in the `set_wells` method of the simulation model. Pass the `well_design` section of the injected configuration (the well payload is no longer at the top level):
 
    ```python
    def set_wells(self):
 
        wells = OpenDartsConnector.get_well_connection_cells(
-           self._configuration, self.reservoir
+           self._configuration["well_design"], self.reservoir
        )
 
        for well_name, cells in wells.items():
@@ -516,8 +549,8 @@ Configuration file define services to be used for simulation and optimization as
 
 The toolbox expects **one JSON file** that defines:
 
-1. Services name and parameters for optimization (with their bounds)
-2. Which plugins to use (connector, optimizer, domain service)
+1. Which plugins to use (connector, optimizer, domain services)
+2. The items each domain service optimizes (with their bounds)
 3. How the optimization algorithm is configured
 
 ### Input file schemas
@@ -529,18 +562,31 @@ Input configuration file is a JSON file with the structures presented in `schema
 ```json
 {
    "run_mode": "optimization",
-   "=== SERVICE NAME ===": service item(s),
-   "optimization_parameters": { ... },
-   "simulation_config": { ... },
    "plugins": {
      "connector": "<name>",
      "optimizer": "<name>",
-     "domain_service": "<name>"
-   }
+     "domain_services": ["<name>", "..."]
+   },
+   "domain_services": {
+     "<name>": [ service item(s) ],
+     "...": [ ... ]
+   },
+   "optimization_parameters": { ... },
+   "simulation_config": { ... }
 }
 ```
 
-> **Important:** The `plugins` block is **required**. The toolbox will not start without it.
+> **Important:** The `plugins` block is **required**. The toolbox will not start without it. The keys of the top-level `domain_services` mapping must exactly match the names listed in `plugins.domain_services`.
+
+Each service item is an object with a unique `name`, an `initial_state` (validated by the owning plugin's Pydantic model) and an optional `parameter_bounds` block:
+
+```json
+{
+  "name": "INJ",
+  "initial_state": { ... },
+  "parameter_bounds": { ... }
+}
+```
 
 #### Run Mode
 
@@ -574,7 +620,7 @@ pixi run python src/main.py \
     --model-file path/to/model.zip
 ```
 
-The problem configuration (objectives, well design, bounds, etc.) is restored directly from the checkpoint — no separate `--config-file` is needed.
+The problem configuration (objectives, domain service items, bounds, etc.) is restored directly from the checkpoint — no separate `--config-file` is needed.
 
 > **Note:** The toolbox validates that the model file provided at resume time matches the one used when the checkpoint was created, using a SHA-256 hash. Providing a different model will raise an error.
 
@@ -598,22 +644,27 @@ With `checkpoint_interval: 5`, a checkpoint is saved after generations 5, 10, 15
 
 | Service name  | Plugin kind      | Description                                                            |
 |---------------|------------------|------------------------------------------------------------------------|
-| `well_design` | `domain_service` | Well placement, trajectory and completion geometry (builtin plugin: IWell / JWell / SWell / HWell). Custom plugins may replace this entirely. |
+| `well_design` | `domain_service` | Well placement, trajectory and completion geometry (IWell / JWell / SWell / HWell). Bundled plugin file: `plugins/domain_services/well_design.py`. Custom plugins may replace this entirely. |
+| `well_counter` | `domain_service` | Minimal demo service. Each item's `initial_state` is `{"count": N}` with optional bounds on `count`; its payload section is `{"counts": {"<item>": <count>}}`. |
 
 
 
 
 ### Well design service
 
-> **Note:** The `well_design` schema below describes the `initial_state` format expected by the **builtin domain service plugin** (`"domain_service": "builtin"`). A custom domain service plugin may define its own `initial_state` shape — whatever its `get_well_state_adapter` accepts.
+> **Note:** The schema below describes the `initial_state` format expected by the **bundled `well_design` domain service plugin** (`"domain_services": ["well_design"]`). A custom domain service plugin may define its own `initial_state` shape — whatever its `get_item_state_adapter` accepts.
 
-`well_design` expecting is an array of objects (service items):
+The `well_design` key of the top-level `domain_services` mapping expects an array of objects (service items):
 
 ```json
-{
-  "well_name": "INJ",
-  "initial_state": { ... },
-  "parameter_bounds": { ... }
+"domain_services": {
+  "well_design": [
+    {
+      "name": "INJ",
+      "initial_state": { ... },
+      "parameter_bounds": { ... }
+    }
+  ]
 }
 ```
 
@@ -621,7 +672,7 @@ With `checkpoint_interval: 5`, a checkpoint is saved after generations 5, 10, 15
 
 | Field | Required | Description |
 |----|----|----|
-| `well_name` | ✅ | Unique identifier used across the configuration |
+| `name` | ✅ | Unique identifier used across the configuration |
 | `initial_state` | ✅ | Defines well initial (user defined) geometry and completion |
 | `parameter_bounds` | ✅ (optimization mode) | Selects which parameters (from initial state) are optimized, with the lower and upper range. Not required in `evaluation` mode. |
 
@@ -871,9 +922,9 @@ These settings control the execution and termination of the optimization process
 | `seed` | Integer \| null | `null`   | Random seed for the optimization algorithm. Set to an integer value to make runs reproducible. When `null`, results will vary between runs.                                                                                                                                                                              |
 | `linear_inequalities` | see below       |`null` | Dictionary of linear inequality constraints.
 
-#### Linear inequalities allow you to define relationships between variables across different wells, such as a combined "drilling budget" for total measured depth.
+#### Linear inequalities allow you to define relationships between variables across different items — and even across different domain services — such as a combined "drilling budget" for total measured depth.
 
-- **A**: List of coefficient maps. Variables must be named as `service_name.attribute.subattribute` (e.g., `well_design.PRO.md` or `well_design.INJ.perforations.p1.start_md`).
+- **A**: List of coefficient maps. Variables must be named as `<domain_service>.<item>.<parameter path>` (e.g., `well_design.PRO.md` or `well_design.INJ.perforations.p1.start_md`). The `<domain_service>` prefix must be one of the names configured in `plugins.domain_services`, and each referenced parameter must have `parameter_bounds` defined in its item. A single row may mix variables from different domain services — cross-domain constraints are supported (e.g., `{"well_design.INJ.wellhead.x": 1.0, "well_counter.field.count": 100.0}`).
 - **b**: List of constant values (right-hand side of the inequality).
 - **sense**: List of operators (`<=`, `>=`, `<`, `>`). Defaults to `<=` if omitted.
 
@@ -944,78 +995,85 @@ The Well design service will be use to determine the optimal wells placement and
 
 ```json
 {
-  "well_design": [
-    {
-      "well_name": "INJ",
-      "initial_state": {
-        "well_type": "IWell",
-        "md": 2500.0,
-        "md_step": 1.0,
-        "wellhead": {
-          "x": 500.0,
-          "y": 500.0,
-          "z": 0.0
+  "plugins": {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "domain_services": ["well_design"]
+  },
+  "domain_services": {
+    "well_design": [
+      {
+        "name": "INJ",
+        "initial_state": {
+          "well_type": "IWell",
+          "md": 2500.0,
+          "md_step": 1.0,
+          "wellhead": {
+            "x": 500.0,
+            "y": 500.0,
+            "z": 0.0
+          },
+          "perforations": {
+            "p1": {
+              "start_md": 2000.0,
+              "end_md": 2500.0
+            }
+          }
         },
-        "perforations": {
-          "p1": {
-            "start_md": 2000.0,
-            "end_md": 2500.0
+        "parameter_bounds": {
+          "wellhead": {
+            "x": {
+              "lb": 100.0,
+              "ub": 1000.0
+            },
+            "y": {
+              "lb": 100.0,
+              "ub": 1000.0
+            }
+          },
+          "md": {
+            "lb": 1500.0,
+            "ub": 3000.0
           }
         }
       },
-      "parameter_bounds": {
-        "wellhead": {
-          "x": {
-            "lb": 100.0,
-            "ub": 1000.0
+      {
+        "name": "PRO",
+        "initial_state": {
+          "well_type": "IWell",
+          "md": 2500.0,
+          "md_step": 1.0,
+          "wellhead": {
+            "x": 1500.0,
+            "y": 1500.0,
+            "z": 0.0
           },
-          "y": {
-            "lb": 100.0,
-            "ub": 1000.0
+          "perforations": {
+            "p1": {
+              "start_md": 2100.0,
+              "end_md": 2200.0
+            }
           }
         },
-        "md": {
-          "lb": 1500.0,
-          "ub": 3000.0
+        "parameter_bounds": {
+          "wellhead": {
+            "x": {
+              "lb": 1000.0,
+              "ub": 2500.0
+            },
+            "y": {
+              "lb": 1000.0,
+              "ub": 2500.0
+            }
+          },
+          "md": {
+            "lb": 1500.0,
+            "ub": 3000.0
+          }
         }
       }
-    },
-    {
-      "well_name": "PRO",
-      "initial_state": {
-        "well_type": "IWell",
-        "md": 2500.0,
-        "md_step": 1.0,
-        "wellhead": {
-          "x": 1500.0,
-          "y": 1500.0,
-          "z": 0.0
-        },
-        "perforations": {
-          "p1": {
-            "start_md": 2100.0,
-            "end_md": 2200.0
-          }
-        }
-      },
-      "parameter_bounds": {
-        "wellhead": {
-          "x": {
-            "lb": 1000.0,
-            "ub": 2500.0
-          },
-          "y": {
-            "lb": 1000.0,
-            "ub": 2500.0
-          }
-        },
-        "md": {
-          "lb": 1500.0,
-          "ub": 3000.0
-        }
-      }
-    }
-  ],
+    ]
+  },
   "optimization_parameters": {
     "objectives": {
       "HEAT": "maximize"
@@ -1044,11 +1102,6 @@ The Well design service will be use to determine the optimal wells placement and
     "worker_count": 4,
     "checkpoint_interval": 5,
     "checkpoint_path": "checkpoints"
-  },
-  "plugins": {
-    "connector": "opendarts",
-    "optimizer": "pso",
-    "domain_service": "builtin"
   }
 }
 

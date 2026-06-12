@@ -60,6 +60,16 @@ class SimulationStatus(Enum):
 
 
 class ConnectorInterface(ABC):
+    @classmethod
+    def required_traces(cls) -> frozenset[str]:
+        """Trace tags that must be provided by the configured domain services.
+
+        Used by the startup plugin-trace verification: every tag returned here
+        must appear in the union of the domain services' ``trace()`` sets,
+        otherwise the run fails fast. Default: no requirements.
+        """
+        return frozenset()
+
     @abstractmethod
     def run(
         self,

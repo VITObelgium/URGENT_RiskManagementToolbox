@@ -10,13 +10,12 @@ from services.problem_dispatcher_service.core.models import (
     LinearInequalities,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
-    ServiceType,
 )
 from services.problem_dispatcher_service.core.utils import (
     DEFAULT_SEPARATOR,
     CandidateGenerator,
-    build_full_key_boundaries_from_well_design,
-    build_initial_state_from_well_design,
+    build_full_key_boundaries,
+    build_initial_state,
     convert_key_separator,
 )
 from services.shared import Boundaries
@@ -47,12 +46,9 @@ class ProblemDispatcherService:
                 self._problem_definition.optimization_parameters.linear_inequalities
             )
 
-            well_items = self._problem_definition.well_design
-            self._initial_state: dict[str, Any] = {
-                ServiceType.DomainService: build_initial_state_from_well_design(
-                    well_items
-                )
-            }
+            self._initial_state: dict[str, Any] = build_initial_state(
+                self._problem_definition.domain_services
+            )
             self.logger.debug("Initial state built: %s", self._initial_state)
 
             self._task_builder = TaskBuilder(self._initial_state)
@@ -166,9 +162,7 @@ class ProblemDispatcherService:
     def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
         if self._problem_definition.run_mode == RunMode.Evaluation:
             return {}
-        return build_full_key_boundaries_from_well_design(
-            self._problem_definition.well_design
-        )
+        return build_full_key_boundaries(self._problem_definition.domain_services)
 
     def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
         if (

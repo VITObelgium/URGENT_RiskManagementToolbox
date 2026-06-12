@@ -1,69 +1,76 @@
 {
   "run_mode": "optimization",
-  "well_design": [
-    {
-      "well_name": "INJ",
-      "initial_state": {
-        "well_type": "IWell",
-        "md": 4000.0,
-        "md_step": 1.0,
-        "wellhead": {
-          "x": 3460.0,
-          "y": 2900.0,
-          "z": 0.0
+  "plugins": {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "domain_services": ["well_design"]
+  },
+  "domain_services": {
+    "well_design": [
+      {
+        "name": "INJ",
+        "initial_state": {
+          "well_type": "IWell",
+          "md": 4000.0,
+          "md_step": 1.0,
+          "wellhead": {
+            "x": 3460.0,
+            "y": 2900.0,
+            "z": 0.0
+          },
+          "perforations": {
+            "p1": {
+              "start_md": 3250.0,
+              "end_md": 3609.0
+            }
+          }
         },
-        "perforations": {
-          "p1": {
-            "start_md": 3250.0,
-            "end_md": 3609.0
+        "parameter_bounds": {
+          "wellhead": {
+            "x": {
+              "lb": 1250.0,
+              "ub": 3750.0
+            },
+            "y": {
+              "lb": 800.0,
+              "ub": 3200.0
+            }
           }
         }
       },
-      "parameter_bounds": {
-        "wellhead": {
-          "x": {
-            "lb": 1250.0,
-            "ub": 3750.0
+      {
+        "name": "PROD",
+        "initial_state": {
+          "well_type": "IWell",
+          "md": 4000.0,
+          "md_step": 1.0,
+          "wellhead": {
+            "x": 1800.0,
+            "y": 1950.0,
+            "z": 0.0
           },
-          "y": {
-            "lb": 800.0,
-            "ub": 3200.0
+          "perforations": {
+            "p1": {
+              "start_md": 3250.0,
+              "end_md": 3609.0
+            }
           }
-        }
-      }
-    },
-    {
-      "well_name": "PROD",
-      "initial_state": {
-        "well_type": "IWell",
-        "md": 4000.0,
-        "md_step": 1.0,
-        "wellhead": {
-          "x": 1800.0,
-          "y": 1950.0,
-          "z": 0.0
         },
-        "perforations": {
-          "p1": {
-            "start_md": 3250.0,
-            "end_md": 3609.0
-          }
-        }
-      },
-      "parameter_bounds": {
-        "wellhead": {
-          "x": {
-            "lb": 1250.0,
-            "ub": 3750.0
-          },
-          "y": {
-            "lb": 800.0,
-            "ub": 3200.0
+        "parameter_bounds": {
+          "wellhead": {
+            "x": {
+              "lb": 1250.0,
+              "ub": 3750.0
+            },
+            "y": {
+              "lb": 800.0,
+              "ub": 3200.0
+            }
           }
         }
       }
-    }
-  ],
+    ]
+  },
   "optimization_parameters": {
     "objectives": {
       "Heat": "maximize"
@@ -76,10 +83,5 @@
     "worker_simulation_timeout_seconds": 900,
     "worker_count": 8,
     "checkpoint_interval": 1
-  },
-  "plugins": {
-    "connector": "opendarts",
-    "optimizer": "pso",
-    "domain_service": "builtin"
   }
 }

@@ -1,6 +1,6 @@
 import pytest
 
-from plugins.domain_services.builtin import TrajectoryPoint
+from plugins.domain_services.well_design import TrajectoryPoint
 from tests.well_management_service_tests.tools import (
     is_subsequence_points,
 )

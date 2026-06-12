@@ -4,7 +4,7 @@ from typing import MutableMapping
 import numpy as np
 import pytest
 
-from plugins.domain_services.builtin import (
+from plugins.domain_services.well_design import (
     CurvedWellSection,
     EmptySectionConfigurationException,
     LinearWellSection,

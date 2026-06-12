@@ -206,7 +206,7 @@ class SimulationService:
             sm.Simulation: The gRPC-compatible simulation object.
         """
         return sm.Simulation(
-            input=sm.SimulationInput(payload=json_to_str(case.wells)),
+            input=sm.SimulationInput(payload=json_to_str(case.payload)),
             result=sm.SimulationResult(result=json_to_str(case.results)),
             control_vector=sm.SimulationControlVector(
                 content=json_to_str(case.control_vector)
@@ -225,7 +225,7 @@ class SimulationService:
             SimulationCase: The simulation case object.
         """
         return SimulationCase(
-            wells=str_to_json(simulation.input.payload),
+            payload=str_to_json(simulation.input.payload),
             results=str_to_json(simulation.result.result),
             control_vector=str_to_json(simulation.control_vector.content),
         )

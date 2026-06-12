@@ -1,4 +1,6 @@
 from services.problem_dispatcher_service.core.models.user import (
+    DomainServiceItem,
+    DomainServiceName,
     LinearInequalities,
     OptimizationParameters,
     ParameterBoundaries,
@@ -6,18 +8,16 @@ from services.problem_dispatcher_service.core.models.user import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
     RequestPayload,
-    ServiceType,
     SolutionCandidateServicesTasks,
-    WellDesignItem,
 )
 
 __all__ = [
     "ProblemDispatcherDefinition",
     "ProblemDispatcherServiceResponse",
-    "WellDesignItem",
+    "DomainServiceItem",
+    "DomainServiceName",
     "ParameterBoundaries",
     "PluginConfig",
-    "ServiceType",
     "SolutionCandidateServicesTasks",
     "RequestPayload",
     "OptimizationParameters",

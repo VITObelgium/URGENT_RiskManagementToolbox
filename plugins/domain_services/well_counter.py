@@ -1,12 +1,4 @@
-"""Demo well_counter domain service plugin — a second payload column.
-
-Shows how several domain services run side by side: combine this plugin with
-the built-in ``well_design`` service in ``plugins.domain_services`` to
-optimize a discrete-ish well count alongside well geometry. Each item carries
-a continuous ``count`` control value (the optimizer produces continuous
-controls); the payload rounds it to an integer. The payload column is shaped
-``{"counts": {<item name>: <int count>}}``.
-"""
+"""Demo well_counter domain service plugin — a second payload column."""
 
 from __future__ import annotations
 

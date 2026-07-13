@@ -301,17 +301,16 @@ def test_run_risk_management_evaluation_mode(
 def test_run_risk_management_keyboard_interrupt(
     mock_su, mock_dispatcher, mock_sim, mock_ctx, mock_bootstrap
 ):
-    mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
-    mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    mock_ctx.return_value.__enter__.return_value = None  # fixed
+    mock_ctx.return_value.__exit__.return_value = False  # fixed
     mock_bootstrap.return_value = _mock_run_plugins()
 
     mock_sim.transfer_simulation_model.side_effect = KeyboardInterrupt()
 
     problem_def = _make_problem_def()
 
-    result = rms.run_risk_management(problem_def, b"model", model_hash="abc")
-
-    assert result is None
+    with pytest.raises(KeyboardInterrupt):  # KeyboardInterrupt is NOT caught here
+        rms.run_risk_management(problem_def, b"model", model_hash="abc")
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +407,7 @@ def test_run_risk_management_list_control_vector(
     result = rms.run_risk_management(problem_def, b"model", model_hash="abc")
 
     assert result is not None
-    best, cv = result
+    cv = result.control_vectors
     assert isinstance(cv, list)
 
 

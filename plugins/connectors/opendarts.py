@@ -88,7 +88,9 @@ class _StructReservoirProtocol(Protocol):
     global_data: _GlobalData
 
 
-def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
+def open_darts_input_configuration_injector(
+    func: Callable[..., None],
+) -> Callable[..., None]:
     """Inject a JSON configuration into the user simulation's main function.
 
     Usage::
@@ -104,7 +106,7 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> None:
         if len(sys.argv) < 2:
-            logger.info("Usage: python main.py <path-to-configuration.json>")
+            logger.error("Usage: python main.py <path-to-configuration.json>")
             sys.exit(1)
         json_config_str = sys.argv[1]
         if os.path.isfile(json_config_str):
@@ -129,10 +131,9 @@ def open_darts_input_configuration_injector(func: Callable[..., None]) -> Any:
         if not isinstance(config, (dict, list)):
             logger.error(f"Invalid JSON input, got:{type(config).__name__}")
             sys.exit(1)
-        if isinstance(config, dict):
-            if not all(isinstance(k, str) for k in config.keys()):
-                logger.error(f"Invalid JSON input:{config}")
-                sys.exit(1)
+        if isinstance(config, dict) and not all(isinstance(k, str) for k in config):
+            logger.error(f"Invalid JSON input:{config}")
+            sys.exit(1)
 
         func(config, *args, **kwargs)
 
@@ -144,6 +145,12 @@ class OpenDartsConnector(SubprocessConnectorInterface):
 
     ConnectorName = "opendarts"
     MsgTemplate = "OpenDartsConnector: Type:{0}, Value:{1}"
+    # Matches keys and float values (including scientific notation, e.g. 1e-06).
+    _ResultPattern = re.compile(
+        re.escape(MsgTemplate.format("\x00", "\x01"))
+        .replace("\x00", r"(\w+)")
+        .replace("\x01", r"([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?)")
+    )
 
     @classmethod
     def required_traces(cls) -> frozenset[str]:
@@ -159,14 +166,17 @@ class OpenDartsConnector(SubprocessConnectorInterface):
 
     @classmethod
     def parse_results(cls, work_dir: Path | None, stdout: str) -> SimulationResults:  # noqa: ARG002
-        template = cls.MsgTemplate
-        re_key = r"(\w+)"
-        re_value = r"([+-]?\d+(?:\.\d+)?)"
-        pattern = template.format(re_key, re_value)
-        matches = re.findall(pattern, stdout)
+        """Extract broadcast key/value pairs from the worker's stdout.
+
+        If a key was broadcast multiple times, the last occurrence wins.
+        """
         results: dict[str, float] = {}
-        for key, raw_value in matches:
-            results[key] = float(raw_value.strip())
+        for key, raw_value in cls._ResultPattern.findall(stdout):
+            if key in results:
+                logger.warning(
+                    f"Duplicate result key '{key}' in stdout; keeping the last value."
+                )
+            results[key] = float(raw_value)
         return results
 
     @classmethod
@@ -186,9 +196,15 @@ class OpenDartsConnector(SubprocessConnectorInterface):
 
     @staticmethod
     def broadcast_result(key: str, value: float) -> None:
-        """Emit a simulation result line for the parent worker to capture."""
-        broadcast_template = OpenDartsConnector.MsgTemplate.format(key, float(value))
-        print(broadcast_template)
+        """Emit a simulation result line for the parent worker to capture.
+
+        Uses ``repr`` for a lossless float representation (round-trips through
+        :meth:`parse_results`, including scientific notation).
+        """
+        print(
+            OpenDartsConnector.MsgTemplate.format(key, repr(float(value))),
+            flush=True,
+        )
 
     @staticmethod
     def get_well_connection_cells(
@@ -222,15 +238,22 @@ class OpenDartsConnector(SubprocessConnectorInterface):
                     struct_reservoir, perforations_points
                 )
             )
-            global_perforation_idx: list[int] = [
-                cell_connector.find_cell_index(p) for p in filtered_perforations_points
-            ]
-            unique_global_perforation_idx = list(set(global_perforation_idx))
-            unique_perforation_grid_cells = [
+            if not filtered_perforations_points:
+                logger.warning(
+                    f"Well {well_name} has no perforations inside the reservoir, skipping."
+                )
+                continue
+
+            global_perforation_idx = cell_connector.find_cell_indices(
+                filtered_perforations_points
+            )
+            # dict.fromkeys deduplicates while preserving insertion order,
+            # keeping results deterministic across runs.
+            unique_global_perforation_idx = dict.fromkeys(global_perforation_idx)
+            result[well_name] = tuple(
                 OpenDartsConnector._global_idx_to_grid_cell(idx, struct_reservoir)
                 for idx in unique_global_perforation_idx
-            ]
-            result[well_name] = tuple(unique_perforation_grid_cells)
+            )
 
         return result
 
@@ -252,6 +275,11 @@ class OpenDartsConnector(SubprocessConnectorInterface):
         struct_reservoir: _StructReservoirProtocol,
         well_perforations_points: tuple[Point, ...],
     ) -> tuple[Point, ...]:
+        """Keep only points inside the reservoir's axis-aligned bounding box.
+
+        Note: assumes an axis-aligned structured grid with monotonically
+        increasing coordinates, and that ``dx``/``dy``/``dz`` are 3D arrays.
+        """
         dx = struct_reservoir.global_data["dx"]
         dy = struct_reservoir.global_data["dy"]
         dz = struct_reservoir.global_data["dz"]
@@ -288,41 +316,36 @@ class _CellConnector:
         _, idx = self._kd_tree.query(coord)
         return int(idx)
 
+    def find_cell_indices(self, coords: tuple[Point, ...]) -> list[int]:
+        """Vectorized batch lookup — one KD-tree query for all points."""
+        _, idx = self._kd_tree.query(np.asarray(coords))
+        return [int(i) for i in np.atleast_1d(idx)]
 
-def _calculate_centroids(struct_reservoir: _StructReservoirProtocol) -> npt.NDArray:
+
+def _calculate_centroids(
+    struct_reservoir: _StructReservoirProtocol,
+) -> npt.NDArray[np.float64]:
     """Compute centroid coordinates for every cell of a structured reservoir."""
     nx = struct_reservoir.nx
     ny = struct_reservoir.ny
     nz = struct_reservoir.nz
-
     start_z = struct_reservoir.global_data["start_z"]
+    disc = struct_reservoir.discretizer
 
-    len_cell_zdir = struct_reservoir.discretizer.len_cell_zdir
-    len_cell_ydir = struct_reservoir.discretizer.len_cell_ydir
-    len_cell_xdir = struct_reservoir.discretizer.len_cell_xdir
+    def axis_centers(
+        lengths: npt.NDArray[np.float64], axis: int, start: float = 0.0
+    ) -> npt.NDArray[np.float64]:
+        # Centroid along an axis = start + cumulative length - half the cell length.
+        return start + lengths.cumsum(axis=axis) - 0.5 * lengths
 
-    centroids_all_cells = np.zeros((nx, ny, nz, 3))
-    centroids_all_cells[:, :, 0, 2] = start_z + len_cell_zdir[:, :, 0] * 0.5
-    if nz > 1:
-        d_cumsum = len_cell_zdir.cumsum(axis=2)
-        centroids_all_cells[:, :, 1:, 2] = (
-            start_z + (d_cumsum[:, :, :-1] + d_cumsum[:, :, 1:]) * 0.5
-        )
-
-    centroids_all_cells[:, 0, :, 1] = len_cell_ydir[:, 0, :] * 0.5
-    if ny > 1:
-        d_cumsum = len_cell_ydir.cumsum(axis=1)
-        centroids_all_cells[:, 1:, :, 1] = (
-            d_cumsum[:, :-1, :] + d_cumsum[:, 1:, :]
-        ) * 0.5
-
-    centroids_all_cells[0, :, :, 0] = len_cell_xdir[0, :, :] * 0.5
-    if nx > 1:
-        d_cumsum = len_cell_xdir.cumsum(axis=0)
-        centroids_all_cells[1:, :, :, 0] = (
-            d_cumsum[:-1, :, :] + d_cumsum[1:, :, :]
-        ) * 0.5
-
+    centroids_all_cells = np.stack(
+        [
+            axis_centers(disc.len_cell_xdir, axis=0),
+            axis_centers(disc.len_cell_ydir, axis=1),
+            axis_centers(disc.len_cell_zdir, axis=2, start=start_z),
+        ],
+        axis=-1,
+    )
     return np.reshape(centroids_all_cells, (nx * ny * nz, 3), order="F")
 
 
@@ -335,4 +358,4 @@ try:
         implementation=OpenDartsConnector,
     )
 except ImportError:
-    pass
+    logger.debug("urgent_plugins not available; connector descriptor not registered.")

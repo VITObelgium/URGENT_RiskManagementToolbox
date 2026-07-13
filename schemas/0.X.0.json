@@ -19,206 +19,38 @@
       "title": "Boundaries",
       "type": "object"
     },
-    "HWellModel": {
+    "DomainServiceItem": {
       "additionalProperties": false,
       "properties": {
         "name": {
           "title": "Name",
           "type": "string"
         },
-        "wellhead": {
-          "$ref": "#/$defs/PositionModel"
+        "initial_state": {
+          "title": "Initial State",
+          "type": "object"
         },
-        "md_step": {
-          "default": 0.5,
-          "minimum": 0.1,
-          "title": "Md Step",
-          "type": "number"
-        },
-        "perforations": {
+        "parameter_bounds": {
           "anyOf": [
             {
-              "additionalProperties": {
-                "$ref": "#/$defs/PerforationRangeModel"
-              },
-              "propertyNames": {
-                "$ref": "#/$defs/PerforationName"
-              },
-              "type": "object"
+              "$ref": "#/$defs/ParameterBoundaries"
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Perforations"
-        },
-        "well_type": {
-          "const": "HWell",
-          "default": "HWell",
-          "title": "Well Type",
-          "type": "string"
-        },
-        "TVD": {
-          "exclusiveMinimum": 0.0,
-          "title": "Tvd",
-          "type": "number"
-        },
-        "md_lateral": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Lateral",
-          "type": "number"
-        },
-        "azimuth": {
-          "exclusiveMaximum": 360.0,
-          "minimum": 0.0,
-          "title": "Azimuth",
-          "type": "number"
+          "default": null
         }
       },
       "required": [
         "name",
-        "wellhead",
-        "TVD",
-        "md_lateral",
-        "azimuth"
+        "initial_state"
       ],
-      "title": "HWellModel",
+      "title": "DomainServiceItem",
       "type": "object"
     },
-    "IWellModel": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "wellhead": {
-          "$ref": "#/$defs/PositionModel"
-        },
-        "md_step": {
-          "default": 0.5,
-          "minimum": 0.1,
-          "title": "Md Step",
-          "type": "number"
-        },
-        "perforations": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "$ref": "#/$defs/PerforationRangeModel"
-              },
-              "propertyNames": {
-                "$ref": "#/$defs/PerforationName"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Perforations"
-        },
-        "well_type": {
-          "const": "IWell",
-          "default": "IWell",
-          "title": "Well Type",
-          "type": "string"
-        },
-        "md": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md",
-          "type": "number"
-        }
-      },
-      "required": [
-        "name",
-        "wellhead",
-        "md"
-      ],
-      "title": "IWellModel",
-      "type": "object"
-    },
-    "JWellModel": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "wellhead": {
-          "$ref": "#/$defs/PositionModel"
-        },
-        "md_step": {
-          "default": 0.5,
-          "minimum": 0.1,
-          "title": "Md Step",
-          "type": "number"
-        },
-        "perforations": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "$ref": "#/$defs/PerforationRangeModel"
-              },
-              "propertyNames": {
-                "$ref": "#/$defs/PerforationName"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Perforations"
-        },
-        "well_type": {
-          "const": "JWell",
-          "default": "JWell",
-          "title": "Well Type",
-          "type": "string"
-        },
-        "md_linear1": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Linear1",
-          "type": "number"
-        },
-        "md_curved": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Curved",
-          "type": "number"
-        },
-        "dls": {
-          "exclusiveMinimum": -45.0,
-          "maximum": 45.0,
-          "title": "Dls",
-          "type": "number"
-        },
-        "md_linear2": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Linear2",
-          "type": "number"
-        },
-        "azimuth": {
-          "exclusiveMaximum": 360.0,
-          "minimum": 0.0,
-          "title": "Azimuth",
-          "type": "number"
-        }
-      },
-      "required": [
-        "name",
-        "wellhead",
-        "md_linear1",
-        "md_curved",
-        "dls",
-        "md_linear2",
-        "azimuth"
-      ],
-      "title": "JWellModel",
-      "type": "object"
+    "DomainServiceName": {
+      "type": "string"
     },
     "LinearInequalities": {
       "additionalProperties": false,
@@ -362,52 +194,32 @@
       },
       "type": "object"
     },
-    "PerforationName": {
-      "type": "string"
-    },
-    "PerforationRangeModel": {
+    "PluginConfig": {
       "additionalProperties": false,
       "properties": {
-        "start_md": {
-          "minimum": 0.0,
-          "title": "Start Md",
-          "type": "number"
+        "connector": {
+          "title": "Connector",
+          "type": "string"
         },
-        "end_md": {
-          "minimum": 0.0,
-          "title": "End Md",
-          "type": "number"
+        "optimizer": {
+          "title": "Optimizer",
+          "type": "string"
+        },
+        "domain_services": {
+          "items": {
+            "$ref": "#/$defs/DomainServiceName"
+          },
+          "minItems": 1,
+          "title": "Domain Services",
+          "type": "array"
         }
       },
       "required": [
-        "start_md",
-        "end_md"
+        "connector",
+        "optimizer",
+        "domain_services"
       ],
-      "title": "PerforationRangeModel",
-      "type": "object"
-    },
-    "PositionModel": {
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        },
-        "z": {
-          "title": "Z",
-          "type": "number"
-        }
-      },
-      "required": [
-        "x",
-        "y",
-        "z"
-      ],
-      "title": "PositionModel",
+      "title": "PluginConfig",
       "type": "object"
     },
     "RunMode": {
@@ -417,105 +229,6 @@
       ],
       "title": "RunMode",
       "type": "string"
-    },
-    "SWellModel": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "wellhead": {
-          "$ref": "#/$defs/PositionModel"
-        },
-        "md_step": {
-          "default": 0.5,
-          "minimum": 0.1,
-          "title": "Md Step",
-          "type": "number"
-        },
-        "perforations": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "$ref": "#/$defs/PerforationRangeModel"
-              },
-              "propertyNames": {
-                "$ref": "#/$defs/PerforationName"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Perforations"
-        },
-        "well_type": {
-          "const": "SWell",
-          "default": "SWell",
-          "title": "Well Type",
-          "type": "string"
-        },
-        "md_linear1": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Linear1",
-          "type": "number"
-        },
-        "md_curved1": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Curved1",
-          "type": "number"
-        },
-        "dls1": {
-          "exclusiveMinimum": -45.0,
-          "maximum": 45.0,
-          "title": "Dls1",
-          "type": "number"
-        },
-        "md_linear2": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Linear2",
-          "type": "number"
-        },
-        "md_curved2": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Curved2",
-          "type": "number"
-        },
-        "dls2": {
-          "exclusiveMinimum": -45.0,
-          "maximum": 45.0,
-          "title": "Dls2",
-          "type": "number"
-        },
-        "md_linear3": {
-          "exclusiveMinimum": 0.0,
-          "title": "Md Linear3",
-          "type": "number"
-        },
-        "azimuth": {
-          "exclusiveMaximum": 360.0,
-          "minimum": 0.0,
-          "title": "Azimuth",
-          "type": "number"
-        }
-      },
-      "required": [
-        "name",
-        "wellhead",
-        "md_linear1",
-        "md_curved1",
-        "dls1",
-        "md_linear2",
-        "md_curved2",
-        "dls2",
-        "md_linear3",
-        "azimuth"
-      ],
-      "title": "SWellModel",
-      "type": "object"
     },
     "SimulationConfig": {
       "additionalProperties": false,
@@ -558,58 +271,6 @@
     },
     "VariableName": {
       "type": "string"
-    },
-    "WellDesignItem": {
-      "additionalProperties": false,
-      "properties": {
-        "well_name": {
-          "title": "Well Name",
-          "type": "string"
-        },
-        "initial_state": {
-          "discriminator": {
-            "mapping": {
-              "HWell": "#/$defs/HWellModel",
-              "IWell": "#/$defs/IWellModel",
-              "JWell": "#/$defs/JWellModel",
-              "SWell": "#/$defs/SWellModel"
-            },
-            "propertyName": "well_type"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/IWellModel"
-            },
-            {
-              "$ref": "#/$defs/JWellModel"
-            },
-            {
-              "$ref": "#/$defs/SWellModel"
-            },
-            {
-              "$ref": "#/$defs/HWellModel"
-            }
-          ],
-          "title": "Initial State"
-        },
-        "parameter_bounds": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ParameterBoundaries"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "well_name",
-        "initial_state"
-      ],
-      "title": "WellDesignItem",
-      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -618,12 +279,18 @@
       "$ref": "#/$defs/RunMode",
       "default": "optimization"
     },
-    "well_design": {
-      "items": {
-        "$ref": "#/$defs/WellDesignItem"
+    "domain_services": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/DomainServiceItem"
+        },
+        "type": "array"
       },
-      "title": "Well Design",
-      "type": "array"
+      "propertyNames": {
+        "$ref": "#/$defs/DomainServiceName"
+      },
+      "title": "Domain Services",
+      "type": "object"
     },
     "optimization_parameters": {
       "$ref": "#/$defs/OptimizationParameters"
@@ -635,10 +302,14 @@
     },
     "simulation_config": {
       "$ref": "#/$defs/SimulationConfig"
+    },
+    "plugins": {
+      "$ref": "#/$defs/PluginConfig"
     }
   },
   "required": [
-    "well_design"
+    "domain_services",
+    "plugins"
   ],
   "title": "ProblemDispatcherDefinition",
   "type": "object"

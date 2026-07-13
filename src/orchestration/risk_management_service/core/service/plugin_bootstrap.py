@@ -95,7 +95,7 @@ def bootstrap_run_plugins(
         domain_services[plugin.name] = plugin.implementation()
 
     logger.info(
-        "Running with %s Connector, %s Optimizer, and DomainService(s): %s",
+        "Running with Connector: %s , Optimizer: %s, and DomainService(s): %s",
         connector_name,
         optimizer_name,
         ", ".join(domain_services),

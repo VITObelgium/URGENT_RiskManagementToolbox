@@ -97,7 +97,9 @@ def risk_management(
     resume_file: str | None = None,
     use_docker: bool = False,
     disable_external_log_terminals: bool = False,
-) -> tuple[float | npt.NDArray[np.float64], dict[str, Any]] | None:
+) -> (
+    tuple[float | npt.NDArray[np.float64], dict[str, Any] | list[dict[str, Any]]] | None
+):
     """
     Run risk management with specified parameters without using argparse.
 
@@ -148,7 +150,8 @@ def risk_management(
         )
         logger.info("Risk management process completed successfully.")
         run_status = RunStatus.COMPLETED
-        return result
+        assert result is not None
+        return result.values, result.control_vectors
     except grpc.RpcError as e:
         run_status = RunStatus.FAILED
         return _handle_grpc_error(e, logger)

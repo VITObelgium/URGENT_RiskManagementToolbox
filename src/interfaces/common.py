@@ -20,6 +20,9 @@ from orchestration.risk_management_service.core.service.checkpoint import (
     compute_file_hash,
     LoadedCheckpointData,
 )
+from orchestration.risk_management_service.core.service.plugin_bootstrap import (
+    validate_problem_definition,
+)
 from services.problem_dispatcher_service import ProblemDispatcherDefinition
 
 
@@ -85,7 +88,7 @@ def _load_problem_definition(
         return checkpoint_data["config"], checkpoint_data
 
     with open(config_file) as f:  # type: ignore[arg-type]
-        return ProblemDispatcherDefinition.model_validate(json.load(f)), None
+        return validate_problem_definition(json.load(f)), None
 
 
 def risk_management(
@@ -94,7 +97,9 @@ def risk_management(
     resume_file: str | None = None,
     use_docker: bool = False,
     disable_external_log_terminals: bool = False,
-) -> tuple[float | npt.NDArray[np.float64], dict[str, Any]] | None:
+) -> (
+    tuple[float | npt.NDArray[np.float64], dict[str, Any] | list[dict[str, Any]]] | None
+):
     """
     Run risk management with specified parameters without using argparse.
 
@@ -116,7 +121,7 @@ def risk_management(
         os.environ["URGENT_EXTERNAL_DOCKER_LOG_CONSOLE"] = "false"
         logger.info("External log terminals disabled; using file logging only.")
 
-    os.environ["OPEN_DARTS_RUNNER"] = "docker" if use_docker else "thread"
+    os.environ["RUNNER_MODE"] = "docker" if use_docker else "thread"
     logger.info(
         "Using %s for simulations.", "Docker" if use_docker else "multi-threading"
     )
@@ -145,7 +150,8 @@ def risk_management(
         )
         logger.info("Risk management process completed successfully.")
         run_status = RunStatus.COMPLETED
-        return result
+        assert result is not None
+        return result.values, result.control_vectors
     except grpc.RpcError as e:
         run_status = RunStatus.FAILED
         return _handle_grpc_error(e, logger)

@@ -6,50 +6,58 @@ from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 from services.shared import Boundaries
 
+_PLUGINS = {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "domain_services": ["well_design"],
+}
+
 
 @pytest.fixture
 def md_problem_definition():
     return {
-        "well_design": [
-            {
-                "well_name": "INJ",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 50, "y": 50, "z": 0},
-                    "md": 2500,
-                    "perforations": {"p1": {"start_md": 2100, "end_md": 2400.0}},
-                },
-                "parameter_bounds": {
-                    "wellhead": {
-                        "x": {"lb": 10, "ub": 3190},
-                        "y": {"lb": 10, "ub": 3190},
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "INJ",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 50, "y": 50, "z": 0},
+                        "md": 2500,
+                        "perforations": {"p1": {"start_md": 2100, "end_md": 2400.0}},
                     },
-                    "md": {"lb": 2000, "ub": 2700},
-                    "perforations": {
-                        "p1": {
-                            "start_md": {"lb": 2100, "ub": 2500},
-                            "end_md": {"lb": 2200, "ub": 2400},
-                        }
+                    "parameter_bounds": {
+                        "wellhead": {
+                            "x": {"lb": 10, "ub": 3190},
+                            "y": {"lb": 10, "ub": 3190},
+                        },
+                        "md": {"lb": 2000, "ub": 2700},
+                        "perforations": {
+                            "p1": {
+                                "start_md": {"lb": 2100, "ub": 2500},
+                                "end_md": {"lb": 2200, "ub": 2400},
+                            }
+                        },
                     },
                 },
-            },
-            {
-                "well_name": "PRO",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 50, "y": 50, "z": 0},
-                    "md": 2500,
-                    "perforations": {"p1": {"start_md": 0.0, "end_md": 2500.0}},
-                },
-                "parameter_bounds": {
-                    "wellhead": {
-                        "x": {"lb": 10, "ub": 3190},
-                        "y": {"lb": 10, "ub": 3190},
+                {
+                    "name": "PRO",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 50, "y": 50, "z": 0},
+                        "md": 2500,
+                        "perforations": {"p1": {"start_md": 0.0, "end_md": 2500.0}},
                     },
-                    "md": {"lb": 2000, "ub": 2700},
+                    "parameter_bounds": {
+                        "wellhead": {
+                            "x": {"lb": 10, "ub": 3190},
+                            "y": {"lb": 10, "ub": 3190},
+                        },
+                        "md": {"lb": 2000, "ub": 2700},
+                    },
                 },
-            },
-        ],
+            ]
+        },
         "optimization_parameters": {
             "objectives": {"metrics1": "minimize"},
             "population_size": 10,
@@ -59,6 +67,7 @@ def md_problem_definition():
                 "sense": ["<="],
             },
         },
+        "plugins": dict(_PLUGINS),
     }
 
 
@@ -95,13 +104,13 @@ def test_generation_uses_md_bounds(md_problem_definition, monkeypatch):
         assert 2000.0 <= md_inj <= 2700.0
         assert 2000.0 <= md_pro <= 2700.0
 
-        assert md_pro + md_pro <= 5000.0 + 1e-6
+        assert md_inj + md_pro <= 5000.0 + 1e-6
 
 
 def test_pso_with_optimum_beyond_md_bound_moves_toward_ub(md_problem_definition):
     """Ensure PSO tries to move towards the unconstrained optimum (2800) but respects ub=2700."""
 
-    from services.solution_updater_service.core.engines.pso import PSOEngine
+    from plugins.optimizers.pso import PSOEngine
 
     md_problem_definition["optimization_parameters"]["population_size"] = 2
     problem_definition = ProblemDispatcherDefinition.model_validate(
@@ -159,30 +168,33 @@ def test_initial_generation_respects_linear_inequalities(md_problem_definition):
 
 def test_jwell_constraints_respected():
     problem_definition = {
-        "well_design": [
-            {
-                "well_name": "J1",
-                "initial_state": {
-                    "well_type": "JWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md_linear1": 500.0,
-                    "md_curved": 300.0,
-                    "dls": 15.0,
-                    "md_linear2": 700.0,
-                    "azimuth": 90.0,
-                    "md_step": 20.0,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                },
-                "parameter_bounds": {
-                    "md_linear1": {"lb": 400, "ub": 600},
-                    "azimuth": {"lb": 0, "ub": 180},
-                },
-            }
-        ],
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "J1",
+                    "initial_state": {
+                        "well_type": "JWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md_linear1": 500.0,
+                        "md_curved": 300.0,
+                        "dls": 15.0,
+                        "md_linear2": 700.0,
+                        "azimuth": 90.0,
+                        "md_step": 20.0,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {
+                        "md_linear1": {"lb": 400, "ub": 600},
+                        "azimuth": {"lb": 0, "ub": 180},
+                    },
+                }
+            ]
+        },
         "optimization_parameters": {
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
+        "plugins": dict(_PLUGINS),
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     svc = ProblemDispatcherService(problem_definition=problem_definition)
@@ -201,28 +213,31 @@ def test_jwell_constraints_respected():
 
 def test_hwell_constraints_respected():
     problem_definition = {
-        "well_design": [
-            {
-                "well_name": "H1",
-                "initial_state": {
-                    "well_type": "HWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "TVD": 1000.0,
-                    "md_lateral": 1500.0,
-                    "azimuth": 45.0,
-                    "md_step": 10.0,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                },
-                "parameter_bounds": {
-                    "TVD": {"lb": 900, "ub": 1100},
-                    "md_lateral": {"lb": 1400, "ub": 1600},
-                },
-            }
-        ],
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "H1",
+                    "initial_state": {
+                        "well_type": "HWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "TVD": 1000.0,
+                        "md_lateral": 1500.0,
+                        "azimuth": 45.0,
+                        "md_step": 10.0,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {
+                        "TVD": {"lb": 900, "ub": 1100},
+                        "md_lateral": {"lb": 1400, "ub": 1600},
+                    },
+                }
+            ]
+        },
         "optimization_parameters": {
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
+        "plugins": dict(_PLUGINS),
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
 
@@ -243,37 +258,39 @@ def test_hwell_constraints_respected():
 def test_linear_inequalities_mixed_wells():
     # Constraint: J1.md_linear1 + I1.md <= 1000
     problem_definition = {
-        "well_design": [
-            {
-                "well_name": "J1",
-                "initial_state": {
-                    "well_type": "JWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md_linear1": 500.0,
-                    "md_curved": 300.0,
-                    "dls": 15.0,
-                    "md_linear2": 700.0,
-                    "azimuth": 90.0,
-                    "md_step": 20.0,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "J1",
+                    "initial_state": {
+                        "well_type": "JWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md_linear1": 500.0,
+                        "md_curved": 300.0,
+                        "dls": 15.0,
+                        "md_linear2": 700.0,
+                        "azimuth": 90.0,
+                        "md_step": 20.0,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {
+                        "md_linear1": {"lb": 400, "ub": 600},
+                    },
                 },
-                "parameter_bounds": {
-                    "md_linear1": {"lb": 400, "ub": 600},
+                {
+                    "name": "I1",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md": 500.0,
+                        "perforations": {"p1": {"start_md": 0.0, "end_md": 500.0}},
+                    },
+                    "parameter_bounds": {
+                        "md": {"lb": 400, "ub": 600},
+                    },
                 },
-            },
-            {
-                "well_name": "I1",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md": 500.0,
-                    "perforations": {"p1": {"start_md": 0.0, "end_md": 500.0}},
-                },
-                "parameter_bounds": {
-                    "md": {"lb": 400, "ub": 600},
-                },
-            },
-        ],
+            ]
+        },
         "optimization_parameters": {
             "objectives": {"metrics1": "maximize"},
             "linear_inequalities": {
@@ -282,6 +299,7 @@ def test_linear_inequalities_mixed_wells():
                 "sense": ["<="],
             },
         },
+        "plugins": dict(_PLUGINS),
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     svc = ProblemDispatcherService(problem_definition=problem_definition)

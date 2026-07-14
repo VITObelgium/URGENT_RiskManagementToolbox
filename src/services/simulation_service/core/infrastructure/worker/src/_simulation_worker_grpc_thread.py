@@ -54,13 +54,21 @@ def _run_simulator(
     *,
     working_dir: Path | None = None,
 ) -> tuple[SimulationStatus, SimulationResults]:
-    connector = ConnectorFactory.get_connector(simulation_job.simulator)
+    connector_name = simulation_job.connector
+    try:
+        connector = ConnectorFactory.get_connector(connector_name)
+    except ValueError as e:
+        logger.error("Encountered error in ConnectorFactory: %s", e)
+        raise
+    except Exception as e:
+        logger.error("Encountered Unexpected error in ConnectorFactory: %s", e)
+        raise
 
     user_cost_function = json.loads(simulation_job.simulation.result.result)
 
     tf = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
     try:
-        json.dump(simulation_job.simulation.input.wells, tf)
+        tf.write(simulation_job.simulation.input.payload)
         tf.flush()
         tf_path = tf.name
         tf.close()
@@ -372,8 +380,8 @@ def _create_channel():
 
 
 async def main(stop_flag: threading.Event | None = None, worker_id: str | None = None):
-    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
-    logger.info("Worker starting with OPEN_DARTS_RUNNER=%s", mode)
+    mode = os.getenv("RUNNER_MODE", "thread").lower()
+    logger.info("Worker starting with RUNNER_MODE=%s", mode)
     worker_id = worker_id or str(uuid.uuid4().hex)[:8]
 
     loop = asyncio.get_running_loop()

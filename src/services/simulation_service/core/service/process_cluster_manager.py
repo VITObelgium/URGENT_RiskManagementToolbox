@@ -23,6 +23,10 @@ from logger import (
     get_logger,
 )
 from services.simulation_service.core.config import get_simulation_config
+from urgent_plugins import (
+    get_plugin_settings,
+    normalize_plugin_name,
+)
 from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
     driver,
     request_server_shutdown,
@@ -284,6 +288,46 @@ class ProcessClusterManager(ClusterManager):
 
         for src, dst_name in ((connectors_dir, "connectors"), (logger_dir, "logger")):
             _replace_tree(src, target_dir / dst_name)
+
+        self._stage_connector_plugin(repo_root, target_dir)
+
+    def _stage_connector_plugin(self, _repo_root: Path, target_dir: Path) -> None:
+        """Stage the connector plugin file(s) into the per-worker temp dir.
+
+        The connector name must be set by the orchestrator from config. The
+        corresponding plugin file is copied from ``URGENT_PLUGIN_PATH`` so
+        subprocess imports such as ``from connectors.<stem> import ...`` resolve
+        correctly without connector-specific assumptions.
+        """
+
+        plugin_cfg = get_plugin_settings()
+        plugin_name = plugin_cfg.connector_plugin_name
+        if not plugin_name:
+            raise ValueError(
+                "URGENT_CONNECTOR_PLUGIN_NAME must be set; cannot stage connector plugin."
+            )
+
+        normalized = normalize_plugin_name(plugin_name)
+
+        if plugin_cfg.plugin_path is None:
+            raise RuntimeError(
+                "URGENT_PLUGIN_PATH must be set; cannot locate connector plugin file to stage."
+            )
+
+        source = plugin_cfg.plugin_path / "connectors" / f"{normalized}.py"
+        if not source.is_file():
+            raise FileNotFoundError(
+                f"Connector plugin file not found for staging: {source}"
+            )
+
+        staged_dir = target_dir / "connectors"
+        destination = staged_dir / source.name
+        shutil.copyfile(source, destination)
+        logger.info(
+            "Staged connector plugin %r into worker temp dir: %s",
+            plugin_name,
+            destination,
+        )
 
     def _cleanup_worker_directories(self) -> None:
         """Remove all per-worker temp directories for this run in parallel."""

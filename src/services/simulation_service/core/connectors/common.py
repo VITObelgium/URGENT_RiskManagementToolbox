@@ -27,15 +27,15 @@ class WellSchema(TypedDict):
     completion: CompletionSchema | None
 
 
-class WellManagementServiceResultSchema(TypedDict):
+class WellDesignServiceResultSchema(TypedDict):
     wells: list[WellSchema]
 
 
 def extract_well_with_perforations_points(
-    well_management_service_result: WellManagementServiceResultSchema,
+    well_design_service_result: WellDesignServiceResultSchema,
 ) -> dict[WellName, tuple[Point, ...]]:
     results: dict[WellName, tuple[Point, ...]] = {}
-    for well in well_management_service_result["wells"]:
+    for well in well_design_service_result["wells"]:
         perforation_points: list[Point] = []
         try:
             well_name = well["name"]
@@ -60,9 +60,19 @@ class SimulationStatus(Enum):
 
 
 class ConnectorInterface(ABC):
-    @staticmethod
+    @classmethod
+    def required_traces(cls) -> frozenset[str]:
+        """Trace tags that must be provided by the configured domain services.
+
+        Used by the startup plugin-trace verification: every tag returned here
+        must appear in the union of the domain services' ``trace()`` sets,
+        otherwise the run fails fast. Default: no requirements.
+        """
+        return frozenset()
+
     @abstractmethod
     def run(
+        self,
         config_path: JsonPath,
         user_cost_function_with_default_values: SimulationResults,
         stop: threading.Event | None = None,

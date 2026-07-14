@@ -16,7 +16,6 @@ from services.simulation_service.core.models import (
 )
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
 from services.simulation_service.core.utils.converters import json_to_str, str_to_json
-from services.well_management_service.core.models import WellDesignServiceResponse
 
 logger = get_logger(__name__)
 
@@ -39,7 +38,7 @@ class SimulationService:
         simulation_cases_request = request.simulation_cases
 
         simulation_cases_response = SimulationService._perform_simulations_on_cluster(
-            simulation_cases_request
+            simulation_cases_request, connector=request.connector
         )
 
         logger.info("Simulation processing completed.")
@@ -116,17 +115,27 @@ class SimulationService:
     @staticmethod
     def _perform_simulations_on_cluster(
         cases: Sequence[SimulationCase],
+        connector: str,
     ) -> Sequence[SimulationCase]:
         """
         Perform simulations on the cluster and return the responses.
 
         Args:
             cases (Sequence[SimulationCase]): The simulation cases to process.
+            connector (str): Name of the connector plugin the workers should use
+                for this batch.
 
         Returns:
             Sequence[SimulationCase]: The processed simulation cases.
         """
-        logger.info("Processing %d simulation cases on the cluster...", len(cases))
+        if not connector:
+            raise ValueError("Connector not defined! Check config.json")
+
+        logger.info(
+            "Processing %d simulation cases on the cluster using connector=%r...",
+            len(cases),
+            connector,
+        )
         _config = get_simulation_config()
 
         with GrpcStubManager.get_stub(
@@ -134,7 +143,10 @@ class SimulationService:
             _config.server_port,
         ) as stub:
             simulations_inputs = [SimulationService._to_grpc(case) for case in cases]
-            simulations_request = sm.Simulations(simulations=simulations_inputs)
+            simulations_request = sm.Simulations(
+                simulations=simulations_inputs,
+                options=sm.SimulationOptions(connector=connector),
+            )
 
             try:
                 logger.info(
@@ -194,7 +206,7 @@ class SimulationService:
             sm.Simulation: The gRPC-compatible simulation object.
         """
         return sm.Simulation(
-            input=sm.SimulationInput(wells=case.wells.model_dump_json()),
+            input=sm.SimulationInput(payload=json_to_str(case.payload)),
             result=sm.SimulationResult(result=json_to_str(case.results)),
             control_vector=sm.SimulationControlVector(
                 content=json_to_str(case.control_vector)
@@ -213,7 +225,7 @@ class SimulationService:
             SimulationCase: The simulation case object.
         """
         return SimulationCase(
-            wells=WellDesignServiceResponse(**str_to_json(simulation.input.wells)),
+            payload=str_to_json(simulation.input.payload),
             results=str_to_json(simulation.result.result),
             control_vector=str_to_json(simulation.control_vector.content),
         )

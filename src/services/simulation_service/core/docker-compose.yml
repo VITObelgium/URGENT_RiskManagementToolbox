@@ -14,7 +14,7 @@ services:
     ports:
       - "50051:50051"
     environment:
-      - OPEN_DARTS_RUNNER=${OPEN_DARTS_RUNNER:-docker}
+      - RUNNER_MODE=${RUNNER_MODE:-docker}
     healthcheck:
       test:
         [
@@ -44,7 +44,7 @@ services:
     networks:
       - grpc-network
     environment:
-      - OPEN_DARTS_RUNNER=${OPEN_DARTS_RUNNER:-docker}
+      - RUNNER_MODE=${RUNNER_MODE:-docker}
     deploy:
       replicas: 1
 

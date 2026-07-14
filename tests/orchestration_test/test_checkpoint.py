@@ -13,28 +13,32 @@ from orchestration.risk_management_service.core.service.checkpoint import (
     save_checkpoint,
 )
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
-from services.solution_updater_service import OptimizationEngine
+from plugins.optimizers.pso import PSOEngine
 from services.solution_updater_service.core.service import SolutionUpdaterService
 
 
 def _make_problem_definition(tmp_path: Path) -> ProblemDispatcherDefinition:
     return ProblemDispatcherDefinition.model_validate(
         {
-            "well_design": [
-                {
-                    "well_name": "W1",
-                    "initial_state": {
-                        "well_type": "IWell",
-                        "wellhead": {"x": 0, "y": 50, "z": 0},
-                        "md": 200,
-                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                    },
-                    "parameter_bounds": {
-                        "wellhead": {"x": {"lb": 0, "ub": 100}},
-                        "md": {"lb": 0, "ub": 300},
-                    },
-                }
-            ],
+            "domain_services": {
+                "well_design": [
+                    {
+                        "name": "W1",
+                        "initial_state": {
+                            "well_type": "IWell",
+                            "wellhead": {"x": 0, "y": 50, "z": 0},
+                            "md": 200,
+                            "perforations": {
+                                "p1": {"start_md": 100.0, "end_md": 200.0}
+                            },
+                        },
+                        "parameter_bounds": {
+                            "wellhead": {"x": {"lb": 0, "ub": 100}},
+                            "md": {"lb": 0, "ub": 300},
+                        },
+                    }
+                ]
+            },
             "optimization_parameters": {
                 "objectives": {"metric1": "minimize"},
                 "max_generations": 20,
@@ -45,6 +49,11 @@ def _make_problem_definition(tmp_path: Path) -> ProblemDispatcherDefinition:
                 "worker_count": 1,
                 "checkpoint_interval": 5,
                 "checkpoint_path": str(tmp_path),
+            },
+            "plugins": {
+                "connector": "opendarts",
+                "optimizer": "pso",
+                "domain_services": ["well_design"],
             },
         }
     )
@@ -239,7 +248,7 @@ OBJECTIVES = {"metric1": OptimizationStrategy.MINIMIZE}
 def warmed_up_service() -> tuple[SolutionUpdaterService, list[Any]]:
     """Service that has completed 5 generations."""
     service = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -258,7 +267,7 @@ def test_restore_resumes_at_correct_generation(
     state = service_a.get_checkpoint_state(next_cvs)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -276,7 +285,7 @@ def test_restore_does_not_start_from_generation_zero(
     state = service_a.get_checkpoint_state(next_cvs)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -294,7 +303,7 @@ def test_restore_preserves_stall_left(
     expected_stall = service_a.loop_controller._stall_left
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -311,7 +320,7 @@ def test_restore_preserves_global_best_result(
     state = service_a.get_checkpoint_state(next_cvs)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -331,7 +340,7 @@ def test_restore_preserves_mapper_parameter_names(
     state = service_a.get_checkpoint_state(next_cvs)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -348,7 +357,7 @@ def test_restore_loop_controller_still_running(
     state = service_a.get_checkpoint_state(next_cvs)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -366,7 +375,7 @@ def test_restore_returns_next_positions_as_control_vectors(
     state = service_a.get_checkpoint_state(next_cvs)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -386,7 +395,7 @@ def test_file_roundtrip_restores_generation(tmp_path: Path) -> None:
     problem_def = _make_problem_definition(tmp_path)
 
     service_a = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -400,7 +409,7 @@ def test_file_roundtrip_restores_generation(tmp_path: Path) -> None:
     loaded = load_checkpoint(cp)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -415,7 +424,7 @@ def test_file_roundtrip_global_best_matches(tmp_path: Path) -> None:
     problem_def = _make_problem_definition(tmp_path)
 
     service_a = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -429,7 +438,7 @@ def test_file_roundtrip_global_best_matches(tmp_path: Path) -> None:
     loaded = load_checkpoint(cp)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -447,7 +456,7 @@ def test_file_roundtrip_service_can_continue(tmp_path: Path) -> None:
     problem_def = _make_problem_definition(tmp_path)
 
     service_a = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,
@@ -461,7 +470,7 @@ def test_file_roundtrip_service_can_continue(tmp_path: Path) -> None:
     loaded = load_checkpoint(cp)
 
     service_b = SolutionUpdaterService(
-        optimization_engine=OptimizationEngine.PSO,
+        optimization_engine=PSOEngine.EngineName,
         max_generations=20,
         max_stall_generations=10,
         objectives=OBJECTIVES,

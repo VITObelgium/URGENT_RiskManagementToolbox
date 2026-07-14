@@ -3,7 +3,7 @@ syntax = "proto3";
 package simulation_messaging;
 
 message SimulationInput{
-  string wells = 1;
+  string payload = 1;
 }
 
 message SimulationControlVector{
@@ -25,17 +25,17 @@ enum JobStatus{
   EXCEPTION = 7;              // Job has thrown an exception/
 }
 
-enum Simulator{
-  SIMULATOR_UNSPECIFIED = 0;
-  OPENDARTS = 1;
-}
 
 message SimulationJob{
   Simulation simulation = 1;
   JobStatus status = 2;
   string worker_id = 3;
-  Simulator simulator = 4;
   int32 job_id = 5;
+  string connector = 6;
+}
+
+message SimulationOptions{
+  string connector = 1;
 }
 
 message RequestJob{
@@ -55,6 +55,7 @@ message Simulation {
 
 message Simulations{
   repeated Simulation simulations = 1;
+  SimulationOptions options = 2;
 }
 
 message RequestModel{

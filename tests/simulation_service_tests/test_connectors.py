@@ -13,15 +13,15 @@ import pytest
 from services.simulation_service.core.connectors.common import (
     GridCell,
     SimulationStatus,
-    WellManagementServiceResultSchema,
+    WellDesignServiceResultSchema,
     WellName,
 )
-from services.simulation_service.core.connectors.open_darts import (
+from plugins.connectors.opendarts import (
     OpenDartsConnector,
     _GlobalData,
     _StructDiscretizerProtocol,
     _StructReservoirProtocol,
-    open_darts_input_configuration_injector,
+    open_darts_input_payload_injector,
 )
 
 
@@ -84,36 +84,38 @@ def mock_struct_reservoir(
     [
         (
             {
-                "wells": [
-                    {
-                        "name": "Test IWell",
-                        "trajectory": [
-                            [0.0, 0.0, 0.0],
-                            [0.0, 0.0, 10.0],
-                            [0.0, 0.0, 50.0],
-                            [0.0, 0.0, 60.0],
-                            [0.0, 0.0, 70.0],
-                            [0.0, 0.0, 80.0],
-                            [0.0, 0.0, 100.0],
-                        ],
-                        "completion": {
-                            "perforations": [
-                                {
-                                    "range": [10.0, 60.0],
-                                    "points": [
-                                        [0.0, 0.0, 10.0],
-                                        [0.0, 0.0, 50.0],
-                                        [0.0, 0.0, 60.0],
-                                    ],
-                                },
-                                {
-                                    "range": [70.0, 80.0],
-                                    "points": [[0.0, 0.0, 70.0], [0.0, 0.0, 80.0]],
-                                },
-                            ]
-                        },
-                    }
-                ]
+                "well_design": {
+                    "wells": [
+                        {
+                            "name": "Test IWell",
+                            "trajectory": [
+                                [0.0, 0.0, 0.0],
+                                [0.0, 0.0, 10.0],
+                                [0.0, 0.0, 50.0],
+                                [0.0, 0.0, 60.0],
+                                [0.0, 0.0, 70.0],
+                                [0.0, 0.0, 80.0],
+                                [0.0, 0.0, 100.0],
+                            ],
+                            "completion": {
+                                "perforations": [
+                                    {
+                                        "range": [10.0, 60.0],
+                                        "points": [
+                                            [0.0, 0.0, 10.0],
+                                            [0.0, 0.0, 50.0],
+                                            [0.0, 0.0, 60.0],
+                                        ],
+                                    },
+                                    {
+                                        "range": [70.0, 80.0],
+                                        "points": [[0.0, 0.0, 70.0], [0.0, 0.0, 80.0]],
+                                    },
+                                ]
+                            },
+                        }
+                    ]
+                }
             },
             {"Test IWell": ((1, 1, 1), (1, 1, 2))},
         )
@@ -121,7 +123,7 @@ def mock_struct_reservoir(
 )
 def test_get_well_connection_cells(
     mock_struct_reservoir: Mock,
-    wells_result: WellManagementServiceResultSchema,
+    wells_result: WellDesignServiceResultSchema,
     expected_output: dict[WellName, tuple[GridCell, ...]],
 ) -> None:
     actual_result = OpenDartsConnector.get_well_connection_cells(
@@ -139,7 +141,9 @@ def test_get_well_connection_cells_empty_wells(mock_struct_reservoir):
 
 
 def test_get_well_connection_cells_missing_completion(mock_struct_reservoir):
-    wells_result = {"wells": [{"name": "NoComp", "trajectory": [[0, 0, 0]]}]}
+    wells_result = {
+        "well_design": {"wells": [{"name": "NoComp", "trajectory": [[0, 0, 0]]}]}
+    }
     import pytest
 
     with pytest.raises(KeyError, match="Well does not have a field: 'completion'"):
@@ -196,7 +200,8 @@ def patch_stream_reader(monkeypatch):
     Patch the stream_reader used by SubprocessRunner so it appends lines from the mock's
     stdout/stderr to manager.stdout_lines/manager.stderr_lines without using real logging.
     """
-    from services.simulation_service.core.connectors import open_darts, runner
+    from plugins.connectors import opendarts as open_darts
+    from services.simulation_service.core.connectors import runner
 
     def fake_stream_reader(stream, lines_list, logger_func=None, **kwargs):
         for line in stream:
@@ -282,7 +287,7 @@ def test_run_uses_container_python_in_docker_mode(
     with patch.dict(
         "os.environ",
         {
-            "OPEN_DARTS_RUNNER": "docker",
+            "RUNNER_MODE": "docker",
             "SIM_MODEL_DIR": str(runtime_dir),
             "SIM_WORKER_ID": "docker-worker-1",
         },
@@ -327,7 +332,7 @@ def test_run_preserves_docker_template_files_between_jobs(
     with patch.dict(
         "os.environ",
         {
-            "OPEN_DARTS_RUNNER": "docker",
+            "RUNNER_MODE": "docker",
             "SIM_MODEL_DIR": str(runtime_dir),
             "SIM_WORKER_ID": "docker-worker-1",
         },
@@ -388,7 +393,7 @@ def test_run_failure(mock_popen: Mock) -> None:
 def test_run_handles_exception(mock_popen: Mock) -> None:
     # Simulate exception in Popen
     with patch(
-        "services.simulation_service.core.connectors.open_darts.ManagedSubprocess.__enter__",
+        "services.simulation_service.core.connectors.runner.ManagedSubprocess.__enter__",
         side_effect=Exception("fail"),
     ):
         expected_cost_function_with_default_values = {"heat": float("nan")}
@@ -399,7 +404,7 @@ def test_run_handles_exception(mock_popen: Mock) -> None:
         assert results == expected_cost_function_with_default_values
 
 
-@open_darts_input_configuration_injector
+@open_darts_input_payload_injector
 def main(configuration_content: dict[str, Any]) -> None:
     print(f"Received configuration: {configuration_content}")
 
@@ -435,7 +440,7 @@ def test_decorator_with_invalid_json(monkeypatch):
     # Mock sys.exit to prevent the test from stopping
     with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
-        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func = open_darts_input_payload_injector(mock_func)
         with pytest.raises(SystemExit):
             decorated_func()
         mock_exit.assert_called_once_with(1)
@@ -448,7 +453,7 @@ def test_decorator_with_non_dict_json(monkeypatch):
 
     with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
-        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func = open_darts_input_payload_injector(mock_func)
         with pytest.raises(SystemExit):
             decorated_func()
         mock_exit.assert_called_once_with(1)
@@ -461,7 +466,7 @@ def test_decorator_with_missing_argument(monkeypatch):
 
     with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
-        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func = open_darts_input_payload_injector(mock_func)
         with pytest.raises(SystemExit):
             decorated_func()
         mock_exit.assert_called_once_with(1)
@@ -482,7 +487,7 @@ def test_decorator_with_dict_but_not_str_keys(monkeypatch):
     with patch("json.loads", fake_loads):
         with patch("sys.exit", side_effect=SystemExit) as mock_exit:
             mock_func = Mock()
-            decorated_func = open_darts_input_configuration_injector(mock_func)
+            decorated_func = open_darts_input_payload_injector(mock_func)
             with pytest.raises(SystemExit):
                 decorated_func()
             mock_exit.assert_called_once_with(1)

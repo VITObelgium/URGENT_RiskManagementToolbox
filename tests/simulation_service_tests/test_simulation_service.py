@@ -103,7 +103,9 @@ def test__perform_simulations_on_cluster_success(
     mock_get_stub.return_value.__enter__.return_value = stub
     mock_from.side_effect = ["case1", "case2"]
     cases = [MagicMock(), MagicMock()]
-    result = SimulationService._perform_simulations_on_cluster(cases)
+    result = SimulationService._perform_simulations_on_cluster(
+        cases, connector="opendarts"
+    )
     assert result == ["case1", "case2"]
     stub.PerformSimulations.assert_called_once_with("sim_req")
 
@@ -123,7 +125,7 @@ def test__perform_simulations_on_cluster_grpc_error(
     mock_get_stub.return_value.__enter__.return_value = stub
     cases = [MagicMock()]
     with pytest.raises(grpc.RpcError):
-        SimulationService._perform_simulations_on_cluster(cases)
+        SimulationService._perform_simulations_on_cluster(cases, connector="opendarts")
 
 
 @patch("services.simulation_service.core.service.simulation_service.sm.Simulation")
@@ -137,10 +139,10 @@ def test__perform_simulations_on_cluster_grpc_error(
 )
 def test__to_grpc(mock_json_to_str, mock_control_vec, mock_input, mock_sim):
     case = MagicMock()
-    case.wells.model_dump_json.return_value = "{}"
+    case.payload = {}  # dict — json_to_str is mocked to return "{}"
     case.control_vector = {}
     SimulationService._to_grpc(case)
-    mock_input.assert_called_once_with(wells="{}")
+    mock_input.assert_called_once_with(payload="{}")
     mock_control_vec.assert_called_once_with(content="{}")
     mock_sim.assert_called_once()
 
@@ -150,17 +152,38 @@ def test__from_grpc(mock_str_to_json):
     from services.simulation_service.core.models import SimulationCase
 
     mock_str_to_json.side_effect = [
-        {"wells": []},
+        {"well_design": {"wells": []}},
         {"Heat": 0.0},
         {"x": 1},
     ]
 
     sim = MagicMock()
-    sim.input.wells = "{}"
+    sim.input.payload = "{}"
     sim.result.result = "{}"
     sim.control_vector.content = "{}"
     result = SimulationService._from_grpc(sim)
     assert isinstance(result, SimulationCase)
-    assert result.wells is not None
+    assert result.payload == {"well_design": {"wells": []}}
     assert result.results is not None
     assert result.control_vector == {"x": 1}
+
+
+def test_to_grpc_from_grpc_payload_roundtrip():
+    """_to_grpc/_from_grpc must preserve a multi-column payload dict verbatim."""
+    from services.simulation_service.core.models import SimulationCase
+
+    case = SimulationCase(
+        payload={
+            "well_design": {
+                "wells": [{"name": "INJ", "trajectory": [[0.0, 0.0, 0.0]]}]
+            },
+            "well_counter": {"counts": {"field": 2}},
+        },
+        control_vector={"well_design#INJ#md": 150.0, "well_counter#field#count": 2.0},
+        results={"Heat": 1.5},
+    )
+
+    roundtripped = SimulationService._from_grpc(SimulationService._to_grpc(case))
+
+    assert roundtripped == case
+    assert set(roundtripped.payload) == {"well_design", "well_counter"}

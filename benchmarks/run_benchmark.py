@@ -19,7 +19,7 @@ benchmarks = {
 
 def _get_control_vector(nested_cv: dict) -> np.ndarray:
     """Extract a flat coordinate array from a single nested control vector dict."""
-    well_design = nested_cv["well_design"]
+    well_design = nested_cv["benchmark_well_design"]
     coords_flat = []
     for _, well_data in well_design.items():
         coords_flat.append(well_data["wellhead"]["x"])

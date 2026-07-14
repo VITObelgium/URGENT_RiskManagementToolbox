@@ -7,54 +7,65 @@ from services.problem_dispatcher_service import ProblemDispatcherService
 from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
-    ServiceType,
     SolutionCandidateServicesTasks,
 )
 from services.shared import LinearInequalities
 from services.solution_updater_service import ControlVector
 
+_PLUGINS = {
+    "connector": "opendarts",
+    "optimizer": "pso",
+    "domain_services": ["well_design"],
+}
+
 
 @pytest.fixture
 def dict_problem_definition():
     return {
-        "well_design": [
-            {
-                "well_name": "W1",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 50, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                },
-                "parameter_bounds": {
-                    "wellhead": {
-                        "x": {"lb": 0, "ub": 100},
-                        "y": {"lb": 10, "ub": 200},
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "W1",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 50, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                     },
-                    "md": {"lb": 0, "ub": 300},
-                    "perforations": {
-                        "p1": {"start_md": {"lb": 50.0, "ub": 150.0}},
+                    "parameter_bounds": {
+                        "wellhead": {
+                            "x": {"lb": 0, "ub": 100},
+                            "y": {"lb": 10, "ub": 200},
+                        },
+                        "md": {"lb": 0, "ub": 300},
+                        "perforations": {
+                            "p1": {"start_md": {"lb": 50.0, "ub": 150.0}},
+                        },
                     },
                 },
-            },
-            {
-                "well_name": "W2",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 10, "y": 10, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                {
+                    "name": "W2",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 10, "y": 10, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {
+                        "wellhead": {
+                            "x": {"lb": 0, "ub": 100},
+                            "y": {"lb": 10, "ub": 200},
+                        },
+                        "md": {"lb": 0, "ub": 300},
+                    },
                 },
-                "parameter_bounds": {
-                    "wellhead": {"x": {"lb": 0, "ub": 100}, "y": {"lb": 10, "ub": 200}},
-                    "md": {"lb": 0, "ub": 300},
-                },
-            },
-        ],
+            ]
+        },
         "optimization_parameters": {
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
+        "plugins": dict(_PLUGINS),
     }
 
 
@@ -74,7 +85,7 @@ def test_handle_initial_request_returns_expected_structure(
 
     for candidate in response.solution_candidates:
         assert isinstance(candidate, SolutionCandidateServicesTasks)
-        assert ServiceType.WellDesignService in candidate.tasks
+        assert "well_design" in candidate.tasks
 
 
 @pytest.mark.parametrize(
@@ -99,7 +110,7 @@ def test_handle_iteration_loop_valid_input(
     assert len(response.solution_candidates) == len(control_vector_items)
 
     for candidate in response.solution_candidates:
-        assert ServiceType.WellDesignService in candidate.tasks
+        assert "well_design" in candidate.tasks
 
 
 @pytest.mark.parametrize(
@@ -153,9 +164,9 @@ def test_control_vector_multiple_wells(
     assert len(response.solution_candidates) == 1
 
     tasks: SolutionCandidateServicesTasks = response.solution_candidates[0]
-    assert ServiceType.WellDesignService in tasks.tasks
+    assert "well_design" in tasks.tasks
 
-    service_tasks = tasks.tasks[ServiceType.WellDesignService]
+    service_tasks = tasks.tasks["well_design"]
     tasks_by_well = {task["name"]: task for task in service_tasks.request}
 
     for key_path, expected_value in expected_updates.items():
@@ -172,7 +183,7 @@ def test_control_vector_multiple_wells(
 def test_invalid_problem_definition_type_raises_validation_error():
     with pytest.raises(ValidationError):
         ProblemDispatcherDefinition.model_validate(
-            {"well_design": "not-a-list", "optimization_parameters": {}}
+            {"domain_services": "not-a-list", "optimization_parameters": {}}
         )
 
 
@@ -234,36 +245,39 @@ def test_linear_inequalities_nested_attribute_valid(dict_problem_definition):
 
 def test_linear_inequalities_missing_well_constraint_raises():
     pd = {
-        "well_design": [
-            {
-                "well_name": "W1",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "W1",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {"md": {"lb": 0, "ub": 300}},
                 },
-                "parameter_bounds": {"md": {"lb": 0, "ub": 300}},
-            },
-            {
-                "well_name": "W2",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 10, "y": 10, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                {
+                    "name": "W2",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 10, "y": 10, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": None,
                 },
-                "parameter_bounds": None,
-            },
-        ],
+            ]
+        },
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
             "linear_inequalities": {
-                "A": [{"W1.md": 1, "W2.md": 1}],
+                "A": [{"well_design.W1.md": 1, "well_design.W2.md": 1}],
                 "b": [100],
             },
         },
+        "plugins": dict(_PLUGINS),
     }
 
     with pytest.raises(ValidationError):
@@ -273,23 +287,26 @@ def test_linear_inequalities_missing_well_constraint_raises():
 def test_linear_inequalities_missing_variable_in_constraints_raises():
     # W1 has parameter_bounds but missing 'md' entry required by inequalities
     pd = {
-        "well_design": [
-            {
-                "well_name": "W1",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                },
-                "parameter_bounds": {"wellhead": {"x": {"lb": 0, "ub": 100}}},
-            }
-        ],
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "W1",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {"wellhead": {"x": {"lb": 0, "ub": 100}}},
+                }
+            ]
+        },
         "optimization_parameters": {
             "objectives": {"metrics1": "maximize"},
             "population_size": 10,
-            "linear_inequalities": {"A": [{"well.design.W1.md": 1}], "b": [100]},
+            "linear_inequalities": {"A": [{"well_design.W1.md": 1}], "b": [100]},
         },
+        "plugins": dict(_PLUGINS),
     }
 
     with pytest.raises(ValidationError):
@@ -312,8 +329,19 @@ def test_process_iteration_exception_handling(dict_problem_definition, monkeypat
 
 
 def test_initialization_failure(dict_problem_definition):
-    dict_problem_definition["well_design"][0]["parameter_bounds"] = "invalid"
+    dict_problem_definition["domain_services"]["well_design"][0]["parameter_bounds"] = (
+        "invalid"
+    )
     with pytest.raises(ValidationError):
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
+
+
+def test_domain_services_section_must_match_plugins(dict_problem_definition):
+    dict_problem_definition["plugins"]["domain_services"] = [
+        "well_design",
+        "well_counter",
+    ]
+    with pytest.raises(ValidationError, match="domain_services sections must match"):
         ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
@@ -329,14 +357,16 @@ def test_problem_dispatcher_service_initializes_correct_population(
     assert len(response.solution_candidates) > 0
 
     # Extract md bounds from the fixture for W1
-    w1_md_bounds = dict_problem_definition["well_design"][0]["parameter_bounds"]["md"]
+    w1_md_bounds = dict_problem_definition["domain_services"]["well_design"][0][
+        "parameter_bounds"
+    ]["md"]
     lb = w1_md_bounds["lb"]
     ub = w1_md_bounds["ub"]
 
     for candidate in response.solution_candidates:
-        # Each candidate should include a WellManagementService task with the ControlVector
-        assert ServiceType.WellDesignService in candidate.tasks
-        payload = candidate.tasks[ServiceType.WellDesignService]
+        # Each candidate should include a well_design task with the ControlVector
+        assert "well_design" in candidate.tasks
+        payload = candidate.tasks["well_design"]
         control_items = payload.control_vector.items
 
         assert "well_design#W1#md" in control_items
@@ -346,57 +376,78 @@ def test_problem_dispatcher_service_initializes_correct_population(
 
 def test_linear_inequalities_unknown_well_raises():
     pd = {
-        "well_design": [
-            {
-                "well_name": "INJ",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                },
-                "parameter_bounds": {
-                    "wellhead": {
-                        "x": {"lb": 0, "ub": 100},
-                        "y": {"lb": 0, "ub": 100},
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "INJ",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
                     },
-                    "md": {"lb": 0, "ub": 300},
-                },
-            },
-            {
-                "well_name": "PRO",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md": 200,
-                    "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-                },
-                "parameter_bounds": {
-                    "wellhead": {
-                        "x": {"lb": 0, "ub": 100},
-                        "y": {"lb": 0, "ub": 100},
+                    "parameter_bounds": {
+                        "wellhead": {
+                            "x": {"lb": 0, "ub": 100},
+                            "y": {"lb": 0, "ub": 100},
+                        },
+                        "md": {"lb": 0, "ub": 300},
                     },
-                    "md": {"lb": 0, "ub": 300},
                 },
-            },
-        ],
+                {
+                    "name": "PRO",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md": 200,
+                        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
+                    },
+                    "parameter_bounds": {
+                        "wellhead": {
+                            "x": {"lb": 0, "ub": 100},
+                            "y": {"lb": 0, "ub": 100},
+                        },
+                        "md": {"lb": 0, "ub": 300},
+                    },
+                },
+            ]
+        },
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
             "linear_inequalities": {
-                "A": [{"Brent.md": 1.0, "PRO.md": 1.0}, {"INJ.md": 1.0, "PRO.md": 1.0}],
+                "A": [
+                    {"well_design.Brent.md": 1.0, "well_design.PRO.md": 1.0},
+                    {"well_design.INJ.md": 1.0, "well_design.PRO.md": 1.0},
+                ],
                 "b": [2100.0, 5000.0],
                 "sense": [">=", "<="],
             },
         },
+        "plugins": dict(_PLUGINS),
     }
     with pytest.raises((ValidationError, TypeError)):
         ProblemDispatcherDefinition.model_validate(pd)
 
 
+def test_linear_inequalities_unknown_domain_service_prefix_raises(
+    dict_problem_definition,
+):
+    dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
+        "A": [{"unknown_service.W1.md": 1}],
+        "b": [100],
+        "sense": ["<="],
+    }
+    with pytest.raises(ValidationError, match="Unknown domain service prefix"):
+        ProblemDispatcherDefinition.model_validate(dict_problem_definition)
+
+
 def test_linear_inequalities_A_b_length_mismatch_raises(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": 1, "W2.md": 1}, {"W1.md": -1, "W2.md": 1}],
+        "A": [
+            {"well_design.W1.md": 1, "well_design.W2.md": 1},
+            {"well_design.W1.md": -1, "well_design.W2.md": 1},
+        ],
         "b": [100],
     }
     with pytest.raises((ValidationError, TypeError)):
@@ -405,7 +456,7 @@ def test_linear_inequalities_A_b_length_mismatch_raises(dict_problem_definition)
 
 def test_linear_inequalities_invalid_sense_length_raises(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": 1, "W2.md": 1}],
+        "A": [{"well_design.W1.md": 1, "well_design.W2.md": 1}],
         "b": [100],
         "sense": ["<=", ">="],
     }
@@ -413,9 +464,11 @@ def test_linear_inequalities_invalid_sense_length_raises(dict_problem_definition
         ProblemDispatcherDefinition.model_validate(dict_problem_definition)
 
 
-def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition):
+def test_linear_inequalities_variable_without_attribute_path_raises(
+    dict_problem_definition,
+):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1md": 1}],
+        "A": [{"well_design.W1md": 1}],
         "b": [100],
     }
     with pytest.raises((ValidationError, TypeError)):
@@ -425,7 +478,7 @@ def test_linear_inequalities_variable_without_dot_raises(dict_problem_definition
 def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definition):
     # Constraints only define wellhead.x/y, but A references wellhead.z
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.wellhead.z": 1}],
+        "A": [{"well_design.W1.wellhead.z": 1}],
         "b": [10],
     }
     with pytest.raises((ValidationError, TypeError)):
@@ -434,39 +487,44 @@ def test_linear_inequalities_nested_missing_leaf_key_raises(dict_problem_definit
 
 def test_duplicate_well_names_raises():
     pd = {
-        "well_design": [
-            {
-                "well_name": "W1",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 0, "y": 0, "z": 0},
-                    "md": 100,
-                    "perforations": {"p1": {"start_md": 20.0, "end_md": 80.0}},
+        "domain_services": {
+            "well_design": [
+                {
+                    "name": "W1",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 0, "y": 0, "z": 0},
+                        "md": 100,
+                        "perforations": {"p1": {"start_md": 20.0, "end_md": 80.0}},
+                    },
+                    "parameter_bounds": {"md": {"lb": 0, "ub": 200}},
                 },
-                "parameter_bounds": {"md": {"lb": 0, "ub": 200}},
-            },
-            {
-                "well_name": "W1",
-                "initial_state": {
-                    "well_type": "IWell",
-                    "wellhead": {"x": 10, "y": 10, "z": 0},
-                    "md": 150,
-                    "perforations": [{"start_md": 50.0, "end_md": 140.0}],
+                {
+                    "name": "W1",
+                    "initial_state": {
+                        "well_type": "IWell",
+                        "wellhead": {"x": 10, "y": 10, "z": 0},
+                        "md": 150,
+                        "perforations": {"p1": {"start_md": 50.0, "end_md": 140.0}},
+                    },
+                    "parameter_bounds": {"md": {"lb": 0, "ub": 300}},
                 },
-                "parameter_bounds": {"md": {"lb": 0, "ub": 300}},
-            },
-        ],
+            ]
+        },
         "optimization_parameters": {
-            "optimization_strategy": "maximize",
+            "objectives": {"metrics1": "maximize"},
             "population_size": 10,
         },
+        "plugins": dict(_PLUGINS),
     }
     with pytest.raises((ValidationError, TypeError)):
         ProblemDispatcherDefinition.model_validate(pd)
 
 
 def test_variable_bounds_lb_gt_ub_raises(dict_problem_definition):
-    dict_problem_definition["well_design"][0]["parameter_bounds"]["md"] = {
+    dict_problem_definition["domain_services"]["well_design"][0]["parameter_bounds"][
+        "md"
+    ] = {
         "lb": 100,
         "ub": 50,
     }
@@ -476,7 +534,7 @@ def test_variable_bounds_lb_gt_ub_raises(dict_problem_definition):
 
 def test_linear_inequalities_non_numeric_values_raises(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": "one"}],
+        "A": [{"well_design.W1.md": "one"}],
         "b": ["hundred"],
     }
     with pytest.raises((ValidationError, TypeError)):
@@ -485,7 +543,7 @@ def test_linear_inequalities_non_numeric_values_raises(dict_problem_definition):
 
 def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition):
     dict_problem_definition["optimization_parameters"]["linear_inequalities"] = {
-        "A": [{"W1.md": 1}],
+        "A": [{"well_design.W1.md": 1}],
         "b": [100],
         "sense": ["!="],
     }
@@ -498,7 +556,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
     [
         # JWell
         {
-            "well_name": "J1",
+            "name": "J1",
             "initial_state": {
                 "well_type": "JWell",
                 "wellhead": {"x": 0, "y": 0, "z": 0},
@@ -517,7 +575,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
         },
         # SWell
         {
-            "well_name": "S1",
+            "name": "S1",
             "initial_state": {
                 "well_type": "SWell",
                 "wellhead": {"x": 0, "y": 0, "z": 0},
@@ -539,7 +597,7 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
         },
         # HWell
         {
-            "well_name": "H1",
+            "name": "H1",
             "initial_state": {
                 "well_type": "HWell",
                 "wellhead": {"x": 0, "y": 0, "z": 0},
@@ -558,8 +616,9 @@ def test_linear_inequalities_invalid_sense_symbol_raises(dict_problem_definition
 )
 def test_problem_dispatcher_supports_extended_well_types(well_config):
     problem_definition = {
-        "well_design": [well_config],
+        "domain_services": {"well_design": [well_config]},
         "optimization_parameters": {"objectives": {"metrics1": "maximize"}},
+        "plugins": dict(_PLUGINS),
     }
     problem_definition = ProblemDispatcherDefinition.model_validate(problem_definition)
     service = ProblemDispatcherService(problem_definition=problem_definition)
@@ -569,46 +628,40 @@ def test_problem_dispatcher_supports_extended_well_types(well_config):
     assert len(response.solution_candidates) > 0
 
     candidate = response.solution_candidates[0]
-    assert ServiceType.WellDesignService in candidate.tasks
+    assert "well_design" in candidate.tasks
 
     # Verify control vector keys match constraints
-    task = candidate.tasks[ServiceType.WellDesignService]
+    task = candidate.tasks["well_design"]
     control_items = task.control_vector.items
 
-    well_name = well_config["well_name"]
+    well_name = well_config["name"]
     for param in well_config["parameter_bounds"]:
         key = f"well_design#{well_name}#{param}"
         assert key in control_items
 
 
 def test_hwell_validation_failure_invalid_geometry():
-    # HWell with invalid dimensions (TVD too small for curvature)
-    # _CURVATURE_RADIUS approx 430m for default params
-    well_config = {
-        "well_name": "H1_Invalid",
-        "initial_state": {
-            "well_type": "HWell",
-            "wellhead": {"x": 0, "y": 0, "z": 0},
-            "TVD": 100.0,  # Too shallow
-            "md_lateral": 1500.0,
-            "azimuth": 45.0,
-            "md_step": 10.0,
-            "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
-        },
-        "parameter_bounds": {"TVD": {"lb": 50, "ub": 150}},
-    }
-    problem_definition = {
-        "well_design": [well_config],
-        "optimization_parameters": {"optimization_strategy": "maximize"},
+    # HWell geometry validation now fires in phase-2 via the plugin's TypeAdapter,
+    # not at ProblemDispatcherDefinition construction time.
+    from plugins.domain_services.well_design import (  # noqa: PLC0415
+        WellDesignDomainService,
+    )
+
+    adapter = WellDesignDomainService.get_item_state_adapter()
+    invalid_state = {
+        "well_type": "HWell",
+        "name": "H1_Invalid",
+        "wellhead": {"x": 0, "y": 0, "z": 0},
+        "TVD": 100.0,  # Too shallow — _CURVATURE_RADIUS ~430m for default params
+        "md_lateral": 1500.0,
+        "azimuth": 45.0,
+        "md_step": 10.0,
+        "perforations": {"p1": {"start_md": 100.0, "end_md": 200.0}},
     }
 
     with pytest.raises(ValidationError) as excinfo:
-        problem_definition = ProblemDispatcherDefinition.model_validate(
-            problem_definition
-        )
-        ProblemDispatcherService(problem_definition=problem_definition)
+        adapter.validate_python(invalid_state)
 
-    # The ValueError from HWellModel is wrapped in Pydantic's ValidationError
     assert (
         "Horizontal well true total depth is less than curved well section radius"
         in str(excinfo.value)

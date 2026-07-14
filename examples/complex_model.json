@@ -3,9 +3,23 @@
   "plugins": {
     "connector": "opendarts",
     "optimizer": "pso",
-    "domain_services": ["well_design"]
+    "domain_services": ["well_design", "well_control"]
   },
   "domain_services": {
+    "well_control": [
+      {
+        "name": "INJ",
+        "initial_state": {
+          "flow_chop": 0.95
+        },
+        "parameter_bounds": {
+          "flow_chop": {
+            "lb": 0.8,
+            "ub": 1.0
+          }
+        }
+      }
+    ],
     "well_design": [
       {
         "name": "INJ",

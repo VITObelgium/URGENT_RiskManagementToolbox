@@ -88,39 +88,39 @@ class _StructReservoirProtocol(Protocol):
     global_data: _GlobalData
 
 
-def open_darts_input_configuration_injector(
+def open_darts_input_payload_injector(
     func: Callable[..., None],
 ) -> Callable[..., None]:
-    """Inject a JSON configuration into the user simulation's main function.
+    """Inject a JSON payload into the user simulation's main function.
 
     Usage::
 
-        @open_darts_input_configuration_injector
-        def main(configuration_content): ...
+        @open_darts_input_payload_injector
+        def main(payload, *args, **kwargs): ...
 
-    The decorated function receives the parsed configuration as its first
+    The decorated function receives the parsed payload as its first
     positional argument when the worker subprocess invokes
-    ``python main.py <path-to-configuration.json>``.
+    ``python main.py <path-to-payload.json>``.
     """
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> None:
         if len(sys.argv) < 2:
-            logger.error("Usage: python main.py <path-to-configuration.json>")
+            logger.error("Usage: python main.py <path-to-payload.json>")
             sys.exit(1)
-        json_config_str = sys.argv[1]
-        if os.path.isfile(json_config_str):
+        json_payload_str = sys.argv[1]
+        if os.path.isfile(json_payload_str):
             try:
-                with open(json_config_str) as f:
-                    config = json.load(f)
-                if isinstance(config, str):
-                    config = json.loads(config)
+                with open(json_payload_str) as f:
+                    payload = json.load(f)
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
             except Exception as e:
-                logger.error(f"Failed to read configuration file: {e}.")
+                logger.error(f"Failed to read payload file: {e}.")
                 sys.exit(1)
         else:
             try:
-                config = json.loads(json_config_str)
+                payload = json.loads(json_payload_str)
             except json.JSONDecodeError:
                 logger.error("Invalid JSON input.")
                 sys.exit(1)
@@ -128,14 +128,14 @@ def open_darts_input_configuration_injector(
                 logger.error(f"Unexpected error: {e}")
                 sys.exit(1)
 
-        if not isinstance(config, (dict, list)):
-            logger.error(f"Invalid JSON input, got:{type(config).__name__}")
+        if not isinstance(payload, (dict, list)):
+            logger.error(f"Invalid JSON input, got:{type(payload).__name__}")
             sys.exit(1)
-        if isinstance(config, dict) and not all(isinstance(k, str) for k in config):
-            logger.error(f"Invalid JSON input:{config}")
+        if isinstance(payload, dict) and not all(isinstance(k, str) for k in payload):
+            logger.error(f"Invalid JSON input:{payload}")
             sys.exit(1)
 
-        func(config, *args, **kwargs)
+        func(payload, *args, **kwargs)
 
     return wrapper
 

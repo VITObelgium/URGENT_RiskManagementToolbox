@@ -21,7 +21,7 @@ from plugins.connectors.opendarts import (
     _GlobalData,
     _StructDiscretizerProtocol,
     _StructReservoirProtocol,
-    open_darts_input_configuration_injector,
+    open_darts_input_payload_injector,
 )
 
 
@@ -404,7 +404,7 @@ def test_run_handles_exception(mock_popen: Mock) -> None:
         assert results == expected_cost_function_with_default_values
 
 
-@open_darts_input_configuration_injector
+@open_darts_input_payload_injector
 def main(configuration_content: dict[str, Any]) -> None:
     print(f"Received configuration: {configuration_content}")
 
@@ -440,7 +440,7 @@ def test_decorator_with_invalid_json(monkeypatch):
     # Mock sys.exit to prevent the test from stopping
     with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
-        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func = open_darts_input_payload_injector(mock_func)
         with pytest.raises(SystemExit):
             decorated_func()
         mock_exit.assert_called_once_with(1)
@@ -453,7 +453,7 @@ def test_decorator_with_non_dict_json(monkeypatch):
 
     with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
-        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func = open_darts_input_payload_injector(mock_func)
         with pytest.raises(SystemExit):
             decorated_func()
         mock_exit.assert_called_once_with(1)
@@ -466,7 +466,7 @@ def test_decorator_with_missing_argument(monkeypatch):
 
     with patch("sys.exit", side_effect=SystemExit) as mock_exit:
         mock_func = Mock()
-        decorated_func = open_darts_input_configuration_injector(mock_func)
+        decorated_func = open_darts_input_payload_injector(mock_func)
         with pytest.raises(SystemExit):
             decorated_func()
         mock_exit.assert_called_once_with(1)
@@ -487,7 +487,7 @@ def test_decorator_with_dict_but_not_str_keys(monkeypatch):
     with patch("json.loads", fake_loads):
         with patch("sys.exit", side_effect=SystemExit) as mock_exit:
             mock_func = Mock()
-            decorated_func = open_darts_input_configuration_injector(mock_func)
+            decorated_func = open_darts_input_payload_injector(mock_func)
             with pytest.raises(SystemExit):
                 decorated_func()
             mock_exit.assert_called_once_with(1)

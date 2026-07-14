@@ -73,9 +73,9 @@ def test_open_darts_plugin_imports_in_worker_subprocess(tmp_path: Path) -> None:
 
     snippet = textwrap.dedent(
         """
-        from connectors.opendarts import OpenDartsConnector, open_darts_input_configuration_injector
+        from connectors.opendarts import OpenDartsConnector, open_darts_input_payload_injector
         print('name=' + OpenDartsConnector.ConnectorName)
-        print('decorator_ok=' + str(callable(open_darts_input_configuration_injector)))
+        print('decorator_ok=' + str(callable(open_darts_input_payload_injector)))
         OpenDartsConnector.broadcast_result('Heat', 1.5)
         """
     ).strip()

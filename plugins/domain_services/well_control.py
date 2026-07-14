@@ -11,8 +11,8 @@ class WellControlModel(BaseModel, extra="forbid"):
     name: str
     flow_chop: float = Field(..., ge=0.0, le=1.0)
 
-class WellControlDomainService(DomainServiceInterface):
 
+class WellControlDomainService(DomainServiceInterface):
     ServiceName = "well_control"
 
     @classmethod
@@ -21,7 +21,7 @@ class WellControlDomainService(DomainServiceInterface):
 
     def build_payload(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         adapter = self.get_item_state_adapter()
-        payload: dict[str, float]  = {}
+        payload: dict[str, float] = {}
         for item in items:
             model = adapter.validate_python(item)
             payload[model.name] = model.flow_chop

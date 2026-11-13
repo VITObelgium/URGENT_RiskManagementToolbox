@@ -9,6 +9,8 @@ from collections.abc import Generator
 from logger import get_logger, log_docker_logs
 from services.simulation_service.core.config import get_simulation_config
 from services.simulation_service.core.service.grpc_stub_manager import GrpcStubManager
+from urgent_plugins.paths import default_plugins_root
+from utils import find_repo_root
 
 logger = get_logger(__name__)
 
@@ -39,6 +41,24 @@ def core_directory() -> Generator[None, None, None]:
     finally:
         os.chdir(original_dir)
         logger.debug("Reverted to original working directory: %s", original_dir)
+
+
+def ensure_docker_compatible_plugin_root() -> None:
+    """Fail fast if plugins come from outside the repo in Docker mode.
+
+    The worker image bakes in ``<repo>/plugins`` (``COPY plugins/``); an
+    external ``URGENT_PLUGIN_PATH`` would be silently ignored inside the
+    containers, so the workers would run different plugin code than the
+    orchestrator validated.
+    """
+    plugins_root = default_plugins_root().resolve()
+    bundled_root = (find_repo_root() / "plugins").resolve()
+    if plugins_root != bundled_root:
+        raise RuntimeError(
+            f"Docker mode only supports plugins from {bundled_root}, but "
+            f"URGENT_PLUGIN_PATH points to {plugins_root}. Move the plugins "
+            "into the repository's plugins/ directory or run without --use-docker."
+        )
 
 
 class SimulationClusterManager:
@@ -176,6 +196,7 @@ def simulation_cluster_context_manager(worker_count: int = 3):
     Context manager for managing the simulation cluster lifecycle.
     """
     logger.info("Entering simulation cluster context.")
+    ensure_docker_compatible_plugin_root()
     SimulationClusterManager.build_simulation_cluster_images()
     SimulationClusterManager.prune_dangling_images()
     SimulationClusterManager.start_simulation_cluster(worker_count)

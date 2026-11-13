@@ -1,7 +1,9 @@
 from services.problem_dispatcher_service.core.models import (
     ProblemDispatcherDefinition,
-    ServiceType,
 )
 from services.problem_dispatcher_service.core.service import ProblemDispatcherService
 
-__all__ = ["ProblemDispatcherService", "ServiceType", "ProblemDispatcherDefinition"]
+__all__ = [
+    "ProblemDispatcherService",
+    "ProblemDispatcherDefinition",
+]

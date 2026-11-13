@@ -49,6 +49,7 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
         )
         self._critical_error: RuntimeError | None = None
         self._total_simulations: int = 0
+        self._batch_connector: str = ""
 
     def _cancel_timeout(self, job_id: int) -> None:
         handle = self._timeout_handles.pop(job_id, None)
@@ -86,7 +87,6 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
             simulation=sm.Simulation(),
             status=sm.JobStatus.NO_JOB_AVAILABLE,
             worker_id=worker_id,
-            simulator=sm.Simulator.SIMULATOR_UNSPECIFIED,
         )
 
     async def TransferSimulationModel(self, request, context):
@@ -101,7 +101,14 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
     async def PerformSimulations(self, request, context):
         total = len(request.simulations)
         self._total_simulations = total
-        logger.info("Initializing simulations with %d job(s)", total)
+        self._batch_connector = (
+            request.options.connector if request.HasField("options") else ""
+        )
+        logger.info(
+            "Initializing simulations with %d job(s) (connector=%r)",
+            total,
+            self._batch_connector or "<unspecified>",
+        )
 
         while not self._pending_jobs.empty():
             try:
@@ -279,8 +286,8 @@ class SimulationMessagingHandler(sm_grpc.SimulationMessagingServicer):
                 simulation=simulation,
                 status=sm.JobStatus.NEW,
                 worker_id=worker_id,
-                simulator=sm.Simulator.OPENDARTS,
                 job_id=job_id,
+                connector=self._batch_connector,
             )
 
         except asyncio.CancelledError:
@@ -376,8 +383,8 @@ async def serve() -> None:
     global _SERVER_LOOP, _SERVER, _SERVER_READY, _HANDLER
 
     logger.info("Initializing Async gRPC Server setup...")
-    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
-    logger.info("Server starting with OPEN_DARTS_RUNNER=%s", mode)
+    mode = os.getenv("RUNNER_MODE", "thread").lower()
+    logger.info("Server starting with RUNNER_MODE=%s", mode)
 
     _SERVER_READY = asyncio.Event()
 

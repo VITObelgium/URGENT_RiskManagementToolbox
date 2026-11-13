@@ -23,6 +23,12 @@ from logger import (
     get_logger,
 )
 from services.simulation_service.core.config import get_simulation_config
+from urgent_plugins import (
+    PluginKind,
+    get_plugin_settings,
+    normalize_plugin_name,
+)
+from urgent_plugins.loader import resolve_plugin_path
 from services.simulation_service.core.infrastructure.server.src._simulation_server_grpc import (
     driver,
     request_server_shutdown,
@@ -34,12 +40,29 @@ from services.simulation_service.core.service.cluster_manager import ClusterMana
 
 logger = get_logger(__name__)
 
+# Framework package copied into every worker as ``connectors/``. A connector
+# plugin is staged next to these modules, so its name must not shadow them.
+_FRAMEWORK_CONNECTORS_DIR = Path(__file__).resolve().parent.parent / "connectors"
+
 # Maximum threads used for parallel I/O tasks (dep-copy, dir cleanup).
 # Kept separate from the worker pool so I/O concurrency is bounded independently.
 _IO_POOL_THREADS = 8
 
 
 class ServerStartupError(Exception): ...
+
+
+def _framework_connector_module_names() -> frozenset[str]:
+    """Module and package names the framework ships in ``connectors/``."""
+    names = set()
+    for entry in _FRAMEWORK_CONNECTORS_DIR.iterdir():
+        if entry.name.startswith(("_", ".")):
+            continue
+        if entry.is_dir():
+            names.add(entry.name)
+        elif entry.suffix == ".py":
+            names.add(entry.stem)
+    return frozenset(names)
 
 
 class ProcessClusterManager(ClusterManager):
@@ -284,6 +307,66 @@ class ProcessClusterManager(ClusterManager):
 
         for src, dst_name in ((connectors_dir, "connectors"), (logger_dir, "logger")):
             _replace_tree(src, target_dir / dst_name)
+
+        self._stage_connector_plugin(target_dir)
+
+    def _stage_connector_plugin(self, target_dir: Path) -> None:
+        """Stage the connector plugin into the per-worker ``connectors/`` dir.
+
+        The connector name must be set by the orchestrator from config. The
+        plugin is located in ``URGENT_PLUGIN_PATH`` the same way the loader
+        locates it (flat ``<name>.py`` or package ``<name>/``), so subprocess
+        imports such as ``from connectors.<name> import ...`` resolve without
+        connector-specific assumptions.
+        """
+
+        plugin_cfg = get_plugin_settings()
+        plugin_name = plugin_cfg.connector_plugin_name
+        if not plugin_name:
+            raise ValueError(
+                "URGENT_CONNECTOR_PLUGIN_NAME must be set; cannot stage connector plugin."
+            )
+
+        normalized = normalize_plugin_name(plugin_name)
+
+        reserved = _framework_connector_module_names()
+        if normalized in reserved:
+            raise ValueError(
+                f"Connector plugin name {normalized!r} collides with a framework "
+                f"module in connectors/ ({', '.join(sorted(reserved))}); "
+                "rename the plugin."
+            )
+
+        if plugin_cfg.plugin_path is None:
+            raise RuntimeError(
+                "URGENT_PLUGIN_PATH must be set; cannot locate connector plugin file to stage."
+            )
+
+        source = resolve_plugin_path(
+            PluginKind.CONNECTOR, normalized, plugin_cfg.plugin_path
+        )
+        if not source.is_file():
+            raise FileNotFoundError(
+                f"Connector plugin file not found for staging: {source}"
+            )
+
+        staged_dir = target_dir / "connectors"
+        if source.name == "__init__.py":
+            destination = staged_dir / normalized
+            shutil.copytree(
+                source.parent,
+                destination,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
+        else:
+            destination = staged_dir / source.name
+            shutil.copyfile(source, destination)
+        logger.info(
+            "Staged connector plugin %r into worker temp dir: %s",
+            plugin_name,
+            destination,
+        )
 
     def _cleanup_worker_directories(self) -> None:
         """Remove all per-worker temp directories for this run in parallel."""

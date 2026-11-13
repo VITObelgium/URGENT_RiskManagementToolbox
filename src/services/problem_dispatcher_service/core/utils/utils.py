@@ -1,6 +1,6 @@
 import copy
 from collections.abc import MutableMapping, Sequence
-from typing import Any
+from typing import Any, cast
 from collections.abc import Callable
 
 import numpy as np
@@ -8,9 +8,10 @@ import numpy as np
 from services.problem_dispatcher_service.core.utils.keys import (
     DEFAULT_SEPARATOR,
     convert_key_separator,
+    join_key,
     split_key,
 )
-from services.shared import Boundaries, LinearInequalities, ServiceType
+from services.shared import Boundaries, DomainServiceName, LinearInequalities
 from services.solution_updater_service.core.utils import (
     repair_against_linear_inequalities,
 )
@@ -83,8 +84,8 @@ def validate_bounds_recursive(bounds: dict[str, Any], path: str = "") -> None:
 
 
 def update_initial_state(
-    initial_state: dict[str | ServiceType, Any], update_dict: dict[str, Any]
-) -> dict[str | ServiceType, Any]:
+    initial_state: dict[str, Any], update_dict: dict[str, Any]
+) -> dict[str, Any]:
     """
     Recursively updates a deep copy of the initial_state dictionary with values
     from update_dict. If a value in update_dict is a dictionary, the function
@@ -162,6 +163,65 @@ def _flatten_dict(d, parent_key="", separator: str = DEFAULT_SEPARATOR):
     return flat
 
 
+def flatten_optimization_parameters(
+    optimization_parameters: dict[str, Any],
+    parent_key: str = "",
+    separator: str = DEFAULT_SEPARATOR,
+) -> dict[str, tuple[float, float]]:
+    """Recursively flatten a nested parameter-boundaries dict into (lb, ub) tuples."""
+    flat: dict[str, tuple[float, float]] = {}
+    for key, value in optimization_parameters.items():
+        full_key = f"{parent_key}{separator}{key}" if parent_key else key
+        if isinstance(value, Boundaries):
+            flat[full_key] = (value.lb, value.ub)
+        elif isinstance(value, dict):
+            if is_bounds_dict(value):
+                lb = cast(float, value["lb"])
+                ub = cast(float, value["ub"])
+                validate_bounds(lb, ub, full_key)
+                flat[full_key] = (lb, ub)
+            else:
+                flat.update(flatten_optimization_parameters(value, full_key, separator))
+        else:
+            raise TypeError(
+                f"Invalid type for key '{key}': expected Boundaries or dict, got {type(value)}"
+            )
+    return flat
+
+
+def build_initial_state(
+    domain_services: dict[DomainServiceName, list[Any]],
+) -> dict[str, Any]:
+    """Build the per-service initial state dict from DomainServiceItem lists.
+
+    Shape: ``{<service>: {<item name>: <initial_state dict>}}``.
+    """
+    return {
+        service: {item.name: item.initial_state for item in items}
+        for service, items in domain_services.items()
+    }
+
+
+def build_full_key_boundaries(
+    domain_services: dict[DomainServiceName, list[Any]],
+    separator: str = DEFAULT_SEPARATOR,
+) -> dict[str, Boundaries]:
+    """Build the flat optimizer boundary map across all domain services.
+
+    Keys are ``<service><sep><item><sep><parameter path>``.
+    """
+    result: dict[str, Boundaries] = {}
+    for service, items in domain_services.items():
+        for item in items:
+            if not item.parameter_bounds:
+                continue
+            flattened = flatten_optimization_parameters(item.parameter_bounds)
+            for key, value in flattened.items():
+                full_key = join_key(service, item.name, key, separator=separator)
+                result[full_key] = Boundaries(lb=value[0], ub=value[1])
+    return result
+
+
 class CandidateGenerator:
     @staticmethod
     def generate(
@@ -212,15 +272,11 @@ class CandidateGenerator:
 
         # No linear constraints scenario
         if not linear_inequalities:
-            if not linear_inequalities:
-                random_candidates = [
-                    {
-                        key: random_fn(b.lb, b.ub)
-                        for key, b in full_key_boundaries.items()
-                    }
-                    for _ in range(n_size - 1)
-                ]
-                return [user_initial_candidate] + random_candidates
+            random_candidates = [
+                {key: random_fn(b.lb, b.ub) for key, b in full_key_boundaries.items()}
+                for _ in range(n_size - 1)
+            ]
+            return [user_initial_candidate] + random_candidates
 
         # Scenario with linear constraints provided
         keys = list(full_key_boundaries.keys())
@@ -234,14 +290,14 @@ class CandidateGenerator:
         b_vals: list[float] = linear_inequalities.b
         senses: Sequence[str] = linear_inequalities.sense
 
-        # Extract involved sparse variable names like "INJ.md", "PRO.md"
+        # Extract involved sparse variable names like "well_design.INJ.md"
         sparse_vars: list[str] = []
         for row in A_rows:
             for v in row.keys():
                 if v not in sparse_vars:
                     sparse_vars.append(v)
 
-        # Map "INJ.md" -> "well_design#INJ#md"
+        # Map "well_design.INJ.md" -> "well_design#INJ#md"
         def fk(var: str) -> str:
             return convert_key_separator(var, output_separator=separator)
 

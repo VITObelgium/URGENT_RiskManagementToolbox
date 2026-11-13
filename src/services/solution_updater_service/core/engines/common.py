@@ -10,6 +10,16 @@ from common import OptimizationStrategy
 
 
 class OptimizationEngineInterface(ABC):
+    @classmethod
+    def required_traces(cls) -> frozenset[str]:
+        """Trace tags that must be provided by the configured domain services.
+
+        Used by the startup plugin-trace verification: every tag returned here
+        must appear in the union of the domain services' ``trace()`` sets,
+        otherwise the run fails fast. Default: no requirements.
+        """
+        return frozenset()
+
     @abstractmethod
     def update_solution_to_next_iter(
         self,

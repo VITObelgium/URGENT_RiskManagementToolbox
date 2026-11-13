@@ -1,5 +1,4 @@
 from typing import Any
-from collections.abc import Callable
 
 import numpy as np
 
@@ -11,63 +10,58 @@ from services.problem_dispatcher_service.core.models import (
     LinearInequalities,
     ProblemDispatcherDefinition,
     ProblemDispatcherServiceResponse,
-    ServiceType,
-)
-from services.problem_dispatcher_service.core.service.handlers import (
-    ProblemTypeHandler,
-    WellDesignHandler,
 )
 from services.problem_dispatcher_service.core.utils import (
     DEFAULT_SEPARATOR,
     CandidateGenerator,
+    build_full_key_boundaries,
+    build_initial_state,
     convert_key_separator,
 )
 from services.shared import Boundaries
 from services.solution_updater_service import ControlVector
 
-PROBLEM_TYPE_HANDLERS: dict[ServiceType, ProblemTypeHandler] = {
-    ServiceType.WellDesignService: WellDesignHandler(),
-}
+logger = get_logger(__name__)
 
 
 class ProblemDispatcherService:
+    """Turns a problem definition into per-iteration solution-candidate tasks.
+
+    Everything derivable from the config (initial state, optimizer boundary
+    map, linear inequality constraints) is built once in ``__init__`` so
+    ``process_iteration`` only has to pick control vectors and build tasks.
+    """
+
     def __init__(self, problem_definition: ProblemDispatcherDefinition):
-        """
-        Initialize the ProblemDispatcherService.
+        self._definition = problem_definition
+        self._params = problem_definition.optimization_parameters
+        self._is_evaluation = problem_definition.run_mode == RunMode.Evaluation
 
-        Args:
-            problem_definition (ProblemDispatcherDefinition): The problem definition to process.
-        """
-        self.logger = get_logger(__name__)
-        self.logger.debug("Initializing ProblemDispatcherService")
+        self._initial_state: dict[str, Any] = build_initial_state(
+            problem_definition.domain_services
+        )
+        self._task_builder = TaskBuilder(self._initial_state)
 
-        try:
-            self._problem_definition = problem_definition
-            self._population_size = (
-                self._problem_definition.optimization_parameters.population_size
-            )
-            self._handlers = PROBLEM_TYPE_HANDLERS
-            self._initial_state = self._build_initial_state()
+        self._full_key_boundaries: dict[str, Boundaries] = (
+            {}
+            if self._is_evaluation
+            else build_full_key_boundaries(problem_definition.domain_services)
+        )
+        self._full_key_linear_inequalities = (
+            None if self._is_evaluation else self._convert_linear_inequalities()
+        )
 
-            self._linear_inequalities = (
-                self._problem_definition.optimization_parameters.linear_inequalities
-            )
-            self._task_builder = TaskBuilder(self._initial_state, self._handlers)
-            self._full_key_boundaries = self._build_full_key_boundaries()
-            self._full_key_linear_inequalities = (
-                self._build_full_key_linear_inequalities()
-            )
-
-            self.logger.debug("ProblemDispatcherService initialized successfully.")
-        except Exception as e:
-            self.logger.error(
-                "Failed to initialize ProblemDispatcherService: %s", str(e)
-            )
-            raise
+        logger.debug(
+            "ProblemDispatcherService initialized. Initial state: %s; "
+            "boundaries: %s; linear inequalities: %s",
+            self._initial_state,
+            self._full_key_boundaries,
+            self._full_key_linear_inequalities,
+        )
 
     @property
     def optimization_objectives(self) -> dict[str, OptimizationStrategy]:
-        return self._problem_definition.optimization_parameters.objectives or {}
+        return self._params.objectives or {}
 
     @property
     def expected_optimization_function_names(self) -> list[str]:
@@ -75,15 +69,15 @@ class ProblemDispatcherService:
 
     @property
     def max_generation(self) -> int:
-        return self._problem_definition.optimization_parameters.max_generations
+        return self._params.max_generations
 
     @property
     def population_size(self) -> int:
-        return self._population_size
+        return self._params.population_size
 
     @property
     def max_stall_generations(self) -> int:
-        return self._problem_definition.optimization_parameters.max_stall_generations
+        return self._params.max_stall_generations
 
     @property
     def full_key_boundaries(self) -> dict[str, Boundaries]:
@@ -96,121 +90,61 @@ class ProblemDispatcherService:
     def process_iteration(
         self, next_iter_solutions: list[ControlVector] | None = None
     ) -> ProblemDispatcherServiceResponse:
-        self.logger.debug("Processing iteration.")
-        self.logger.debug(
-            "Processing iteration. next_iter_solutions: %s",
-            next_iter_solutions if next_iter_solutions else "None",
+        """Generate or forward control vectors for one optimization iteration.
+
+        Args:
+            next_iter_solutions: Optimizer-updated vectors from the previous
+                iteration, or ``None`` to generate the initial population.
+
+        Returns:
+            Response containing one ``SolutionCandidateServicesTasks`` per candidate.
+        """
+        control_vectors = self._control_vectors(next_iter_solutions)
+        solution_candidates = self._task_builder.build(control_vectors)
+        logger.info(
+            "Iteration processed: %d solution candidates.", len(solution_candidates)
         )
+        return ProblemDispatcherServiceResponse(solution_candidates=solution_candidates)
 
-        try:
-            if self._problem_definition.run_mode == RunMode.Evaluation:
-                if next_iter_solutions and len(next_iter_solutions) > 1:
-                    self.logger.warning(
-                        "Evaluation run-mode received %d control vectors; only the first will be used.",
-                        len(next_iter_solutions),
-                    )
-                control_vectors = (
-                    [next_iter_solutions[0].items] if next_iter_solutions else [{}]
+    def _control_vectors(
+        self, next_iter_solutions: list[ControlVector] | None
+    ) -> list[dict[str, Any]]:
+        if self._is_evaluation:
+            if next_iter_solutions and len(next_iter_solutions) > 1:
+                logger.warning(
+                    "Evaluation run-mode received %d control vectors; "
+                    "only the first will be used.",
+                    len(next_iter_solutions),
                 )
-                self.logger.debug(
-                    "Evaluation mode control vectors: %s", control_vectors
-                )
-            elif next_iter_solutions is None:
-                rng = np.random.default_rng(
-                    self._problem_definition.optimization_parameters.seed
-                )
-                control_vectors = CandidateGenerator.generate(
-                    self._full_key_boundaries,
-                    self.population_size,
-                    rng.uniform,
-                    self._initial_state,
-                    self._linear_inequalities,
-                )
-                self.logger.debug("Generated control vectors: %s", control_vectors)
-            else:
-                control_vectors = [cv.items for cv in next_iter_solutions]
-                self.logger.debug("Using provided control vectors: %s", control_vectors)
+            return [next_iter_solutions[0].items] if next_iter_solutions else [{}]
 
-            solution_candidates = self._task_builder.build(control_vectors)
-            self.logger.info(
-                "Iteration processed successfully. Generated %d solution candidates.",
-                len(solution_candidates),
+        if next_iter_solutions is None:
+            rng = np.random.default_rng(self._params.seed)
+            control_vectors = CandidateGenerator.generate(
+                self._full_key_boundaries,
+                self.population_size,
+                rng.uniform,
+                self._initial_state,
+                self._params.linear_inequalities,
             )
-            return ProblemDispatcherServiceResponse(
-                solution_candidates=solution_candidates
-            )
-        except Exception as e:
-            self.logger.error("Error during process_iteration: %s", str(e))
-            raise
+            logger.debug("Generated %d initial control vectors.", len(control_vectors))
+            return control_vectors
 
-    def _process_problem_items(
-        self,
-        process_func: Callable[..., dict[str, Any] | Any],
-        log_message: str,
-        merge_results: bool = False,
-    ) -> dict[str, Any]:
-        self.logger.debug(f"Processing problem items: {log_message}")
-        try:
-            # Add type annotation for the result variable
-            result: dict[str, Any] | None = {} if merge_results else None
-            for problem_type, handler in self._handlers.items():
-                items = getattr(self._problem_definition, problem_type, None)
-                if items:
-                    processed_result = process_func(handler, items)
+        logger.debug("Using %d provided control vectors.", len(next_iter_solutions))
+        return [cv.items for cv in next_iter_solutions]
 
-                    if merge_results:
-                        # Ensure result is always a dictionary when merge_results is True
-                        if result is None:
-                            result = {}  # Safeguard for type consistency
-                        result.update(processed_result)
-                    else:
-                        # Initialize result as a dictionary if it is None
-                        if result is None:
-                            result = {}
-                        result[problem_type] = processed_result
-                    self.logger.debug(
-                        "%s for %s: %s", log_message, problem_type, processed_result
-                    )
-            # If result is still None (no items processed), return an empty dictionary
-            return result if result is not None else {}
-        except Exception as e:
-            self.logger.error("Error during %s: %s", log_message, str(e))
-            raise
-
-    def _build_initial_state(self) -> dict[str, Any]:
-        return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_initial_state(items),
-            log_message="Building initial state",
-            merge_results=False,
-        )
-
-    def _build_full_key_boundaries(self) -> dict[str, Boundaries]:
-        if self._problem_definition.run_mode == RunMode.Evaluation:
-            return {}
-        return self._process_problem_items(
-            process_func=lambda handler, items: handler.build_full_key_boundaries(
-                items
-            ),
-            log_message="Building boundaries",
-            merge_results=True,
-        )
-
-    def _build_full_key_linear_inequalities(self) -> LinearInequalities | None:
-        if (
-            self._problem_definition.run_mode == RunMode.Evaluation
-            or self._linear_inequalities is None
-        ):
+    def _convert_linear_inequalities(self) -> LinearInequalities | None:
+        source = self._params.linear_inequalities
+        if source is None:
             return None
         return LinearInequalities(
-            **{
-                "A": [
-                    {
-                        convert_key_separator(k, output_separator=DEFAULT_SEPARATOR): v
-                        for (k, v) in row.items()
-                    }
-                    for row in self._linear_inequalities.A
-                ],
-                "b": self._linear_inequalities.b,
-                "sense": self._linear_inequalities.sense,
-            }
+            A=[
+                {
+                    convert_key_separator(key, output_separator=DEFAULT_SEPARATOR): v
+                    for key, v in row.items()
+                }
+                for row in source.A
+            ],
+            b=source.b,
+            sense=source.sense,
         )

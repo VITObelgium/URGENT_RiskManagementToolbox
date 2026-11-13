@@ -4,8 +4,8 @@ import os
 import shutil
 from pathlib import Path
 
+from utils import find_repo_root
 from services.simulation_service.core.infrastructure.worker.src.utils.env_helper import (
-    _find_repo_root,
     compute_worker_temp_dir,
 )
 
@@ -22,15 +22,10 @@ def stage_worker_runtime(worker_id: str | int, *, reset: bool = False) -> Path:
 
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
-    repo_root = _find_repo_root()
+    repo_root = find_repo_root()
     runtime_sources = (
         (
-            repo_root
-            / "src"
-            / "services"
-            / "simulation_service"
-            / "core"
-            / "connectors",
+            repo_root / "plugins" / "connectors",
             runtime_dir / "connectors",
         ),
         (repo_root / "src" / "logger", runtime_dir / "logger"),

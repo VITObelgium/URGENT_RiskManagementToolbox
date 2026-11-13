@@ -64,24 +64,6 @@ EXCEPTION: JobStatus.ValueType
 "Job has thrown an exception/"
 Global___JobStatus: typing_extensions.TypeAlias = JobStatus
 
-class _Simulator:
-    ValueType = typing.NewType("ValueType", builtins.int)
-    V: typing_extensions.TypeAlias = ValueType
-
-class _SimulatorEnumTypeWrapper(
-    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Simulator.ValueType],
-    builtins.type,
-):
-    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    SIMULATOR_UNSPECIFIED: _Simulator.ValueType
-    OPENDARTS: _Simulator.ValueType
-
-class Simulator(_Simulator, metaclass=_SimulatorEnumTypeWrapper): ...
-
-SIMULATOR_UNSPECIFIED: Simulator.ValueType
-OPENDARTS: Simulator.ValueType
-Global___Simulator: typing_extensions.TypeAlias = Simulator
-
 class _ModelStatus:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
@@ -105,11 +87,11 @@ Global___ModelStatus: typing_extensions.TypeAlias = ModelStatus
 @typing.final
 class SimulationInput(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    WELLS_FIELD_NUMBER: builtins.int
-    wells: builtins.str
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    payload: builtins.str
 
-    def __init__(self, *, wells: builtins.str = ...) -> None: ...
-    def ClearField(self, field_name: typing.Literal["wells", b"wells"]) -> None: ...
+    def __init__(self, *, payload: builtins.str = ...) -> None: ...
+    def ClearField(self, field_name: typing.Literal["payload", b"payload"]) -> None: ...
 
 Global___SimulationInput: typing_extensions.TypeAlias = SimulationInput
 
@@ -141,12 +123,12 @@ class SimulationJob(google.protobuf.message.Message):
     SIMULATION_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     WORKER_ID_FIELD_NUMBER: builtins.int
-    SIMULATOR_FIELD_NUMBER: builtins.int
     JOB_ID_FIELD_NUMBER: builtins.int
+    CONNECTOR_FIELD_NUMBER: builtins.int
     status: Global___JobStatus.ValueType
     worker_id: builtins.str
-    simulator: Global___Simulator.ValueType
     job_id: builtins.int
+    connector: builtins.str
 
     @property
     def simulation(self) -> Global___Simulation: ...
@@ -156,8 +138,8 @@ class SimulationJob(google.protobuf.message.Message):
         simulation: Global___Simulation | None = ...,
         status: Global___JobStatus.ValueType = ...,
         worker_id: builtins.str = ...,
-        simulator: Global___Simulator.ValueType = ...,
         job_id: builtins.int = ...,
+        connector: builtins.str = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing.Literal["simulation", b"simulation"]
@@ -165,12 +147,12 @@ class SimulationJob(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing.Literal[
+            "connector",
+            b"connector",
             "job_id",
             b"job_id",
             "simulation",
             b"simulation",
-            "simulator",
-            b"simulator",
             "status",
             b"status",
             "worker_id",
@@ -179,6 +161,19 @@ class SimulationJob(google.protobuf.message.Message):
     ) -> None: ...
 
 Global___SimulationJob: typing_extensions.TypeAlias = SimulationJob
+
+@typing.final
+class SimulationOptions(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    CONNECTOR_FIELD_NUMBER: builtins.int
+    connector: builtins.str
+
+    def __init__(self, *, connector: builtins.str = ...) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["connector", b"connector"]
+    ) -> None: ...
+
+Global___SimulationOptions: typing_extensions.TypeAlias = SimulationOptions
 
 @typing.final
 class RequestJob(google.protobuf.message.Message):
@@ -243,6 +238,7 @@ Global___Simulation: typing_extensions.TypeAlias = Simulation
 class Simulations(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     SIMULATIONS_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
 
     @property
     def simulations(
@@ -250,11 +246,22 @@ class Simulations(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         Global___Simulation
     ]: ...
+    @property
+    def options(self) -> Global___SimulationOptions: ...
     def __init__(
-        self, *, simulations: collections.abc.Iterable[Global___Simulation] | None = ...
+        self,
+        *,
+        simulations: collections.abc.Iterable[Global___Simulation] | None = ...,
+        options: Global___SimulationOptions | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["options", b"options"]
+    ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing.Literal["simulations", b"simulations"]
+        self,
+        field_name: typing.Literal[
+            "options", b"options", "simulations", b"simulations"
+        ],
     ) -> None: ...
 
 Global___Simulations: typing_extensions.TypeAlias = Simulations

@@ -2,15 +2,15 @@ import numpy as np
 import pytest
 
 from common import OptimizationStrategy
+from plugins.optimizers.pso import PSOEngine
 from services.solution_updater_service.core.models import (
-    OptimizationEngine,
     SolutionUpdaterServiceResponse,
 )
 from services.solution_updater_service.core.service import (
     SolutionUpdaterService,
 )
 
-engine = OptimizationEngine.PSO
+engine = PSOEngine.EngineName
 
 
 @pytest.fixture

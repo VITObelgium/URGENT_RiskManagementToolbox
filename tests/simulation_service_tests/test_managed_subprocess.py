@@ -1,9 +1,11 @@
+import io
 import subprocess
 
 import pytest
 
 from services.simulation_service.core.connectors.conn_utils.managed_subprocess import (
     ManagedSubprocess,
+    _default_stream_reader,
 )
 
 
@@ -127,3 +129,87 @@ class TestManagedSubprocessExit:
             m.process.wait()
         result = ms.__exit__(None, None, None)
         assert result is None
+
+
+class TestDefaultStreamReader:
+    def test_reads_lines_into_list(self):
+        lines: list[str] = []
+        logged: list[str] = []
+        stream = io.StringIO("line1\nline2\nline3\n")
+        _default_stream_reader(stream, lines, logged.append)
+        assert lines == ["line1", "line2", "line3"]
+
+    def test_calls_log_func_for_each_line(self):
+        logged: list[str] = []
+        stream = io.StringIO("a\nb\n")
+        _default_stream_reader(stream, [], logged.append)
+        assert logged == ["a", "b"]
+
+    def test_stream_closed_value_error_is_swallowed(self):
+        """ValueError raised mid-iteration (stream closed) must be ignored."""
+
+        class _ClosingStream:
+            def __iter__(self):
+                yield "first"
+                raise ValueError("I/O operation on closed file")
+
+            def close(self):
+                pass
+
+        lines: list[str] = []
+        _default_stream_reader(_ClosingStream(), lines, lambda _: None)
+        assert lines == ["first"]
+
+    def test_stream_close_called_in_finally(self):
+        """stream.close() must be called even when no exception occurs."""
+        closed = []
+
+        class _TrackingStream:
+            def __iter__(self):
+                return iter(["x\n"])
+
+            def close(self):
+                closed.append(True)
+
+        _default_stream_reader(_TrackingStream(), [], lambda _: None)
+        assert closed == [True]
+
+
+class TestManagedSubprocessWait:
+    def test_wait_returns_returncode(self):
+        ms = _make_managed(["true"])
+        with ms as m:
+            rc = m.wait()
+        assert rc == 0
+
+    def test_wait_raises_if_not_started(self):
+        ms = _make_managed(["echo", "hi"])
+        with pytest.raises(RuntimeError, match="not been started"):
+            ms.wait()
+
+    def test_returncode_is_none_before_start(self):
+        ms = _make_managed(["echo", "hi"])
+        assert ms.returncode is None
+
+
+class TestManagedSubprocessLogMethods:
+    def test_log_info_calls_info_func(self):
+        logged: list[str] = []
+        ms = ManagedSubprocess(
+            command_args=["echo", "hi"],
+            logger_info_func=logged.append,
+            logger_error_func=lambda _: None,
+        )
+        ms.log_info("hello")
+        assert "hello" in logged
+
+    def test_log_warning_defaults_to_error_func(self):
+        """When no logger_warning_func is given, warning falls back to error func."""
+        errors: list[str] = []
+        ms = ManagedSubprocess(
+            command_args=["echo", "hi"],
+            logger_info_func=lambda _: None,
+            logger_error_func=errors.append,
+        )
+        ms.log_warning("warn msg")
+        assert "warn msg" in errors

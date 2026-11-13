@@ -10,7 +10,7 @@ logger = get_logger("worker-dispatcher", filename=__name__)
 
 
 async def main(stop_flag: threading.Event | None = None, worker_id: str | None = None):
-    mode = os.getenv("OPEN_DARTS_RUNNER", "thread").lower()
+    mode = os.getenv("RUNNER_MODE", "thread").lower()
     if mode == "docker":
         logger.info("Worker dispatcher: selecting docker-mode entrypoint")
         from services.simulation_service.core.infrastructure.worker.src._simulation_worker_grpc_docker import (
@@ -28,7 +28,7 @@ async def main(stop_flag: threading.Event | None = None, worker_id: str | None =
         await thread_main(stop_flag=stop_flag, worker_id=worker_id)
 
     else:
-        raise ValueError(f"Unknown OPEN_DARTS_RUNNER mode: {mode}")
+        raise ValueError(f"Unknown RUNNER_MODE mode: {mode}")
 
 
 if __name__ == "__main__":

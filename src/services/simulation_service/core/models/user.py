@@ -1,18 +1,25 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Any
 
-from services.well_management_service import WellDesignServiceResponse
+from pydantic import BaseModel
 
 
 class SimulationCase(BaseModel, extra="forbid"):
-    wells: WellDesignServiceResponse
+    """One simulation candidate.
+
+    ``payload`` is the opaque simulation input: one key per configured domain
+    service (the service's "column"), with plugin-defined values.
+    """
+
+    payload: dict[str, Any]
     control_vector: dict[str, float]
     results: dict[str, float]
 
 
 class SimulationServiceRequest(BaseModel, extra="forbid"):
     simulation_cases: list[SimulationCase]
+    connector: str
 
 
 class SimulationServiceResponse(BaseModel, extra="forbid"):

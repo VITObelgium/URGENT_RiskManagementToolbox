@@ -15,12 +15,10 @@ del _hard_dependencies, _dependency, _missing_dependencies
 
 from services.solution_updater_service.core.api import (  # noqa: F401, E402
     ControlVector,
-    OptimizationEngine,
     SolutionUpdaterService,
 )
 
 __all__ = [
     "SolutionUpdaterService",
-    "OptimizationEngine",
     "ControlVector",
 ]

@@ -494,3 +494,41 @@ def test_file_roundtrip_service_can_continue(tmp_path: Path) -> None:
 
     assert service_b.loop_controller.current_generation == 4
     assert len(response.next_iter_solutions) == N_PARTICLES
+
+
+def _rewrite_config(checkpoint_file: Path, config: dict[str, Any]) -> None:
+    with np.load(checkpoint_file) as data:
+        arrays = {k: data[k] for k in data.files}
+    arrays["config_json"] = np.frombuffer(
+        json.dumps(config).encode("utf-8"), dtype=np.uint8
+    )
+    np.savez(checkpoint_file, **arrays)
+
+
+def test_load_pre_0_4_checkpoint_gives_clear_error(
+    tmp_path: Path, full_state: dict[str, Any]
+) -> None:
+    ckpt = tmp_path / "ckpt.npz"
+    save_checkpoint(ckpt, _make_problem_definition(tmp_path), full_state, "h", "r")
+    legacy_config = {
+        "well_design": [{"well_name": "INJ", "initial_state": {}}],
+        "optimization_parameters": {"objectives": {"HEAT": "maximize"}},
+    }
+    _rewrite_config(ckpt, legacy_config)
+
+    with pytest.raises(ValueError, match=r"older version of the toolbox \(<0\.4\)"):
+        load_checkpoint(ckpt)
+
+
+def test_load_checkpoint_with_invalid_current_config(
+    tmp_path: Path, full_state: dict[str, Any]
+) -> None:
+    ckpt = tmp_path / "ckpt.npz"
+    pd = _make_problem_definition(tmp_path)
+    save_checkpoint(ckpt, pd, full_state, "h", "r")
+    config = json.loads(pd.model_dump_json())
+    config["plugins"]["domain_services"] = []
+    _rewrite_config(ckpt, config)
+
+    with pytest.raises(ValueError, match="contains an invalid configuration"):
+        load_checkpoint(ckpt)

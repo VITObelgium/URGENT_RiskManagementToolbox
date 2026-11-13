@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/Version-0.3.0-orange">
+  <img alt="Version" src="https://img.shields.io/badge/Version-0.4.0-orange">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
   <img alt="Code Quality" src="https://img.shields.io/badge/Code%20Quality-80%25%2B-yellow">
@@ -36,7 +36,7 @@
 - [Implemented services](#implemented-services)
    - [Well design service](#well-design-service)
 - [Configuration example](#configuration-example)
-- [Known issues](#known-issues)
+- [Migrating from 0.3](#migrating-from-03)
 - [Contact](#contact)
 
 ## Introduction
@@ -148,7 +148,11 @@ The toolbox uses an explicit plugin system to select the reservoir simulator con
 }
 ```
 
-`connector` and `optimizer` take a single plugin name; `domain_services` takes a list of domain service plugin names (at least one, no duplicates). Each name maps to a file in `plugins/<type>/<name>.py`. The toolbox loads only the selected plugins at startup and validates each exported `plugin` descriptor.
+`connector` and `optimizer` take a single plugin name; `domain_services` takes a list of domain service plugin names (at least one, no duplicates). Each name maps to a file `plugins/<type>/<name>.py` (or a package `plugins/<type>/<name>/__init__.py`). The toolbox loads only the selected plugins at startup and validates each exported `plugin` descriptor.
+
+Plugin names are normalised before use: they are lower-cased and `-` becomes `_`, so `"Well-Design"` selects `well_design`. A normalised name must match `[a-z][a-z0-9_]*`. The same rule applies to the keys of the top-level `domain_services` mapping. A plugin's descriptor name must equal its file (or package) name. Connector plugins must not be named after the framework modules they are staged next to in workers (`common`, `runner`, `factory`, `conn_utils`).
+
+Plugins are loaded from `<repo>/plugins` by default; set `URGENT_PLUGIN_PATH` to load them from another directory. In Docker mode (`--use-docker`) only `<repo>/plugins` is supported, because that directory is baked into the worker image; the run aborts at startup if `URGENT_PLUGIN_PATH` points elsewhere.
 
 Configuration validation happens in two phases. The framework first reads the `plugins` block, loads the selected plugins, and runs a trace-compatibility check: connectors and optimizers may declare required trace tags, and each domain service provides its service name as a trace tag by default. If a required tag is not provided by any selected domain service, startup fails fast with a clear error. Only then is the full configuration validated — including each item's `initial_state`, which is checked by the owning plugin's own Pydantic model.
 
@@ -164,12 +168,15 @@ connector, optimizer, and domain services in its config.
 | `optimizer` | `pso` | Particle Swarm Optimization engine |
 | `domain_service` | `well_design` | Geometric well design service (IWell / JWell / SWell / HWell) |
 | `domain_service` | `well_counter` | Minimal demo service: each item optimizes a single `count` value |
+| `domain_service` | `benchmark_well_design` | Flattens each item's wellhead `x`/`y` into a decision vector `{"x": [...]}`; used by the synthetic benchmarks in `benchmarks/` |
 
 ---
 
 #### Creating a custom plugin
 
 The scaffolder generates a one-file plugin template derived from the live interface. Run the appropriate command and implement the generated stubs.
+
+> **Note:** The generated file currently also copies every import of the interface's module (for example `os`, `subprocess`, `abc` for connectors). The snippets below show only the imports the stub needs; remove the unused ones from the generated file, or `ruff check` reports them as `F401`.
 
 ##### Connector plugin
 
@@ -325,19 +332,20 @@ class CompanyDomainService(DomainServiceInterface):
 
     @classmethod
     def get_item_state_adapter(cls) -> TypeAdapter[Any]:
-        """Return a TypeAdapter for validating and normalising an item's initial_state dict.
+        """Return a TypeAdapter validating and normalising one item's initial_state dict.
 
-        Called once at orchestrator startup after the plugin is loaded and
-        before ``ProblemDispatcherService`` is constructed.
+        Called once at startup after the plugin is loaded, before any
+        service is constructed. The returned adapter must accept dicts with
+        at least a ``"name"`` key.
         """
         raise NotImplementedError()
 
     def build_payload(self, items: list[dict[str, Any]]) -> dict[str, Any]:
-        """Build this service's section of the simulation payload.
+        """Convert this service's item states into its simulation payload column.
 
-        Called once per optimisation candidate with the current state of all
-        items configured under this service. The returned dict is placed under
-        the service's name in the combined payload sent to the simulator.
+        Called once per optimisation candidate. The returned dict is placed
+        under the service's name in the simulation payload and sent to the
+        simulator verbatim — its structure is entirely plugin-defined.
         """
         raise NotImplementedError()
 
@@ -418,7 +426,7 @@ The connector enables bidirectional data exchange between the Toolbox and the si
 
 > *Note: Make sure you run OpenDarts with the set_num_threads(1) to prevent toolbox performance degradation*
 >
-> check main.py in examples/complex_model
+> see `main.py` inside `examples/complex_model.zip`
 ``` python
 from darts.engines import set_num_threads
 ...
@@ -605,7 +613,8 @@ Long optimization runs can be interrupted at any time (e.g., due to a crash or m
 
 #### How checkpoints work
 
-- A checkpoint is saved every `checkpoint_interval` completed generations (configured in `simulation_config`).
+- A checkpoint is saved every `checkpoint_interval` completed generations (configured in `simulation_config`), counting from generation 0.
+- On Ctrl+C the toolbox writes the state of the last *fully completed* generation if it is newer than the last saved checkpoint. A generation that was interrupted half-way is never checkpointed.
 - Checkpoints capture the full optimizer state and the problem configuration.
 - Files are written atomically to `checkpoint_path` and named `checkpoint_<run_id>.npz`.
 - On successful completion the toolbox deletes the checkpoint file automatically.
@@ -636,7 +645,7 @@ The problem configuration (objectives, domain service items, bounds, etc.) is re
 }
 ```
 
-With `checkpoint_interval: 5`, a checkpoint is saved after generations 5, 10, 15, and so on. If the run is interrupted at generation 13, resuming will continue from generation 10 (the most recent saved checkpoint).
+With `checkpoint_interval: 5`, a checkpoint is saved after generations 0, 5, 10, 15, and so on. If the run crashes during generation 13, the checkpoint of generation 10 is the latest one and resuming continues with generation 11. If you stop it with Ctrl+C during generation 13, generation 12 is saved on exit and resuming continues with generation 13.
 
 ---
 
@@ -1107,6 +1116,44 @@ The Well design service will be use to determine the optimal wells placement and
 
 
 ```
+
+## Migrating from 0.3
+
+0.4 replaces the built-in well management service and OpenDarts connector with the plugin system. It is a clean break: 0.3 configs, models and checkpoints must be updated.
+
+1. **Config file.** Add a `plugins` block and move the items under a `domain_services` mapping keyed by service name. Items use `name` instead of `well_name`:
+
+   ```jsonc
+   // 0.3
+   {
+     "well_design": [
+       { "well_name": "INJ", "initial_state": { ... }, "parameter_bounds": { ... } }
+     ],
+     "optimization_parameters": { ... }
+   }
+
+   // 0.4
+   {
+     "plugins": { "connector": "opendarts", "optimizer": "pso", "domain_services": ["well_design"] },
+     "domain_services": {
+       "well_design": [
+         { "name": "INJ", "initial_state": { ... }, "parameter_bounds": { ... } }
+       ]
+     },
+     "optimization_parameters": { ... }
+   }
+   ```
+
+   Linear-inequality variable names (`well_design.INJ.md`) are unchanged.
+
+2. **Simulation model (`main.py` in the model zip).**
+   - `from connectors.open_darts import ...` becomes `from connectors.opendarts import ...`.
+   - `open_darts_input_configuration_injector` is renamed to `open_darts_input_payload_injector`.
+   - The injected payload has one section per domain service, so the wells are under `payload["well_design"]` instead of at the top level. Pass the whole payload to `OpenDartsConnector.get_well_connection_cells(payload, reservoir)`; it reads the `well_design` section itself.
+
+   See [OpenDarts Connector](#opendarts-connector) and `main.py` inside `examples/complex_model.zip`.
+
+3. **Checkpoints.** Checkpoints written by 0.3 cannot be resumed with 0.4. Resuming one fails with an error saying it was created by an older version; start a new run instead.
 
 ## Contact
 For issues or contributions, please open a GitHub issue or contact the maintainers.

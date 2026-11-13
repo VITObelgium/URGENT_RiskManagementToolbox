@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+from pydantic import ValidationError
 
 from services.problem_dispatcher_service.core.models import ProblemDispatcherDefinition
 from services.solution_updater_service.core.service.solution_updater_service import (
@@ -102,6 +103,27 @@ def save_checkpoint(
     tmp_npz.replace(checkpoint_path)
 
 
+def _validate_checkpoint_config(
+    config_dict: dict[str, Any], checkpoint_file: Path
+) -> ProblemDispatcherDefinition:
+    """Validate the stored config, explaining failures caused by old checkpoints."""
+    try:
+        return ProblemDispatcherDefinition.model_validate(config_dict)
+    except ValidationError as exc:
+        # 0.4 introduced the required "plugins" block and the "domain_services"
+        # mapping; configs without them predate the plugin system.
+        if "plugins" not in config_dict or "domain_services" not in config_dict:
+            raise ValueError(
+                f"Checkpoint {checkpoint_file} was created by an older version "
+                "of the toolbox (<0.4) and cannot be resumed. Start a new run "
+                "with a config in the 0.4 format (see 'Migrating from 0.3' in "
+                "the README)."
+            ) from exc
+        raise ValueError(
+            f"Checkpoint {checkpoint_file} contains an invalid configuration: {exc}"
+        ) from exc
+
+
 def load_checkpoint(checkpoint_file: Path) -> LoadedCheckpointData:
     """Load optimizer state from an .npz checkpoint file.
 
@@ -116,7 +138,7 @@ def load_checkpoint(checkpoint_file: Path) -> LoadedCheckpointData:
     data = np.load(checkpoint_file)
 
     config_dict = json.loads(_decode(data["config_json"]))
-    config = ProblemDispatcherDefinition.model_validate(config_dict)
+    config = _validate_checkpoint_config(config_dict, checkpoint_file)
 
     last_best_val = float(data["lc_last_best"][0])
     last_best: float | None = None if np.isnan(last_best_val) else last_best_val

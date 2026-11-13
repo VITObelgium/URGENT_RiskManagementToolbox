@@ -349,7 +349,11 @@ def _calculate_centroids(
     return np.reshape(centroids_all_cells, (nx * ny * nz, 3), order="F")
 
 
-# Plugin descriptor — only built when ``urgent_plugins`` is importable.
+# Plugin descriptor — only built when ``urgent_plugins`` is importable. The
+# worker env has no pydantic, so inside simulation subprocesses (where the
+# descriptor is never needed) the import is expected to fail.
+_DESCRIPTOR_OPTIONAL_DEPS = frozenset({"urgent_plugins", "pydantic", "pydantic_settings"})
+
 try:
     from urgent_plugins import ConnectorPlugin
 
@@ -357,5 +361,16 @@ try:
         name=OpenDartsConnector.ConnectorName,
         implementation=OpenDartsConnector,
     )
-except ImportError:
-    logger.debug("urgent_plugins not available; connector descriptor not registered.")
+except ModuleNotFoundError as exc:
+    if (exc.name or "").split(".")[0] not in _DESCRIPTOR_OPTIONAL_DEPS:
+        raise
+    _log = (
+        logger.debug
+        if os.environ.get("URGENT_WORKER_SUBPROCESS") == "1"
+        else logger.warning
+    )
+    _log(
+        "%s not available (%s); connector descriptor not registered.",
+        exc.name,
+        exc,
+    )

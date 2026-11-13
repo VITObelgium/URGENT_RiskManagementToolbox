@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 from logger import get_logger
 
-from urgent_plugins.api import PluginKind
+from urgent_plugins.api import PluginKind, normalize_plugin_name
 from urgent_plugins.loader import load_local_plugin
 from urgent_plugins.paths import default_plugins_root
 from urgent_plugins.registry import get_registry
@@ -44,7 +44,7 @@ def _resolve_plugin(kind: PluginKind, name: str) -> str:
     plugins_root = default_plugins_root()
     os.environ["URGENT_PLUGIN_PATH"] = str(plugins_root)
 
-    normalized = name.strip().lower()
+    normalized = normalize_plugin_name(name)
     existing = get_registry().get(kind, normalized)
     if existing is not None:
         return existing.name

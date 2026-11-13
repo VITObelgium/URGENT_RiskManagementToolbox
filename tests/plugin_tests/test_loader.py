@@ -104,13 +104,11 @@ def test_load_local_plugin_missing_file_errors(tmp_path: Path) -> None:
         load_local_plugin(PluginKind.CONNECTOR, "nope", tmp_path)
 
 
-def test_load_local_plugin_registers_under_descriptor_name(tmp_path: Path) -> None:
-    """Loader registers under descriptor.name even when it differs from the filename.
+def test_load_local_plugin_rejects_descriptor_name_mismatch(tmp_path: Path) -> None:
+    """descriptor.name must equal the file name.
 
-    The descriptor's own name (sourced from the implementation class's
-    ConnectorName/EngineName attribute) is the source of truth — this lets the
-    built-in OpenDARTS plugin lives at ``opendarts.py`` and registers
-    under the canonical name ``opendarts``.
+    The registry is keyed by descriptor.name, but worker staging locates the
+    file by the configured name, so a mismatch would only fail later.
     """
     _write_plugin(
         tmp_path,
@@ -119,10 +117,21 @@ def test_load_local_plugin_registers_under_descriptor_name(tmp_path: Path) -> No
         _VALID_CONNECTOR_TEMPLATE.format(name="canonical_name"),
     )
 
-    descriptor = load_local_plugin(PluginKind.CONNECTOR, "filename_stem", tmp_path)
-    assert descriptor.name == "canonical_name"
-    assert get_registry().get(PluginKind.CONNECTOR, "canonical_name") is descriptor
-    assert get_registry().get(PluginKind.CONNECTOR, "filename_stem") is None
+    with pytest.raises(ValueError, match="canonical_name.*filename_stem"):
+        load_local_plugin(PluginKind.CONNECTOR, "filename_stem", tmp_path)
+    assert get_registry().get(PluginKind.CONNECTOR, "canonical_name") is None
+
+
+def test_load_local_plugin_accepts_unnormalised_requested_name(tmp_path: Path) -> None:
+    _write_plugin(
+        tmp_path,
+        PluginKind.CONNECTOR,
+        "my_conn",
+        _VALID_CONNECTOR_TEMPLATE.format(name="My-Conn"),
+    )
+
+    descriptor = load_local_plugin(PluginKind.CONNECTOR, "My-Conn", tmp_path)
+    assert descriptor.name == "my_conn"
 
 
 def test_load_local_plugin_missing_descriptor(tmp_path: Path) -> None:

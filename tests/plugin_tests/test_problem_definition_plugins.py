@@ -93,3 +93,47 @@ def test_domain_services_sections_must_match_plugins() -> None:
     payload["plugins"]["domain_services"] = ["well_design", "well_counter"]
     with pytest.raises(ValueError, match="must match plugins.domain_services"):
         ProblemDispatcherDefinition(**payload)
+
+
+def test_plugin_names_are_normalised() -> None:
+    payload = _minimal_problem_definition_payload()
+    payload["plugins"] = {
+        "connector": "OpenDarts",
+        "optimizer": "PSO",
+        "domain_services": ["Well-Design"],
+    }
+    payload["domain_services"] = {
+        "Well_Design": payload["domain_services"]["well_design"]
+    }
+
+    pd = ProblemDispatcherDefinition(**payload)
+
+    assert pd.plugins.connector == "opendarts"
+    assert pd.plugins.optimizer == "pso"
+    assert pd.plugins.domain_services == ["well_design"]
+    assert list(pd.domain_services) == ["well_design"]
+
+
+def test_domain_service_names_duplicate_after_normalisation_rejected() -> None:
+    with pytest.raises(ValueError, match="must be unique"):
+        PluginConfig(
+            connector="opendarts",
+            optimizer="pso",
+            domain_services=["well_design", "Well-Design"],
+        )
+
+
+def test_domain_service_sections_duplicate_after_normalisation_rejected() -> None:
+    payload = _minimal_problem_definition_payload()
+    items = payload["domain_services"]["well_design"]
+    payload["domain_services"] = {"well_design": items, "Well-Design": items}
+
+    with pytest.raises(ValueError, match="after name normalisation"):
+        ProblemDispatcherDefinition(**payload)
+
+
+def test_invalid_plugin_name_rejected() -> None:
+    with pytest.raises(ValueError, match="Invalid plugin name"):
+        PluginConfig(
+            connector="open darts", optimizer="pso", domain_services=["well_design"]
+        )

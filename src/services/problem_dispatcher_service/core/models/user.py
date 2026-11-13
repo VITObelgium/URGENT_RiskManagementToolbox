@@ -26,6 +26,7 @@ from services.shared import (
     ServiceRequest,
 )
 from services.solution_updater_service import ControlVector
+from urgent_plugins.api import normalize_plugin_name
 
 logger = get_logger(__name__)
 
@@ -116,11 +117,18 @@ class PluginConfig(BaseModel, extra="forbid"):
     optimizer: str
     domain_services: list[DomainServiceName] = Field(min_length=1)
 
+    @field_validator("connector", "optimizer")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return normalize_plugin_name(value)
+
     @field_validator("domain_services")
     @classmethod
     def validate_unique_domain_services(
         cls, value: list[DomainServiceName]
     ) -> list[DomainServiceName]:
+        # Normalise first so "Well-Design" and "well_design" count as duplicates.
+        value = [normalize_plugin_name(name) for name in value]
         if duplicates := _duplicate_names(value):
             raise ValueError(
                 f"plugins.domain_services must be unique. Duplicate: {duplicates}"
@@ -191,6 +199,23 @@ class ProblemDispatcherDefinition(BaseModel, extra="forbid"):
     )
     simulation_config: SimulationConfig = Field(default_factory=SimulationConfig)
     plugins: PluginConfig
+
+    @field_validator("domain_services", mode="before")
+    @classmethod
+    def normalize_domain_service_keys(cls, value: Any) -> Any:
+        """Normalise section keys the same way plugin names are normalised."""
+        if not isinstance(value, dict):
+            return value
+        normalized: dict[str, Any] = {}
+        for key, items in value.items():
+            name = normalize_plugin_name(key)
+            if name in normalized:
+                raise ValueError(
+                    f"domain_services section {key!r} duplicates section "
+                    f"{name!r} after name normalisation."
+                )
+            normalized[name] = items
+        return normalized
 
     @model_validator(mode="after")
     def apply_task_overrides(self) -> Self:

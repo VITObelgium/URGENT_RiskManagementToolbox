@@ -34,7 +34,7 @@ def load_local_plugin(
     Inserts the module into ``sys.modules`` before executing it so circular
     imports inside the plugin behave normally. For package plugins (resolved to
     __init__.py) sets ``submodule_search_locations`` so relative imports resolve.
-    Validates the exported ``plugin`` object before returning.
+    Validates the exported ``plugin`` object (type and name) before returning.
     """
     normalized = normalize_plugin_name(name)
     path = resolve_plugin_path(kind, normalized, plugins_root)
@@ -81,5 +81,13 @@ def load_local_plugin(
         )
 
     descriptor = cast(PluginDescriptor, raw_descriptor)
+    # The registry is keyed by descriptor.name while files are located (and
+    # staged into workers) by file/package name; they must agree.
+    if descriptor.name != normalized:
+        raise ValueError(
+            f"Plugin at {path} declares name {descriptor.name!r}, but its "
+            f"{'package' if is_package else 'file'} name is {normalized!r}. "
+            "Rename the file or change the descriptor name so they match."
+        )
     get_registry().register(kind, descriptor)
     return descriptor

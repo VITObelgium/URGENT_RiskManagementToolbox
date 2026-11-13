@@ -528,3 +528,156 @@ def test_run_risk_management_checkpoint_file_cleared(
         rms.run_risk_management(problem_def, b"model", model_hash="abc")
 
     assert not ckpt_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# KeyboardInterrupt inside the generation loop: only completed generations
+# are ever checkpointed.
+# ---------------------------------------------------------------------------
+
+
+class _FakeLoopController:
+    def __init__(self, max_generations: int = 10) -> None:
+        self.current_generation = 0
+        self._max = max_generations
+        self.info = "fake"
+
+    def running(self) -> bool:
+        return self.current_generation < self._max
+
+    def increment_generation(self) -> None:
+        self.current_generation += 1
+
+
+def _run_loop_interrupted_at(
+    interrupt_generation: int,
+    tmp_path: Path,
+    checkpoint_interval: int = 10,
+    resume_from: int | None = None,
+):
+    """Drive _run_optimization_loop, raising KeyboardInterrupt mid-generation.
+
+    Returns (loop_completed, save_checkpoint_mock).
+    """
+    loop = _FakeLoopController()
+    solution_updater = MagicMock()
+    solution_updater.loop_controller = loop
+    # The live state carries a mutable object so the test can prove a deep
+    # copy is what gets written.
+    live_state = {"generation": None, "positions": [0]}
+
+    def _get_state(_next_solutions):
+        live_state["generation"] = loop.current_generation
+        return live_state
+
+    solution_updater.get_checkpoint_state.side_effect = _get_state
+
+    def _restore(_checkpoint):
+        loop.current_generation = resume_from
+        return []
+
+    solution_updater.restore_checkpoint_state.side_effect = _restore
+    solution_updater.process_request.return_value = MagicMock(next_iter_solutions=[])
+
+    dispatcher = MagicMock()
+    dispatcher.full_key_boundaries = {}
+    dispatcher.full_key_linear_inequalities = None
+    dispatcher.expected_optimization_function_names = ["cost"]
+    dispatcher.process_iteration.return_value = MagicMock(solution_candidates=[])
+
+    def _simulate(_request):
+        if loop.current_generation == interrupt_generation:
+            live_state["positions"].append("partial")
+            raise KeyboardInterrupt()
+        return MagicMock(simulation_cases=[])
+
+    problem_def = _make_problem_def()
+    problem_def.simulation_config.checkpoint_interval = checkpoint_interval
+    problem_def.simulation_config.checkpoint_path = str(tmp_path)
+
+    with (
+        patch(f"{_RMS}.SimulationService") as mock_sim,
+        patch(f"{_RMS}.save_checkpoint") as mock_save,
+    ):
+        mock_sim.process_request.side_effect = _simulate
+        completed = rms._run_optimization_loop(
+            dispatcher=dispatcher,
+            solution_updater=solution_updater,
+            run_plugins=_mock_run_plugins(),
+            problem_definition=problem_def,
+            model_hash="abc",
+            run_id="run1",
+            checkpoint=MagicMock() if resume_from is not None else None,
+        )
+    return completed, mock_save
+
+
+def test_interrupt_in_first_generation_saves_nothing(tmp_path: Path):
+    completed, mock_save = _run_loop_interrupted_at(0, tmp_path)
+
+    assert completed is False
+    mock_save.assert_not_called()
+
+
+def test_interrupt_saves_last_completed_generation(tmp_path: Path):
+    completed, mock_save = _run_loop_interrupted_at(2, tmp_path)
+
+    assert completed is False
+    # Generation 0 is saved periodically (0 % interval == 0); generation 1 is
+    # the last one that finished and is saved on interrupt; generation 2 was
+    # partial and must not leak into the checkpoint.
+    saved_states = [c.args[2] for c in mock_save.call_args_list]
+    assert [s["generation"] for s in saved_states] == [0, 1]
+    assert saved_states[-1]["positions"] == [0]
+
+
+def test_interrupt_skips_save_when_latest_generation_already_checkpointed(
+    tmp_path: Path,
+):
+    completed, mock_save = _run_loop_interrupted_at(2, tmp_path, checkpoint_interval=1)
+
+    assert completed is False
+    # Periodic saves for generations 0 and 1 only; nothing extra on interrupt.
+    saved_generations = [c.args[2]["generation"] for c in mock_save.call_args_list]
+    assert saved_generations == [0, 1]
+
+
+def test_interrupt_right_after_resume_keeps_existing_checkpoint(tmp_path: Path):
+    # Restored at generation 5 -> generation 6 runs next and is interrupted.
+    completed, mock_save = _run_loop_interrupted_at(6, tmp_path, resume_from=5)
+
+    assert completed is False
+    mock_save.assert_not_called()
+
+
+def test_interrupt_after_resume_saves_newer_generation(tmp_path: Path):
+    completed, mock_save = _run_loop_interrupted_at(3, tmp_path, resume_from=1)
+
+    assert completed is False
+    mock_save.assert_called_once()
+    assert mock_save.call_args.args[2]["generation"] == 2
+
+
+def test_run_risk_management_returns_none_when_loop_interrupted():
+    with (
+        patch(f"{_RMS}.bootstrap_run_plugins", return_value=_mock_run_plugins()),
+        patch(f"{_RMS}.simulation_process_context_manager"),
+        patch(f"{_RMS}.SimulationService"),
+        patch(f"{_RMS}.ProblemDispatcherService"),
+        patch(f"{_RMS}.SolutionUpdaterService"),
+        patch(f"{_RMS}._run_optimization_loop", return_value=False),
+    ):
+        result = rms.run_risk_management(
+            _make_problem_def(), b"model", model_hash="abc"
+        )
+
+    assert result is None
+
+
+def test_write_checkpoint_state_reports_failure(tmp_path: Path):
+    with patch(f"{_RMS}.save_checkpoint", side_effect=OSError("disk full")):
+        ok = rms._write_checkpoint_state(
+            {}, 3, tmp_path / "ckpt.npz", MagicMock(), "hash", "run1"
+        )
+
+    assert ok is False

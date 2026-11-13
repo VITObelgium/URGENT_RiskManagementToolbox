@@ -438,25 +438,25 @@ set_num_threads(1)
 
    ```python
    from connectors.opendarts import OpenDartsConnector
-   from connectors.opendarts import open_darts_input_configuration_injector
+   from connectors.opendarts import open_darts_input_payload_injector
    ```
 
    > **Note:**
    > The `connectors` package is automatically transferred from the Toolbox to the simulation model directory.
    > No user action is required.
 
-3. **Configuration injection**
+3. **Payload injection**
 
    The simulation entry-point function must be decorated with
-   `open_darts_input_configuration_injector`:
+   `open_darts_input_payload_injector`:
 
    ```python
-   @open_darts_input_configuration_injector
-   def run_darts(injected_configuration) -> None:
+   @open_darts_input_payload_injector
+   def run_darts(payload) -> None:
        ...
    ```
 
-   The `injected_configuration` is a dictionary with one key per active domain service, e.g.:
+   The `payload` is a dictionary with one key per active domain service, e.g.:
 
    ```json
    {
@@ -465,27 +465,27 @@ set_num_threads(1)
    }
    ```
 
-   It is **strongly recommended** to pass this configuration to the model during initialization:
+   It is **strongly recommended** to pass the payload to the model during initialization:
 
    ```python
-   @open_darts_input_configuration_injector
-   def run_darts(injected_configuration, ...) -> None:
-       model = Model(configuration=injected_configuration)
+   @open_darts_input_payload_injector
+   def run_darts(payload, ...) -> None:
+       model = Model(payload=payload)
    ```
 
    ```python
    class Model(DartsModel):
-       def __init__(self, configuration, ...):
-           self._configuration = configuration
+       def __init__(self, payload, ...):
+           self._payload = payload
            super().__init__()
            ...
    ```
 
-   This ensures that the injected configuration is accessible throughout the entire `DartsModel` instance.
+   This ensures that the injected payload is accessible throughout the entire `DartsModel` instance.
 
 4. **Well connections**
 
-   Well connections are extracted from the injected configuration using
+   Well connections are extracted from the injected payload using
    `OpenDartsConnector.get_well_connection_cells(...)`.
 
    Ensure the following import is present:
@@ -494,13 +494,13 @@ set_num_threads(1)
    from connectors.opendarts import OpenDartsConnector
    ```
 
-   Wells must be defined in the `set_wells` method of the simulation model. Pass the `well_design` section of the injected configuration (the well payload is no longer at the top level):
+   Wells must be defined in the `set_wells` method of the simulation model. Pass the **whole** payload; the connector reads its `well_design` section itself (and returns no wells if that section is absent):
 
    ```python
    def set_wells(self):
 
        wells = OpenDartsConnector.get_well_connection_cells(
-           self._configuration["well_design"], self.reservoir
+           self._payload, self.reservoir
        )
 
        for well_name, cells in wells.items():

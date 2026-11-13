@@ -55,16 +55,18 @@ def _run_simulator(
     working_dir: Path | None = None,
 ) -> tuple[SimulationStatus, SimulationResults]:
     connector_name = simulation_job.connector
+    user_cost_function = json.loads(simulation_job.simulation.result.result)
+
+    # A connector that cannot be loaded must still produce a submitted result;
+    # re-raising here would leave the server waiting for the job until
+    # SERVER_JOB_TIMEOUT_SECONDS expires.
     try:
         connector = ConnectorFactory.get_connector(connector_name)
-    except ValueError as e:
-        logger.error("Encountered error in ConnectorFactory: %s", e)
-        raise
-    except Exception as e:
-        logger.error("Encountered Unexpected error in ConnectorFactory: %s", e)
-        raise
-
-    user_cost_function = json.loads(simulation_job.simulation.result.result)
+    except Exception:
+        logger.exception(
+            "Failed to load connector %r; reporting job as EXCEPTION.", connector_name
+        )
+        return SimulationStatus.EXCEPTION, user_cost_function
 
     tf = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
     try:

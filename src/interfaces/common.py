@@ -150,7 +150,9 @@ def risk_management(
         )
         logger.info("Risk management process completed successfully.")
         run_status = RunStatus.COMPLETED
-        assert result is not None
+        # None is a normal outcome: evaluation mode, or a user interrupt.
+        if result is None:
+            return None
         return result.values, result.control_vectors
     except grpc.RpcError as e:
         run_status = RunStatus.FAILED

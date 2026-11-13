@@ -9,6 +9,7 @@ The public entry point is :func:`run_risk_management`. The flow is:
 4. Extract and return the best result(s).
 """
 
+import copy
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,9 @@ from orchestration.risk_management_service.core.service.checkpoint import (
     checkpoint_filename,
     save_checkpoint,
     LoadedCheckpointData,
+)
+from services.solution_updater_service.core.service.solution_updater_service import (
+    UpdaterCheckpointState,
 )
 from orchestration.risk_management_service.core.service.plugin_bootstrap import (
     bootstrap_run_plugins,
@@ -58,6 +62,14 @@ class SimulationCaseDict(TypedDict):
     payload: dict[str, Any]
     control_vector: dict[str, Any]
     results: dict[str, float]
+
+
+@dataclass(frozen=True)
+class _GenerationSnapshot:
+    """Checkpoint state captured right after a generation fully completed."""
+
+    generation: int
+    state: UpdaterCheckpointState
 
 
 @dataclass(frozen=True)
@@ -248,8 +260,10 @@ def _run_optimization_loop(
     """Run the generation loop until the loop controller stops.
 
     Returns:
-        True if the loop completed normally, False if interrupted by the user
-        (a best-effort checkpoint is saved before returning in that case).
+        True if the loop completed normally, False if interrupted by the user.
+        On interrupt, the state of the last *fully completed* generation is
+        written, but only if it is newer than the last saved checkpoint; the
+        partially processed generation is never checkpointed.
     """
     full_key_boundaries = dispatcher.full_key_boundaries
     logger.debug("Boundaries retrieved: %s", full_key_boundaries)
@@ -264,9 +278,15 @@ def _run_optimization_loop(
     loop_controller = solution_updater.loop_controller
 
     next_solutions = None
+    # Generation whose state is currently on disk (None: nothing saved yet).
+    last_saved_generation: int | None = None
+    # State of the latest generation that finished in this session.
+    last_completed: _GenerationSnapshot | None = None
+
     if checkpoint is not None:
         logger.info("Restoring optimizer state from checkpoint.")
         next_solutions = solution_updater.restore_checkpoint_state(checkpoint)
+        last_saved_generation = loop_controller.current_generation
         logger.info("Resuming from generation %s.", loop_controller.current_generation)
         # The restored generation was already fully processed and checkpointed
         # after completion, so resume at the following generation. (Covered by
@@ -320,32 +340,32 @@ def _run_optimization_loop(
             )
 
             next_solutions = response.next_iter_solutions
+            generation = loop_controller.current_generation
 
-            logger.info(
-                "Generation %s successfully completed.",
-                loop_controller.current_generation,
-            )
+            logger.info("Generation %s successfully completed.", generation)
 
-            if loop_controller.current_generation % checkpoint_interval == 0:
-                _save_checkpoint(
-                    solution_updater,
-                    next_solutions,
+            # Deep-copied so later in-place updates by the engine cannot
+            # alter the snapshot before it is written on interrupt.
+            state = _snapshot_checkpoint_state(solution_updater, next_solutions)
+            if state is not None:
+                last_completed = _GenerationSnapshot(generation, state)
+
+                if generation % checkpoint_interval == 0 and _write_checkpoint_state(
+                    state,
+                    generation,
                     checkpoint_file,
                     problem_definition,
                     model_hash,
                     run_id,
-                )
+                ):
+                    last_saved_generation = generation
 
             loop_controller.increment_generation()
 
     except KeyboardInterrupt:
-        logger.warning(
-            "Risk management process interrupted by user; "
-            "saving best-effort checkpoint before exiting."
-        )
-        _save_checkpoint(
-            solution_updater,
-            next_solutions,
+        _save_checkpoint_on_interrupt(
+            last_completed,
+            last_saved_generation,
             checkpoint_file,
             problem_definition,
             model_hash,
@@ -457,16 +477,106 @@ def _save_checkpoint(
     problem_definition: ProblemDispatcherDefinition,
     model_hash: str,
     run_id: str,
-) -> None:
-    """Persist optimizer state; failures are logged (with traceback) but not fatal."""
+) -> bool:
+    """Capture and persist the current optimizer state.
+
+    Failures are logged (with traceback) but not fatal.
+
+    Returns:
+        True if the checkpoint was written.
+    """
     try:
         state = solution_updater.get_checkpoint_state(next_solutions)
-        save_checkpoint(checkpoint_file, problem_definition, state, model_hash, run_id)
-        logger.info(
-            "Checkpoint for run ID %s saved at generation %s: %s",
-            run_id,
-            solution_updater.loop_controller.current_generation,
-            checkpoint_file,
-        )
     except Exception:
         logger.exception("Failed to save checkpoint.")
+        return False
+    return _write_checkpoint_state(
+        state,
+        solution_updater.loop_controller.current_generation,
+        checkpoint_file,
+        problem_definition,
+        model_hash,
+        run_id,
+    )
+
+
+def _snapshot_checkpoint_state(
+    solution_updater: SolutionUpdaterService, next_solutions: Any
+) -> UpdaterCheckpointState | None:
+    """Return a deep copy of the optimizer state, or None if it cannot be read."""
+    try:
+        return copy.deepcopy(solution_updater.get_checkpoint_state(next_solutions))
+    except Exception:
+        logger.exception("Failed to capture checkpoint state.")
+        return None
+
+
+def _write_checkpoint_state(
+    state: UpdaterCheckpointState,
+    generation: int,
+    checkpoint_file: Path,
+    problem_definition: ProblemDispatcherDefinition,
+    model_hash: str,
+    run_id: str,
+) -> bool:
+    """Persist a precomputed optimizer state; failures are logged, not raised.
+
+    Returns:
+        True if the checkpoint was written.
+    """
+    try:
+        save_checkpoint(checkpoint_file, problem_definition, state, model_hash, run_id)
+    except Exception:
+        logger.exception("Failed to save checkpoint.")
+        return False
+    logger.info(
+        "Checkpoint for run ID %s saved at generation %s: %s",
+        run_id,
+        generation,
+        checkpoint_file,
+    )
+    return True
+
+
+def _save_checkpoint_on_interrupt(
+    last_completed: _GenerationSnapshot | None,
+    last_saved_generation: int | None,
+    checkpoint_file: Path,
+    problem_definition: ProblemDispatcherDefinition,
+    model_hash: str,
+    run_id: str,
+) -> None:
+    """Write the last fully completed generation, if it is not on disk yet."""
+    if last_completed is None:
+        logger.warning(
+            "Risk management process interrupted by user before any generation "
+            "completed in this session; no checkpoint written%s.",
+            " (existing checkpoint kept)" if checkpoint_file.exists() else "",
+        )
+        return
+
+    if (
+        last_saved_generation is not None
+        and last_completed.generation <= last_saved_generation
+    ):
+        logger.warning(
+            "Risk management process interrupted by user; generation %s is "
+            "already checkpointed at %s, nothing new to save.",
+            last_saved_generation,
+            checkpoint_file,
+        )
+        return
+
+    logger.warning(
+        "Risk management process interrupted by user; saving checkpoint of the "
+        "last completed generation (%s).",
+        last_completed.generation,
+    )
+    _write_checkpoint_state(
+        last_completed.state,
+        last_completed.generation,
+        checkpoint_file,
+        problem_definition,
+        model_hash,
+        run_id,
+    )

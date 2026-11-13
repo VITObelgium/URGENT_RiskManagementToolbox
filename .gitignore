@@ -465,3 +465,7 @@ pixi.lock
 pyrightconfig.json
 #checkpoint path
 checkpoints/
+/graphify-out/
+/CLAUDE.md
+/uv.lock
+/.claude/settings.json

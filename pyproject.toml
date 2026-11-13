@@ -81,7 +81,7 @@ handlers = ["console", "file"]
 
 [tool.coverage.run]
 branch = true
-source = ["src"]
+source = ["src", "plugins"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -106,7 +106,7 @@ exclude_lines = [
 
 [tool.mypy]
 mypy_path = "src"
-files = ["src"]
+files = ["src", "plugins"]
 ignore_missing_imports = true
 allow_untyped_decorators = true
 exclude = [

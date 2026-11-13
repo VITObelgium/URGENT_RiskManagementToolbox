@@ -352,7 +352,9 @@ def _calculate_centroids(
 # Plugin descriptor — only built when ``urgent_plugins`` is importable. The
 # worker env has no pydantic, so inside simulation subprocesses (where the
 # descriptor is never needed) the import is expected to fail.
-_DESCRIPTOR_OPTIONAL_DEPS = frozenset({"urgent_plugins", "pydantic", "pydantic_settings"})
+_DESCRIPTOR_OPTIONAL_DEPS = frozenset(
+    {"urgent_plugins", "pydantic", "pydantic_settings"}
+)
 
 try:
     from urgent_plugins import ConnectorPlugin

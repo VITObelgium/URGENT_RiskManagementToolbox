@@ -1,0 +1,70 @@
+{
+  "run_mode": "optimization",
+  "minewater": {
+    "global_demand": {
+      "path": "minewater_global_demand.txt",
+      "warm_series": "RMT_WARM_TOTAL",
+      "cold_series": "RMT_COLD_TOTAL"
+    },
+    "warm_wells": [
+      {
+        "node_id": "HLH-GT-03-01",
+        "flow_pattern_id": "HLH-GT-03-01_FLOW",
+        "max_production_rate_m3_h": 350.0,
+        "max_injection_rate_m3_h": 110.0,
+        "initial_share_weight": 1.0
+      },
+      {
+        "node_id": "HLH-GT-02-05",
+        "flow_pattern_id": "HLH-GT-02-05_FLOW",
+        "max_production_rate_m3_h": 375.0,
+        "max_injection_rate_m3_h": 125.0,
+        "initial_share_weight": 1.0
+      },
+      {
+        "node_id": "HLH-GT-04-06",
+        "flow_pattern_id": "HLH-GT-04-06_FLOW",
+        "max_production_rate_m3_h": 400.0,
+        "max_injection_rate_m3_h": 135.0,
+        "initial_share_weight": 1.0
+      }
+    ],
+    "cold_wells": [
+      {
+        "node_id": "HLN3-1",
+        "flow_pattern_id": "HLN3-1_FLOW",
+        "max_production_rate_m3_h": 110.0,
+        "max_injection_rate_m3_h": 350.0,
+        "initial_share_weight": 1.0
+      },
+      {
+        "node_id": "HLN2-5-6",
+        "flow_pattern_id": "HLN2-5-6_FLOW",
+        "max_production_rate_m3_h": 125.0,
+        "max_injection_rate_m3_h": 375.0,
+        "initial_share_weight": 1.0
+      },
+      {
+        "node_id": "HLN4",
+        "flow_pattern_id": "HLN4_FLOW",
+        "max_production_rate_m3_h": 135.0,
+        "max_injection_rate_m3_h": 400.0,
+        "initial_share_weight": 1.0
+      }
+    ]
+  },
+  "optimization_parameters": {
+    "objectives": {
+      "net_heat_gj": "maximize"
+    },
+    "population_size": 4,
+    "max_generations": 2,
+    "max_stall_generations": 2
+  },
+  "simulation_config": {
+    "worker_count": 2,
+    "checkpoint_interval": 1,
+    "worker_simulation_timeout_seconds": 900,
+    "server_job_timeout_seconds": 3600
+  }
+}
